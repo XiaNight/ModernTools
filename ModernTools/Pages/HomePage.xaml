@@ -32,25 +32,25 @@
                           FontSize="18" 
                           FontWeight="SemiBold"/>
                 
-                <ui:SimpleStackPanel Spacing="8">
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
                     <ui:FontIcon Glyph="&#xE73E;" FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock Text="Modern WPF UI with light/dark theme support" 
                               VerticalAlignment="Center"/>
                 </ui:SimpleStackPanel>
                 
-                <ui:SimpleStackPanel Spacing="8">
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
                     <ui:FontIcon Glyph="&#xE700;" FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock Text="Collapsible navigation panel" 
                               VerticalAlignment="Center"/>
                 </ui:SimpleStackPanel>
                 
-                <ui:SimpleStackPanel Spacing="8">
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
                     <ui:FontIcon Glyph="&#xE8F1;" FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock Text="Integrated output log window" 
                               VerticalAlignment="Center"/>
                 </ui:SimpleStackPanel>
                 
-                <ui:SimpleStackPanel Spacing="8">
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
                     <ui:FontIcon Glyph="&#xE90F;" FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock Text="Extensible framework for building tools" 
                               VerticalAlignment="Center"/>
