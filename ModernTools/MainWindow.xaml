@@ -1,0 +1,217 @@
+﻿<Window x:Class="ModernTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ModernTools"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        mc:Ignorable="d"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="ModernTools - Developer Base Plate" 
+        Height="720" 
+        Width="1280"
+        MinHeight="600"
+        MinWidth="900">
+    
+    <Window.Resources>
+        <!-- Icon Styles -->
+        <Style x:Key="NavButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="Center"
+                                            Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Menu Bar -->
+            <RowDefinition Height="*"/>    <!-- Main Content -->
+            <RowDefinition Height="Auto"/> <!-- Log Window -->
+        </Grid.RowDefinitions>
+
+        <!-- Top Menu Bar -->
+        <Menu Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+            <MenuItem Header="_File">
+                <MenuItem Header="_New" InputGestureText="Ctrl+N"/>
+                <MenuItem Header="_Open" InputGestureText="Ctrl+O"/>
+                <Separator/>
+                <MenuItem Header="_Exit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Copy" InputGestureText="Ctrl+C"/>
+                <MenuItem Header="_Paste" InputGestureText="Ctrl+V"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
+                <MenuItem Header="Toggle _Log Window" Click="ToggleLog_Click"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Main Content Area with Navigation -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/> <!-- Navigation Panel -->
+                <ColumnDefinition Width="*"/>    <!-- Content -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Navigation Panel -->
+            <Border Grid.Column="0" 
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/> <!-- Toggle Button -->
+                        <RowDefinition Height="*"/>    <!-- Navigation Items -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Navigation Toggle Button -->
+                    <Button Grid.Row="0" 
+                            x:Name="NavToggleButton"
+                            Click="ToggleNav_Click"
+                            Style="{StaticResource NavButtonStyle}"
+                            ToolTip="Toggle Navigation Panel">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:FontIcon Glyph="&#xE700;" FontSize="16"/>
+                            <TextBlock x:Name="NavToggleText" 
+                                     Text="Menu" 
+                                     Margin="12,0,0,0"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Navigation Items -->
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                        <!-- Home Page -->
+                        <Button Style="{StaticResource NavButtonStyle}"
+                                Click="NavigateHome_Click"
+                                ToolTip="Home">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:FontIcon Glyph="&#xE80F;" FontSize="16"/>
+                                <TextBlock x:Name="NavHome" 
+                                         Text="Home" 
+                                         Margin="12,0,0,0"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Tools Page -->
+                        <Button Style="{StaticResource NavButtonStyle}"
+                                Click="NavigateTools_Click"
+                                ToolTip="Tools">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:FontIcon Glyph="&#xE90F;" FontSize="16"/>
+                                <TextBlock x:Name="NavTools" 
+                                         Text="Tools" 
+                                         Margin="12,0,0,0"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Settings Page -->
+                        <Button Style="{StaticResource NavButtonStyle}"
+                                Click="NavigateSettings_Click"
+                                ToolTip="Settings">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:FontIcon Glyph="&#xE713;" FontSize="16"/>
+                                <TextBlock x:Name="NavSettings" 
+                                         Text="Settings" 
+                                         Margin="12,0,0,0"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Main Content Frame -->
+            <Grid Grid.Column="1" Background="{DynamicResource SystemControlPageBackgroundChromeLowBrush}">
+                <Frame x:Name="ContentFrame" 
+                       NavigationUIVisibility="Hidden"
+                       Background="Transparent"/>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom Log Window -->
+        <Grid Grid.Row="2" x:Name="LogPanel" Height="200">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Header -->
+                <RowDefinition Height="*"/>    <!-- Content -->
+            </Grid.RowDefinitions>
+
+            <!-- Log Header -->
+            <Border Grid.Row="0" 
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="0,1,0,0"
+                    Padding="12,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <TextBlock Grid.Column="0" 
+                             Text="Output Log" 
+                             FontWeight="SemiBold"
+                             VerticalAlignment="Center"/>
+                    
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="Clear" 
+                                Click="ClearLog_Click"
+                                Style="{StaticResource AccentButtonStyle}"
+                                Margin="0,0,8,0"/>
+                        <Button Click="ToggleLog_Click"
+                                ToolTip="Hide Log Window">
+                            <ui:FontIcon Glyph="&#xE70D;" FontSize="12"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Log Content -->
+            <Border Grid.Row="1" 
+                    Background="{DynamicResource SystemControlPageBackgroundChromeLowBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    BorderThickness="0,1,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" 
+                            HorizontalScrollBarVisibility="Auto">
+                    <TextBox x:Name="LogTextBox"
+                           IsReadOnly="True"
+                           TextWrapping="Wrap"
+                           BorderThickness="0"
+                           Background="Transparent"
+                           Padding="12"
+                           VerticalScrollBarVisibility="Auto"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

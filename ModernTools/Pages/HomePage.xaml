@@ -1,0 +1,67 @@
+<Page x:Class="ModernTools.HomePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:ui="http://schemas.modernwpf.com/2019"
+      xmlns:local="clr-namespace:ModernTools"
+      mc:Ignorable="d" 
+      d:DesignHeight="450" d:DesignWidth="800"
+      Title="HomePage">
+
+    <Grid Margin="24">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="600">
+            <ui:FontIcon Glyph="&#xE80F;" FontSize="64" 
+                        HorizontalAlignment="Center"
+                        Margin="0,0,0,24"/>
+            
+            <TextBlock Text="Welcome to ModernTools" 
+                      FontSize="32" 
+                      FontWeight="Bold"
+                      HorizontalAlignment="Center"
+                      Margin="0,0,0,16"/>
+            
+            <TextBlock Text="Developer Tool Base Plate" 
+                      FontSize="20"
+                      HorizontalAlignment="Center"
+                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                      Margin="0,0,0,32"/>
+            
+            <ui:SimpleStackPanel Spacing="16">
+                <TextBlock Text="Features:" 
+                          FontSize="18" 
+                          FontWeight="SemiBold"/>
+                
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:FontIcon Glyph="&#xE73E;" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock Text="Modern WPF UI with light/dark theme support" 
+                              VerticalAlignment="Center"/>
+                </ui:SimpleStackPanel>
+                
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:FontIcon Glyph="&#xE700;" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock Text="Collapsible navigation panel" 
+                              VerticalAlignment="Center"/>
+                </ui:SimpleStackPanel>
+                
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:FontIcon Glyph="&#xE8F1;" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock Text="Integrated output log window" 
+                              VerticalAlignment="Center"/>
+                </ui:SimpleStackPanel>
+                
+                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                    <ui:FontIcon Glyph="&#xE90F;" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock Text="Extensible framework for building tools" 
+                              VerticalAlignment="Center"/>
+                </ui:SimpleStackPanel>
+            </ui:SimpleStackPanel>
+            
+            <TextBlock Text="Start building your tools by adding new pages and functionality!" 
+                      TextWrapping="Wrap"
+                      HorizontalAlignment="Center"
+                      Margin="0,32,0,0"
+                      Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+        </StackPanel>
+    </Grid>
+</Page>
