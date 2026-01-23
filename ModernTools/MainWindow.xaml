@@ -99,11 +99,12 @@
                             Style="{StaticResource NavButtonStyle}"
                             ToolTip="Toggle Navigation Panel">
                         <StackPanel Orientation="Horizontal">
-                            <ui:FontIcon Glyph="&#xE700;" FontSize="16"/>
+                            <ui:FontIcon Glyph="&#xE700;" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             <TextBlock x:Name="NavToggleText" 
                                      Text="Menu" 
                                      Margin="12,0,0,0"
-                                     VerticalAlignment="Center"/>
+                                     VerticalAlignment="Center"
+                                     Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                         </StackPanel>
                     </Button>
 
@@ -114,11 +115,12 @@
                                 Click="NavigateHome_Click"
                                 ToolTip="Home">
                             <StackPanel Orientation="Horizontal">
-                                <ui:FontIcon Glyph="&#xE80F;" FontSize="16"/>
+                                <ui:FontIcon Glyph="&#xE80F;" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                                 <TextBlock x:Name="NavHome" 
                                          Text="Home" 
                                          Margin="12,0,0,0"
-                                         VerticalAlignment="Center"/>
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             </StackPanel>
                         </Button>
 
@@ -127,11 +129,12 @@
                                 Click="NavigateTools_Click"
                                 ToolTip="Tools">
                             <StackPanel Orientation="Horizontal">
-                                <ui:FontIcon Glyph="&#xE90F;" FontSize="16"/>
+                                <ui:FontIcon Glyph="&#xE90F;" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                                 <TextBlock x:Name="NavTools" 
                                          Text="Tools" 
                                          Margin="12,0,0,0"
-                                         VerticalAlignment="Center"/>
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             </StackPanel>
                         </Button>
 
@@ -140,11 +143,12 @@
                                 Click="NavigateSettings_Click"
                                 ToolTip="Settings">
                             <StackPanel Orientation="Horizontal">
-                                <ui:FontIcon Glyph="&#xE713;" FontSize="16"/>
+                                <ui:FontIcon Glyph="&#xE713;" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                                 <TextBlock x:Name="NavSettings" 
                                          Text="Settings" 
                                          Margin="12,0,0,0"
-                                         VerticalAlignment="Center"/>
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
