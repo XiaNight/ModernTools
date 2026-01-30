@@ -1,0 +1,76 @@
+﻿
+<Window x:Class="Base.Components.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Base.Components"
+        xmlns:prop="clr-namespace:Base.Properties"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        mc:Ignorable="d"
+        Title="About"
+        Height="220" Width="534"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="ToolWindow" 
+        ShowInTaskbar="False" 
+        Topmost="True">
+    <Grid Margin="20 10 20 10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Icon + Product -->
+        <StackPanel Orientation="Vertical" Margin="0,0,0,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Grid.Column="0" Grid.Row="1" Grid.ColumnSpan="2" Margin="0 0 0 8">
+                    <Image x:Name="AppIcon" Grid.Column="0" Grid.Row="0" Grid.ColumnSpan="2" Source="/Base;component/Resource/Icons/AppIcon_256.png" Width="80" Height="80">
+                        <Image.RenderTransform>
+                            <ScaleTransform ScaleX="1" ScaleY="1" CenterX="32" CenterY="32"/>
+                        </Image.RenderTransform>
+                    </Image>
+                    <TextBlock x:Name="AppNameText"
+                               Margin="0 0 0 0"
+                               Grid.Column="0"
+                               Grid.Row="1"
+                               Grid.ColumnSpan="2"
+                               VerticalAlignment="Center"
+                               TextAlignment="Center"
+                               FontFamily="ROG Fonts"
+                               FontWeight="Normal"
+                               FontSize="24"
+                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                               Text="App Name"/>
+                </StackPanel>
+                <TextBlock Grid.Column="0" Grid.Row="2" Text="Version" FontSize="14" HorizontalAlignment="Left"/>
+                <TextBlock Grid.Column="1" Grid.Row="2" x:Name="VersionText" FontSize="14" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Column="0" Grid.Row="3" Text="Tool Base Version" FontSize="14" HorizontalAlignment="Left"/>
+                <TextBlock Grid.Column="1" Grid.Row="3" x:Name="ToolBaseVersionText" FontSize="14" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Column="0" Grid.Row="4" Text="Developer" FontSize="14" HorizontalAlignment="Left"/>
+                <TextBlock Grid.Column="1" Grid.Row="4" Text="JimmyTM_Lai@asus.com" FontSize="14" HorizontalAlignment="Right"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Footer -->
+        <TextBlock Grid.Row="2"
+                   Margin="4,0,4,4"
+                   HorizontalAlignment="Center"
+                   FontSize="12"
+                   Foreground="Gray"
+                   Text="{Binding CompanyCopyright, Source={x:Static prop:Settings.Default}}"/>
+    </Grid>
+</Window>

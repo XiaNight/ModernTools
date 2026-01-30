@@ -1,0 +1,182 @@
+﻿<UserControl x:Class="Gamepad.Controller"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Gamepad"
+             mc:Ignorable="d"
+             d:DesignHeight="450" d:DesignWidth="600">
+    <Grid>
+        <Canvas>
+            <Canvas Canvas.Left="-72" Canvas.Top="45">
+                <!-- LT -->
+                <Path x:Name="LTShape" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="180,0">
+                                <BezierSegment Point1="180,0" Point2="190,-40" Point3="215,-40"/>
+                                <BezierSegment Point1="215,-40" Point2="220,-40" Point3="225,-38"/>
+                                <BezierSegment Point1="225,-38" Point2="230,-35" Point3="235,-10"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- LB -->
+                <Path x:Name="LBShape" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="160,30">
+                                <LineSegment Point="170,05"/>
+                                <BezierSegment Point1="170,5" Point2="215,-10" Point3="245,-10"/>
+                                <BezierSegment Point1="245,-10" Point2="250,-10" Point3="255,-6"/>
+                                <BezierSegment Point1="260,-4" Point2="265,0" Point3="290,0"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- RT -->
+                <Path x:Name="RTShape" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="570,0">
+                                <BezierSegment Point1="570,0" Point2="560,-40" Point3="535,-40"/>
+                                <BezierSegment Point1="535,-40" Point2="530,-40" Point3="525,-38"/>
+                                <BezierSegment Point1="525,-38" Point2="520,-35" Point3="515,-10"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- RB -->
+                <Path x:Name="RBShape" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="590,30">
+                                <LineSegment Point="580,5"/>
+                                <BezierSegment Point1="580,5" Point2="535,-10" Point3="505,-10"/>
+                                <BezierSegment Point1="505,-10" Point2="500,-10" Point3="495,-6"/>
+                                <BezierSegment Point1="490,-4" Point2="485,0" Point3="460,0"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- Gamepad Body -->
+                <Path Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="370,0">
+                                <BezierSegment Point1="370,0" Point2="410,0" Point3="450,0"/>
+                                <BezierSegment Point1="450,0" Point2="500,0" Point3="600,30"/>
+                                <BezierSegment Point1="600,30" Point2="740,400" Point3="620,400"/>
+                                <BezierSegment Point1="620,400" Point2="590,400" Point3="500,270"/>
+                                <BezierSegment Point1="500,270" Point2="485,250" Point3="460,250"/>
+                                <LineSegment Point="280,250"/>
+                                <BezierSegment Point1="280,250" Point2="255,250" Point3="240,270"/>
+                                <BezierSegment Point1="240,270" Point2="150,400" Point3="120,400"/>
+                                <BezierSegment Point1="120,400" Point2="0,400" Point3="150,30"/>
+                                <BezierSegment Point1="140,30" Point2="240,0" Point3="290,0"/>
+                                <BezierSegment Point1="290,0" Point2="370,0" Point3="370,0"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- Left Stick -->
+                <Canvas Canvas.Left="210" Canvas.Top="90">
+                    <Grid Canvas.Left="-48" Canvas.Top="-48">
+                        <Ellipse Width="96" Height="96" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" IsHitTestVisible="False"/>
+                    </Grid>
+                    <Canvas Canvas.Left="0" Canvas.Top="0">
+                        <Grid Canvas.Left="-30" Canvas.Top="-30">
+                            <Ellipse x:Name="LStickKnob" Width="60" Height="60" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" StrokeThickness="4">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="LStickTranslate"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+                    </Canvas>
+                </Canvas>
+
+                <!-- Right Stick -->
+                <Canvas Canvas.Left="460" Canvas.Top="180">
+                    <Grid Canvas.Left="-48" Canvas.Top="-48">
+                        <Ellipse Width="96" Height="96" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" IsHitTestVisible="False"/>
+                    </Grid>
+                    <Canvas Canvas.Left="0" Canvas.Top="0">
+                        <Grid Canvas.Left="-30" Canvas.Top="-30">
+                            <Ellipse x:Name="RStickKnob" Width="60" Height="60" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" StrokeThickness="4">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="RStickTranslate"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+                    </Canvas>
+                </Canvas>
+
+                <!-- Face Buttons -->
+                <Canvas Canvas.Left="540" Canvas.Top="90">
+                    <Grid Canvas.Left="-58" Canvas.Top="-18">
+                        <Ellipse x:Name="BtnX_Left" Width="36" Height="36" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+                    </Grid>
+                    <Grid Canvas.Left="-18" Canvas.Top="-58">
+                        <Ellipse x:Name="BtnY_Top" Width="36" Height="36" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+                    </Grid>
+                    <Grid Canvas.Left="22" Canvas.Top="-18">
+                        <Ellipse x:Name="BtnB_Right" Width="36" Height="36" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+                    </Grid>
+                    <Grid Canvas.Left="-18" Canvas.Top="22">
+                        <Ellipse x:Name="BtnA_Bottom" Width="36" Height="36" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+                    </Grid>
+                </Canvas>
+
+                <!-- Center Buttons -->
+                <Rectangle x:Name="BtnView" Canvas.Left="300" Canvas.Top="90"
+                           Width="30" Height="20" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4"
+                           RadiusX="4" RadiusY="4"/>
+                <Rectangle x:Name="BtnMenu" Canvas.Left="420" Canvas.Top="90"
+                           Width="30" Height="20" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4"
+                           RadiusX="4" RadiusY="4"/>
+                <Rectangle x:Name="BtnGuide" Canvas.Left="360" Canvas.Top="200"
+                           Width="30" Height="20" Fill="{DynamicResource SystemControlBackgroundChromeMediumBrush}" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4"
+                           RadiusX="4" RadiusY="4" Visibility="Collapsed"/>
+
+                <!-- D-Pad (kept; arrows do not move) -->
+                <Canvas Canvas.Left="290" Canvas.Top="180">
+                    <Ellipse Width="96" Height="96" Stroke="{DynamicResource SystemControlBackgroundBaseMediumRevealBorderBrush}" StrokeThickness="4"
+                             Canvas.Left="-48" Canvas.Top="-48" IsHitTestVisible="False"/>
+                    <!-- Down -->
+                    <Grid Canvas.Left="0" Canvas.Top="6">
+                        <Grid.RenderTransform>
+                            <RotateTransform Angle="0"/>
+                        </Grid.RenderTransform>
+                        <local:GamepadArrow x:Name="DpadDownOverlay"/>
+                    </Grid>
+                    <!-- Left -->
+                    <Grid Canvas.Left="-6" Canvas.Top="0">
+                        <Grid.RenderTransform>
+                            <RotateTransform Angle="90"/>
+                        </Grid.RenderTransform>
+                        <local:GamepadArrow x:Name="DpadLeftOverlay"/>
+                    </Grid>
+                    <!-- Up -->
+                    <Grid Canvas.Left="0" Canvas.Top="-6">
+                        <Grid.RenderTransform>
+                            <RotateTransform Angle="180"/>
+                        </Grid.RenderTransform>
+                        <local:GamepadArrow x:Name="DpadUpOverlay"/>
+                    </Grid>
+                    <!-- Right -->
+                    <Grid Canvas.Left="6" Canvas.Top="0">
+                        <Grid.RenderTransform>
+                            <RotateTransform Angle="270"/>
+                        </Grid.RenderTransform>
+                        <local:GamepadArrow x:Name="DpadRightOverlay"/>
+                    </Grid>
+                </Canvas>
+            </Canvas>
+        </Canvas>
+    </Grid>
+</UserControl>

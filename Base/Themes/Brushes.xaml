@@ -1,0 +1,41 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<!-- Merge active palette (light/dark) -->
+	<ResourceDictionary.MergedDictionaries>
+		<ResourceDictionary Source="Palette.Light.xaml"/>
+		<!-- Swap with Palette.Dark.xaml at runtime -->
+	</ResourceDictionary.MergedDictionaries>
+
+	<!-- Main brand brush, used for primary buttons, highlights, selection -->
+	<SolidColorBrush x:Key="PrimaryBrush" Color="{DynamicResource PrimaryColor}"/>
+
+	<!-- Supporting brush, used for secondary buttons, side panels, less prominent elements -->
+	<SolidColorBrush x:Key="SecondaryBrush" Color="{DynamicResource SecondaryColor}"/>
+
+	<!-- Success brush, used for positive state indicators and success messages -->
+	<SolidColorBrush x:Key="AccentSuccessBrush" Color="{DynamicResource AccentSuccessColor}"/>
+
+	<!-- Error brush, used for errors, validation highlights, destructive actions -->
+	<SolidColorBrush x:Key="AccentErrorBrush" Color="{DynamicResource AccentErrorColor}"/>
+
+	<!-- Main background brush, used for window/page backgrounds -->
+	<SolidColorBrush x:Key="BackgroundBrush" Color="{DynamicResource BackgroundColor}"/>
+
+	<!-- Surface brush, used for cards, dialogs, menus, popups -->
+	<SolidColorBrush x:Key="SurfaceBrush" Color="{DynamicResource SurfaceColor}"/>
+
+	<!-- Surface Alt brush, used for hint, cutouts, dividers-->
+	<SolidColorBrush x:Key="SurfaceAltBrush" Color="{DynamicResource SurfaceAltColor}"/>
+
+	<!-- Primary text brush, used for headings, labels, and normal content -->
+	<SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource TextPrimaryColor}"/>
+
+	<!-- Secondary text brush, used for subtle text such as captions, hints, timestamps -->
+	<SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource TextSecondaryColor}"/>
+	
+	<!-- Accents -->
+	<SolidColorBrush x:Key="Accent1Brush" Color="CornflowerBlue"/>
+	<SolidColorBrush x:Key="Accent2Brush" Color="DarkOrange"/>
+	<SolidColorBrush x:Key="Accent3Brush" Color="LawnGreen"/>
+	<SolidColorBrush x:Key="Accent4Brush" Color="OrangeRed"/>
+</ResourceDictionary>

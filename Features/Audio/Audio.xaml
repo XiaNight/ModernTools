@@ -1,0 +1,70 @@
+﻿<base:PageBase x:Class="Audio.AudioPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Audio"
+             xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+             xmlns:chart="clr-namespace:Base.Components.Chart;assembly=Base"
+             xmlns:entries="clr-namespace:Audio.Entries"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800" d:Background="White">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid
+            Margin="0 0 10 0"
+            Grid.Row="0" Grid.Column="0"
+            Grid.RowSpan="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Column="0" Grid.Row="4" Text="Cycle"/>
+            <TextBox x:Name="CycleTimeInputField" Grid.Column="2" MinWidth="60" Text="600" Grid.Row="4"/>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="Duration (ms)"/>
+
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="Threshold"/>
+            <TextBox x:Name="ThresholdInputField" Grid.Row="6" Grid.Column="2" Text="5"/>
+            
+            <TextBox x:Name="DurationInputField" Grid.Row="5" Grid.Column="2" MinWidth="60" Text="1000"/>
+            <Button x:Name="PrepareButton" Grid.Row="7" Grid.Column="0" Content="Prepare" Grid.ColumnSpan="3"/>
+            <Button x:Name="StopPrepareButton" Grid.Row="7" Grid.Column="0" Content="Stop" Grid.ColumnSpan="3" Visibility="Collapsed"/>
+            <TextBlock x:Name="RemainingDurationText" Text="Remaining: 10:00" Grid.Row="9" Grid.Column="0" HorizontalAlignment="Center"/>
+            <Button x:Name="StartButton" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Content="Start"/>
+            <Button x:Name="StopButton" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Content="Stop" Visibility="Collapsed"/>
+        </Grid>
+
+        <ScrollViewer
+            Grid.Row="0" Grid.Column="1"
+            Grid.RowSpan="2"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled">
+
+            <StackPanel x:Name="AudioDeviceEntries" Orientation="Vertical" Grid.Column="1">
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</base:PageBase>

@@ -1,0 +1,81 @@
+﻿<UserControl x:Class="Base.Components.NavigationButton"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Base.Components"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:helper="clr-namespace:Base.Helpers"
+             mc:Ignorable="d"
+             x:Name="Root"
+             d:DesignHeight="40" d:DesignWidth="100" d:Background="White">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <Grid x:Name="Highlight" Visibility="Collapsed" d:Visibility="Visible">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#50787878" Offset="0.0" />
+                    <GradientStop Color="#00000000" Offset="1.0" />
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Rectangle
+                Width="4"
+                VerticalAlignment="Stretch"
+                Margin="0,4"
+                Fill="{DynamicResource SystemControlForegroundAccentBrush}"
+                d:Fill="White"
+                RadiusX="2"
+                RadiusY="2"
+                HorizontalAlignment="Left"/>
+        </Grid>
+        <Button x:Name="NavButton" Style="{DynamicResource NavButtonStyle}">
+            <StackPanel Orientation="Horizontal">
+                <Grid>
+                    <ui:FontIcon x:Name="NavIcon"
+                                 Margin="4,0"
+                                 Glyph="{Binding Glyph, ElementName=Root}"
+                                 d:Glyph="&#xe765;"
+                                 FontSize="22"
+                                 Foreground="{DynamicResource TextControlForeground}"
+                                 d:Foreground="Black">
+                    </ui:FontIcon>
+                    <Grid>
+                        <Grid.RenderTransform>
+                            <TranslateTransform X="4" Y="4" />
+                        </Grid.RenderTransform>
+                        <ui:FontIcon x:Name="SecondaryIcon"
+                                     Glyph="{Binding SecondaryGlyph, ElementName=Root}"
+                                     d:Glyph="&#xE70F;"
+                                     FontSize="14"
+                                     FontWeight="light"
+                                     Foreground="{DynamicResource TextControlForeground}"
+                                     d:Foreground="Black"/>
+                    </Grid>
+                    <Grid HorizontalAlignment="Center">
+                        <Grid.RenderTransform>
+                            <TranslateTransform X="0" Y="14" />
+                        </Grid.RenderTransform>
+
+                        <TextBlock x:Name="SecondaryLabel"
+                                   d:Text="RAW"
+                                   FontFamily="Cascadia Mono"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextControlForeground}"/>
+                    </Grid>
+                </Grid>
+                <TextBlock x:Name="Label"
+                           Text="{Binding Text, ElementName=Root}"
+                           d:Text="Home"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextControlForeground}"/>
+            </StackPanel>
+        </Button>
+    </Grid>
+</UserControl>

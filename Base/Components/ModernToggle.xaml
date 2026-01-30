@@ -1,0 +1,33 @@
+﻿<UserControl x:Class="Base.Components.ModernToggle"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="24" d:DesignWidth="50">
+    <Grid Width="50" Height="24">
+        <ToggleButton x:Name="PART_Toggle" BorderThickness="0" Cursor="Hand">
+            <ToggleButton.Style>
+                <Style TargetType="ToggleButton">
+                    <Setter Property="Background" Value="LightGray"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Grid Width="50" Height="24">
+                                    <Border x:Name="SwitchBorder" CornerRadius="12" Background="{TemplateBinding Background}"/>
+                                    <Ellipse x:Name="SwitchThumb" Width="20" Height="20" Margin="2" Fill="White" HorizontalAlignment="Left"/>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="SwitchBorder" Property="Background" Value="#4CAF50"/>
+                                        <Setter TargetName="SwitchThumb" Property="HorizontalAlignment" Value="Right"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ToggleButton.Style>
+        </ToggleButton>
+    </Grid>
+</UserControl>

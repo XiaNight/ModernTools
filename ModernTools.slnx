@@ -1,3 +1,11 @@
 <Solution>
+  <Folder Name="/Feature/">
+    <Project Path="Features/Audio/Audio.csproj" />
+    <Project Path="Features/Gamepad/GamePad.csproj" />
+    <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj" />
+    <Project Path="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj" />
+
+  </Folder>
+  <Project Path="Base/Base.csproj" />
   <Project Path="ModernTools/ModernTools.csproj" />
 </Solution>

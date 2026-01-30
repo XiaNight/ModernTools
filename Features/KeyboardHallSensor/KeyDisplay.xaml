@@ -1,0 +1,92 @@
+﻿<UserControl x:Class="KeyboardHallSensor.KeyDisplay"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:KeyboardHallSensor"
+             mc:Ignorable="d"
+             MouseLeftButtonUp="OnLeftClick"
+             MouseRightButtonUp="OnRightClick"
+             d:DesignHeight="50" d:DesignWidth="50">
+    <Grid>
+        <Border
+            Width="{Binding Width, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            Height="{Binding Height, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            Background="{DynamicResource ButtonBorderBrush}"
+            BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+            ClipToBounds="True"
+            BorderThickness="3"
+            CornerRadius="6">
+            <Grid>
+                <Rectangle
+                    x:Name="FillRect"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Height="25"
+                    Fill="{DynamicResource Accent2Brush}"/>
+
+                <Rectangle
+                    x:Name="MinRect"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Height="2"
+                    Fill="{DynamicResource SystemControlBackgroundBaseMediumBrush}"
+                    Visibility="Collapsed">
+                    <Rectangle.RenderTransform>
+                        <TranslateTransform/>
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+                <Rectangle
+                    x:Name="MaxRect"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Height="2"
+                    Fill="{DynamicResource SystemControlBackgroundBaseMediumBrush}"
+                    Visibility="Collapsed">
+                    <Rectangle.RenderTransform>
+                        <TranslateTransform/>
+                    </Rectangle.RenderTransform>
+                </Rectangle>
+
+                <TextBlock
+                    x:Name="LabelText"
+                    Text=""
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    TextAlignment="Center"
+                    TextWrapping="WrapWithOverflow"
+                    FontFamily="ROG Fonts"/>
+                <TextBlock
+                    x:Name="ValueText"
+                    Text="Value"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    TextAlignment="Center"
+                    FontFamily="Consolas"/>
+                <TextBlock
+                    x:Name="MinText"
+                    Text="MinText"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    TextAlignment="Center"
+                    FontFamily="Consolas"/>
+                <TextBlock
+                    x:Name="MaxText"
+                    Text="MaxText"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Top"
+                    TextAlignment="Center"
+                    FontFamily="Consolas"/>
+            </Grid>
+        </Border>
+
+        <Border
+            x:Name="MainBorder"
+            Width="{Binding Width, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            Height="{Binding Height, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+            BorderThickness="3"
+            CornerRadius="6">
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,59 @@
+﻿<Window x:Class="Gamepad.FullWindowChart"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Gamepad"
+        xmlns:base="clr-namespace:Base.Components.Chart;assembly=Base"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        mc:Ignorable="d"
+        WindowStartupLocation="Manual"
+        Title="FullWindowChart" Height="450" Width="800">
+    <Grid>
+        <Border
+            x:Name="StripChartContainer"
+            BorderBrush="Black"
+            BorderThickness="3"
+            Padding="6"
+            CornerRadius="0">
+            <Grid Margin="0 4 0 4">
+                <base:FastStripChartControl
+                    x:Name="StripChart"
+                    RenderMode="Combined"
+                    LineBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    DotBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    LabelBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    LineThickness="3"
+                    DotThickness="8"
+                    MinY="-10"
+                    MaxY="1"
+                />
+            </Grid>
+        </Border>
+
+        <Border
+            x:Name="XYChartContainer"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="3"
+            CornerRadius="0">
+            <Grid>
+                <base:ScatterChartControl
+                    x:Name="XYChart"
+                    RenderMode="Combined"
+                    LineBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    DotBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    LineThickness="3"
+                    DotThickness="8"
+                    AutoFit="False"
+                    MinY="-68812"
+                    MaxY="3276"
+                    MinX="-3276"
+                    MaxX="68812"
+                />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

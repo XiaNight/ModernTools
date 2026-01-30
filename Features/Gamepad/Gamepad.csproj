@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Platforms>AnyCPU;x64</Platforms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\Gamepad.ico" />
+    <None Remove="Assets\Icons\chart_mode.png" />
+    <None Remove="Assets\Icons\eraser.png" />
+    <None Remove="Assets\Icons\open_in_new.png" />
+    <None Remove="Assets\Icons\play_pause.png" />
+    <None Remove="Assets\Icons\record.png" />
+    <None Remove="Assets\Icons\stop_record.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Base\Base.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Gamepad.ico" />
+    <Resource Include="Assets\Icons\chart_mode.png" />
+    <Resource Include="Assets\Icons\eraser.png" />
+    <Resource Include="Assets\Icons\open_in_new.png" />
+    <Resource Include="Assets\Icons\play_pause.png" />
+    <Resource Include="Assets\Icons\record.png" />
+    <Resource Include="Assets\Icons\stop_record.png" />
+  </ItemGroup>
+
+</Project>

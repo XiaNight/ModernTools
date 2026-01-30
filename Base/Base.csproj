@@ -1,0 +1,127 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Keyboard.ico</ApplicationIcon>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SelfContained>true</SelfContained>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.0</Version>
+    <InformationalVersion>V02_00_01</InformationalVersion>
+    <CleanInformationalVersion>$(CleanInformationalVersion)</CleanInformationalVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Assets\DropFile.png" />
+    <None Remove="Helpers\InvertEffect.ps" />
+    <None Remove="Properties\Settings.settings" />
+    <None Remove="Resource\Fonts\NotoSansTC-VariableFont_wght.ttf" />
+    <None Remove="Resource\Icons\AppIcon_1024.png" />
+    <None Remove="Resource\Icons\AppIcon_128.png" />
+    <None Remove="Resource\Icons\AppIcon_256.png" />
+    <None Remove="Resource\Icons\AppIcon_512.png" />
+    <None Remove="Resource\Icons\AppIcon_64.png" />
+    <None Remove="Resource\Icons\AppIcon_Flat_1024.png" />
+    <None Remove="Resource\Icons\AppIcon_Flat_128.png" />
+    <None Remove="Resource\Icons\AppIcon_Flat_256.png" />
+    <None Remove="Resource\Icons\AppIcon_Flat_512.png" />
+    <None Remove="Resource\Icons\AppIcon_Flat_64.png" />
+    <None Remove="Tools\Bluetooth\bluetooth.ps1" />
+    <None Remove="Tools\Bluetooth\BluetoothOff.bat" />
+    <None Remove="Tools\Bluetooth\BluetoothOn.bat" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\DropFile.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Resource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Helpers\InvertEffect.ps">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Resource>
+    <Content Include="Resource\Fonts\NotoSansTC-VariableFont_wght.ttf" />
+    <Resource Include="Resource\Icons\AppIcon_1024.png" />
+    <Resource Include="Resource\Icons\AppIcon_128.png" />
+    <Resource Include="Resource\Icons\AppIcon_256.png" />
+    <Resource Include="Resource\Icons\AppIcon_512.png" />
+    <Resource Include="Resource\Icons\AppIcon_64.png" />
+    <Content Include="Themes\Brushes.xaml" />
+    <Content Include="Themes\Generic.xaml" />
+    <Content Include="Themes\Palette.Dark.xaml" />
+    <Content Include="Themes\Palette.Light.xaml" />
+    <Resource Include="Keyboard.ico" />
+    <Resource Include="Resource\Icons\AppIcon_Flat_1024.png" />
+    <Resource Include="Resource\Icons\AppIcon_Flat_128.png" />
+    <Resource Include="Resource\Icons\AppIcon_Flat_256.png" />
+    <Resource Include="Resource\Icons\AppIcon_Flat_512.png" />
+    <Resource Include="Resource\Icons\AppIcon_Flat_64.png" />
+    <Resource Include="Themes\Brushes.xaml" />
+    <Resource Include="Themes\Generic.xaml" />
+    <Resource Include="Themes\Palette.Dark.xaml" />
+    <Resource Include="Themes\Palette.Light.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="Themes\brushes.xaml" />
+    <Page Remove="Themes\generic.xaml" />
+    <Page Remove="Themes\palette.dark.xaml" />
+    <Page Remove="Themes\palette.light.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+    <PackageReference Include="ComputeSharp" Version="3.0.0" />
+    <PackageReference Include="System.IO.Ports" Version="9.0.4" />
+    <PackageReference Include="System.Management" Version="9.0.7" />
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Components\Chart\FastStripChartControl.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="Components\Chart\ScatterChartControl.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="Components\NavigationButton.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Update="Components\VerticalTabsManager.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Properties\PublishProfiles\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Tools\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="RenameExe" AfterTargets="Publish">
+    <Exec Command="cmd /c del &quot;$(PublishDir)KeyboardDevTool_$(CleanInformationalVersion).exe&quot; &amp;&amp; rename &quot;$(PublishDir)KeyboardUI.exe&quot; &quot;KeyboardDevTool_$(CleanInformationalVersion).exe&quot;" />
+  </Target>
+
+  <ItemGroup>
+    <DesignData Include="Properties\DesignTimeResources.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+      <ContainsDesignTimeResources>true</ContainsDesignTimeResources>
+    </DesignData>
+    <DesignData Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
+    </DesignData>
+  </ItemGroup>
+</Project>

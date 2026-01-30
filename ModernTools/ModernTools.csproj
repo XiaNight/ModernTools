@@ -1,16 +1,39 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
+    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>AnyCPU;x64</Platforms>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <SelfContained>true</SelfContained>
     <UseWPF>true</UseWPF>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <InformationalVersion>V99_03_14</InformationalVersion>
+    <CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
+    <AppName>KeyboardUI</AppName>
+    <Company>AsusTek Computer Inc.</Company>
+    <CompanyName>Asus</CompanyName>
+    <Product>GamePad Toolset</Product>
+    <ProductName>$(Product)</ProductName>
+    <Copyright>Copyright © AsusTek Computer Inc. All rights reserved.</Copyright>
+    <AssemblyName>$(AppName)_$(CleanInformationalVersion)</AssemblyName>
+    <Title>$(Product) $(CleanInformationalVersion)</Title>
+    <ApplicationIcon>ROG_DevTool.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+	  <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+	  <ProjectReference Include="..\Features\Audio\Audio.csproj">
+		  <ReferenceOutputAssembly>True</ReferenceOutputAssembly>
+		  <Private>True</Private>
+	  </ProjectReference>
+	  <ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
+	  <ProjectReference Include="..\Features\Gamepad\GamePadToolset.csproj" />
+	  <ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
   </ItemGroup>
 
 </Project>

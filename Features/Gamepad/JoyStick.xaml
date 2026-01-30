@@ -1,0 +1,157 @@
+﻿<UserControl x:Class="Gamepad.JoyStick"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Gamepad"
+             mc:Ignorable="d" 
+             FontFamily="Consolas"
+             d:DesignHeight="450" d:DesignWidth="800" d:Background="White">
+    <Grid>
+        <Canvas>
+            <Rectangle
+                Canvas.Left="0" Canvas.Top="0"
+                Width="290" Height="240"
+                Fill="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                Stroke="{DynamicResource SystemControlForegroundBaseHighBrush}" StrokeThickness="3"
+                RadiusX="0" RadiusY="0"
+                Visibility="Collapsed"
+            />
+
+            <DockPanel 
+                Canvas.Left="114" Canvas.Top="5" Width="80"
+                HorizontalAlignment="Right"
+            >
+            </DockPanel>
+
+
+            <TextBlock
+                x:Name="TitleTextBlock"
+                Canvas.Left="10" Canvas.Top="5"
+                FontSize="24"
+                FontWeight="Bold"
+                Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Text="{Binding TitleText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                Margin="0,0,0,10"
+            />
+
+            <Grid Canvas.Left="8" Canvas.Top="154">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="60"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Column="4" Grid.Row="0" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="Mag:"/>
+                <TextBlock Grid.Column="4" Grid.Row="1" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="Fit:"/>
+                <TextBlock Grid.Column="0" Grid.Row="2" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="X:" />
+                <TextBlock Grid.Column="2" Grid.Row="2" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="min:" />
+                <TextBlock Grid.Column="4" Grid.Row="2" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="max:" />
+                <TextBlock Grid.Column="0" Grid.Row="3" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="Y:" />
+                <TextBlock Grid.Column="2" Grid.Row="3" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="min:" />
+                <TextBlock Grid.Column="4" Grid.Row="3" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" Text="max:" />
+                <TextBlock Grid.Column="5" Grid.Row="0" FontWeight="Bold" FontSize="16" x:Name="MagnitudeText" Text="0.0" />
+                <TextBlock Grid.Column="5" Grid.Row="1" FontWeight="Bold" FontSize="16" x:Name="CircularityText" Text="0.0%" />
+                <TextBlock Grid.Column="1" Grid.Row="2" FontWeight="Bold" FontSize="16" x:Name="XValueText" Text=" 0" />
+                <TextBlock Grid.Column="3" Grid.Row="2" FontWeight="Bold" FontSize="16" x:Name="XValueMinText" Text=" 0" />
+                <TextBlock Grid.Column="5" Grid.Row="2" FontWeight="Bold" FontSize="16" x:Name="XValueMaxText" Text=" 0" />
+                <TextBlock Grid.Column="1" Grid.Row="3" FontWeight="Bold" FontSize="16" x:Name="YValueText" Text=" 0" />
+                <TextBlock Grid.Column="3" Grid.Row="3" FontWeight="Bold" FontSize="16" x:Name="YValueMinText" Text=" 0" />
+                <TextBlock Grid.Column="5" Grid.Row="3" FontWeight="Bold" FontSize="16" x:Name="YValueMaxText" Text=" 0" />
+            </Grid>
+
+            <Canvas Canvas.Left="20" Canvas.Top="20">
+            
+                <!-- horizontal line -->
+                <Path Canvas.Left="80" Canvas.Top="80" Stroke="{DynamicResource SystemControlForegroundBaseLowBrush}" StrokeThickness="4" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="-80,0" IsClosed="False">
+                                <LineSegment Point="80,0"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- vertical line -->
+                <Path Canvas.Left="80" Canvas.Top="80" Stroke="{DynamicResource SystemControlForegroundBaseLowBrush}" StrokeThickness="4" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="0,80" IsClosed="False">
+                                <LineSegment Point="0,-80"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- border circle -->
+                <Ellipse Width="168" Height="168" Stroke="{DynamicResource SystemControlForegroundChromeHighBrush}" StrokeThickness="6" IsHitTestVisible="False">
+                    <Ellipse.RenderTransform>
+                        <TranslateTransform X="-4" Y="-4"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+
+                <!-- circularity line -->
+                <Path
+                    x:Name="CircularityLine"
+                    Canvas.Left="80"
+                    Canvas.Top="80"
+                    Stroke="{DynamicResource SystemControlHighlightAccentBrush}"
+                    Fill="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                    StrokeThickness="6"
+                    StrokeStartLineCap="Round"
+                    StrokeEndLineCap="Round"
+                    StrokeLineJoin="Round"
+                    StrokeMiterLimit="1"
+                    IsHitTestVisible="False"
+                    
+                >
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="0,0" IsClosed="False">
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- line direction -->
+                <Path x:Name="DirectionLine" Canvas.Left="80" Canvas.Top="80" Stroke="{DynamicResource SystemControlForegroundBaseMediumBrush}" StrokeThickness="4" IsHitTestVisible="False">
+                    <Path.Data>
+                        <PathGeometry>
+                            <PathFigure StartPoint="0,0" IsClosed="False">
+                                <LineSegment Point="0,0"/>
+                            </PathFigure>
+                        </PathGeometry>
+                    </Path.Data>
+                </Path>
+
+                <!-- center point -->
+                <Ellipse Canvas.Left="0" Canvas.Top="0"
+                         Width="4" Height="4" Fill="{DynamicResource SystemControlForegroundBaseMediumBrush}" IsHitTestVisible="False">
+                    <Ellipse.RenderTransform>
+                        <TranslateTransform X="78" Y="78"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                
+                <!-- Joy Stick Dot -->
+                <Ellipse x:Name="CenterPoint"
+                         Canvas.Left="0" Canvas.Top="0"
+                         Width="8" Height="8" Fill="{DynamicResource SystemControlForegroundBaseHighBrush}" IsHitTestVisible="False">
+                    <Ellipse.RenderTransform>
+                        <TranslateTransform X="76" Y="76"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+            </Canvas>
+        </Canvas>
+    </Grid>
+</UserControl>
