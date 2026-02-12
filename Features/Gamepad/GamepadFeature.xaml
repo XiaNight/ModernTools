@@ -48,15 +48,29 @@
                     <TextBlock Text="Timestamp: " FontSize="20" FontWeight="Bold"/>
                     <TextBlock Text="0" x:Name="TimestampText" FontSize="20"/>
                 </StackPanel>
+                    <Grid HorizontalAlignment="Stretch"  Margin="0 4">
+                        <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="1*"/>
+                        </Grid.ColumnDefinitions>
+                    <TextBlock Text="Vibration: " Grid.Column="0" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Button x:Name="LightVibrationButton" Grid.Column="1" FontSize="16" Content="Light" Padding="4 2" IsEnabled="False" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="HeavyVibrationButton" Grid.Column="2" FontSize="16" Margin="4 0 0 0" Content="Heavy" Padding="4 2" IsEnabled="False" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                    </Grid>
+                    <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="ReportRate: " Grid.Column="0" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="0" x:Name="ReportRateText" Grid.Column="1" FontSize="20"/>
+                    <Button x:Name="ReportRateSettingBtn" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <ui:FontIcon Glyph="&#xE713;" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    </Button>
+                </Grid>
                 <StackPanel Orientation="Horizontal" Margin="0 4">
-                    <TextBlock Text="Vibration: " FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-                    <TextBlock Text="0" x:Name="VibrationText" FontSize="20" Margin="4 0" Visibility="Collapsed" VerticalAlignment="Center"/>
-                    <Button x:Name="LightVibrationButton" FontSize="16" Content="Light" Padding="4 2" IsEnabled="False" VerticalAlignment="Center"/>
-                    <Button x:Name="HeavyVibrationButton" FontSize="16" Margin="4 0" Content="Heavy" Padding="4 2" IsEnabled="False" VerticalAlignment="Center"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0 4">
-                    <TextBlock Text="ReportRate: " FontSize="20" FontWeight="Bold"/>
-                    <TextBlock Text="0" x:Name="ReportRateText" FontSize="20"/>
                 </StackPanel>
                 <ComboBox x:Name="ChartType" HorizontalAlignment="Stretch" SelectedIndex="0" Padding="16,0,16,0">
                     <ComboBoxItem>Report Rate</ComboBoxItem>

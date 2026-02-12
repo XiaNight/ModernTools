@@ -36,6 +36,8 @@ namespace Audio.Entries
         private long offsetTime = 0;
         private float volumeOffsetLeft = 1;
         private float volumeOffsetRight = 1;
+        private float[] volumeSpectrumOffsetLeft;
+        private float[] volumeSpectrumOffsetRight;
         private float manualVolumeOffset = 1;
         private Task comparingTask;
         private CancellationTokenSource comparingCancellationTokenSource;
@@ -113,14 +115,17 @@ namespace Audio.Entries
             AudioDeviceEntry.SampleRateText.Text = $"Sample Rate: {handler.SampleRate} Hz";
             AudioDeviceEntry.SampleRateText.Visibility = System.Windows.Visibility.Visible;
 
-            spectrumRing = new(MaxSpectrumLength, 7, handler.HalfBins, sigma: 3, fill: true);
-            compareRing = new(MaxSpectrumLength, 7, handler.HalfBins, sigma: 3, fill: true);
+            spectrumRing = new(MaxSpectrumLength, 13, handler.HalfBins, sigma: 4, fill: true);
+            compareRing = new(MaxSpectrumLength, 13, handler.HalfBins, sigma: 4, fill: true);
             differenceRing.Fill((ref TimedSpectrum value) =>
             {
                 value.leftSpectrum = new float[handler.HalfBins];
                 value.rightSpectrum = new float[handler.HalfBins];
                 value.timestampTick = 0;
             });
+
+            volumeSpectrumOffsetLeft = new float[handler.HalfBins];
+            volumeSpectrumOffsetRight = new float[handler.HalfBins];
 
             if (isStreaming)
             {
@@ -151,7 +156,7 @@ namespace Audio.Entries
             comparingSubject = null;
             foreach (var subjects in audioSubjects)
             {
-                if (subjects.SelectedSource.ID == device.ID)
+                if (subjects.SelectedSource.ID == device?.ID)
                 {
                     comparingSubject = subjects;
                     comparingSubject.OnSpectrumUpdated += CompareDeviceSpectrumUpdated;
@@ -163,12 +168,21 @@ namespace Audio.Entries
             AudioDeviceEntry.LeftFFTChart.ScaleMode = scaleMode;
             AudioDeviceEntry.RightFFTChart.ScaleMode = scaleMode;
 
+            // Set spectrum line charts
             double minY = comparingSubject == null ? -60 : -60;
             double maxY = comparingSubject == null ? 0 : 60;
             AudioDeviceEntry.RightFFTChart.MinY = minY;
             AudioDeviceEntry.RightFFTChart.MaxY = maxY;
             AudioDeviceEntry.LeftFFTChart.MinY = minY;
             AudioDeviceEntry.LeftFFTChart.MaxY = maxY;
+
+            // Set spectrograms
+            minY = comparingSubject == null ? -60 : -20;
+            maxY = comparingSubject == null ? 0 : 20;
+            AudioDeviceEntry.LeftSpectrogram.MinDb = minY;
+            AudioDeviceEntry.LeftSpectrogram.MaxDb = maxY;
+            AudioDeviceEntry.RightSpectrogram.MinDb = minY;
+            AudioDeviceEntry.RightSpectrogram.MaxDb = maxY;
 
             offsetTime = AlignmentTimestamp - comparingSubject?.AlignmentTimestamp ?? 0;
             AudioDeviceEntry.SetOffset(offsetTime);
@@ -228,24 +242,26 @@ namespace Audio.Entries
                     return false;
                 }
 
-                differenceRing.EnqueueValue((ref TimedSpectrum value) =>
+                TimedSpectrum enqueued = differenceRing.EnqueueValue((ref TimedSpectrum value) =>
                 {
                     float leftVolumeDifference = AudioChannelHandler.DbToSqrRms(volumeOffsetLeft - comparingSubject.volumeOffsetLeft);
                     float rightVolumeDifference = AudioChannelHandler.DbToSqrRms(volumeOffsetRight - comparingSubject.volumeOffsetRight);
 
                     for (int i = 0; i < handler.HalfBins; i++)
                     {
-                        value.leftSpectrum[i] = LogorithmicCompare(
+                        value.leftSpectrum[i] = MinThresholdValue(LogorithmicCompare(
                             currentSpectrum.leftSpectrum[i],
-                            peek.leftSpectrum[i], leftVolumeDifference * manualVolumeOffset
-                        );
-                        value.rightSpectrum[i] = LogorithmicCompare(
+                            peek.leftSpectrum[i], comparingSubject.volumeSpectrumOffsetLeft[i] / volumeSpectrumOffsetLeft[i]
+                        ), manualVolumeOffset);
+
+                        value.rightSpectrum[i] = MinThresholdValue(LogorithmicCompare(
                             currentSpectrum.rightSpectrum[i],
-                            peek.rightSpectrum[i], rightVolumeDifference * manualVolumeOffset
-                        );
+                            peek.rightSpectrum[i], comparingSubject.volumeSpectrumOffsetRight[i] / volumeSpectrumOffsetRight[i]
+                        ), manualVolumeOffset);
                     }
                     value.timestampTick = currentSpectrum.timestampTick;
                 });
+                currentState?.SpectrumUpdate(enqueued);
 
                 return true;
             }
@@ -253,9 +269,10 @@ namespace Audio.Entries
             return false;
         }
 
-        private static float Compare(float a, float b)
+        private static float MinThresholdValue(float value, float threshold)
         {
-            return MathF.Abs(a - b);
+            if (MathF.Abs(value) < threshold) return 0;
+            return value;
         }
 
         /// <summary>
@@ -264,7 +281,7 @@ namespace Audio.Entries
         /// <param name="a"></param>
         /// <param name="b"></param>
         /// <returns></returns>
-        private static float LogorithmicCompare(float a, float b, float offsetB)
+        private static float LogorithmicCompare(float a, float b, float offset)
         {
             if (a == 0 && b == 0)
             {
@@ -277,11 +294,12 @@ namespace Audio.Entries
 
             float logA = MathF.Max(MathF.Log10(a), -80);
             float logB = MathF.Max(MathF.Log10(b), -80);
+            float logOffset = MathF.Log10(offset);
             float logMax = Math.Max(logA, logB);
-            //float noiseFix = logMax - 4;
-            //noiseFix /= noiseFix + 1;
+            float noiseFix = MathF.Max(0, logMax + 8);
+            noiseFix = 1 - MathF.Exp(-noiseFix);
 
-            return 10 * (logA - logB - offsetB);// * noiseFix;
+            return 10 * (logA - logB + logOffset) * noiseFix;
         }
 
         public class TimedSpectrum : IDisposable
@@ -302,12 +320,12 @@ namespace Audio.Entries
             TimedSpectrum enqueued = spectrumRing.EnqueueValue((ref TimedSpectrum spectrum) =>
             {
                 spectrum.timestampTick = timestampTick;
-                spectrum.leftSpectrum = new float[handler.HalfBins];
-                spectrum.rightSpectrum = new float[handler.HalfBins];
                 Array.Copy(handler.spectrumL, spectrum.leftSpectrum, handler.spectrumL.Length);
                 Array.Copy(handler.spectrumR, spectrum.rightSpectrum, handler.spectrumR.Length);
             });
 
+            if(comparingSubject == null)
+                currentState?.SpectrumUpdate(enqueued);
             OnSpectrumUpdated?.Invoke(enqueued);
         }
 

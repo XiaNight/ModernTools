@@ -4,6 +4,7 @@ using Base.Core;
 using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
+using ModernWpf.Controls;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -63,6 +64,11 @@ namespace Gamepad
         private float reportRateRaw = 0f;
         private float momentum = 0;
         private int noDataCounter = 0;
+
+        // Report Rate Trigger
+        private float reportRateTriggerThreshold = 500;
+        private bool isReportRateTriggered = false;
+        private bool isReportRateTriggerEnabled = false;
 
         // Chart
         private Action<long> appendChartData = (_) => { }; // Add data point to chart
@@ -217,6 +223,46 @@ namespace Gamepad
                     SetChartType(chartType);
                     SetRenderMode(renderMode);
                 };
+            };
+
+            page.ReportRateSettingBtn.Click += (_, _) =>
+            {
+                StackPanel stackPanel = new StackPanel() { Orientation = Orientation.Vertical };
+
+                // Rate Input
+                TextBox rateInput = new TextBox() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
+                stackPanel.Children.Add(rateInput);
+
+                // Enable Checkbox
+                CheckBox enableCheckbox = new CheckBox() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
+                stackPanel.Children.Add(enableCheckbox);
+
+                // Dialog
+                ContentDialog dialog = new()
+                {
+                    Title = "Report Rate Trigger Threshold",
+                    Content = stackPanel,
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel"
+                };
+
+                dialog.PrimaryButtonClick += (_, _) =>
+                {
+                    if (dialog.Content is StackPanel sp)
+                    {
+                        if (sp.Children[0] is TextBox tb && float.TryParse(tb.Text, out float threshold))
+                        {
+                            reportRateTriggerThreshold = threshold;
+                        }
+
+                        if (sp.Children[1] is CheckBox cb)
+                        {
+                            isReportRateTriggerEnabled = cb.IsChecked == true;
+                        }
+                    }
+                };
+
+                _ = dialog.ShowAsync();
             };
 
             page.ChartType.SelectionChanged += (_, _) => SetChartType(page.ChartType.SelectedIndex);
@@ -431,6 +477,35 @@ namespace Gamepad
             }
 
             reportRateSmoothed = timestamps.Count / 1f;
+
+            if(isReportRateTriggerEnabled)
+            {
+                if (reportRateSmoothed < reportRateTriggerThreshold)
+                {
+                    if(!isReportRateTriggered)
+                    {
+                        isReportRateTriggered = true;
+                        isReportRateTriggerEnabled = false;
+                        ContentDialog dialog = new()
+                        {
+                            Title = "Report Rate Trigger Threshold",
+                            Content = new TextBlock() { Text = $"Report rate dropped below {reportRateTriggerThreshold} reports/sec. at date time {DateTime.Now}" },
+                            PrimaryButtonText = "Ok",
+                        };
+
+                        dialog.PrimaryButtonClick += (_, _) =>
+                        {
+                            isReportRateTriggerEnabled = true;
+                        };
+                        Main.RequestWindowFocus();
+                        _ = dialog.ShowAsync();
+                    }
+                }
+                else
+                {
+                    isReportRateTriggered = false;
+                }
+            }
 
             if (!hasData)
             {

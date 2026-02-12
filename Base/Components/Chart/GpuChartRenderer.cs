@@ -495,6 +495,7 @@ namespace Base.Components.Chart
                     int binIndex = Math.Clamp((int)(hz * fftLength / sampleRate), 0, bins - 1);
 
                     float mag = magArray[binIndex];
+                    mag = MathF.Abs(mag);
                     if (mag <= 0) mag = 1e-10f;
 
                     float db = 10f * MathF.Log10(mag);

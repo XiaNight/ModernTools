@@ -73,9 +73,6 @@ namespace Audio
             PrepareButton.Click += (s, e) =>
             {
                 OnAdaptationStarted?.Invoke();
-                PrepareButton.Visibility = System.Windows.Visibility.Collapsed;
-                StartButton.Visibility = System.Windows.Visibility.Collapsed;
-                StopPrepareButton.Visibility = System.Windows.Visibility.Visible;
             };
             StopPrepareButton.Click += (s, e) =>
             {
@@ -235,17 +232,6 @@ namespace Audio
             }
         }
 
-        private void StartAdapting()
-        {
-            if (adaptingTask != null && !adaptingTask.IsCompleted)
-            {
-                return;
-            }
-            adaptCts = new CancellationTokenSource();
-            adaptingTask = Task.Run(Adaptation, adaptCts.Token);
-            isAdapting = true;
-        }
-
         private async Task Adaptation()
         {
             List<AudioGenerator> generators = new();
@@ -331,7 +317,7 @@ namespace Audio
             {
                 if (entry.TryGetState<AudioSubject.AudioSubjectTimeAlignmentState>(out var state))
                 {
-                    state.SetupVolumeTrigger(1);
+                    state.SetupVolumeTrigger(2);
                 }
             }
             await Task.Delay(1500, adaptCts.Token);
@@ -344,26 +330,32 @@ namespace Audio
             }
             await Task.Delay(200, adaptCts.Token);
 
-            
-
-            /*
-            // short rest after beep
-            await Task.Delay(1000, adaptCts.Token);
-
-            // Set state to adapting
-            foreach (var entry in spawnedEntries)
-                entry.SetState<AudioSubject.AudioSubjectAdaptingState>();
-
-            // Adapt for 3 seconds
-            await Task.Delay(3000, adaptCts.Token);
-            */
-
             // Stop all generators
             foreach (var generator in generators)
                 generator.Pause();
+        }
 
-            // Stop adapting
-            StopAdapting();
+
+        [AppMenuItem("Threshold Adapt")]
+        private async void ThresholdAdapt()
+        {
+            adaptCts ??= new CancellationTokenSource();
+            // Set state to adapting
+            foreach (var entry in spawnedEntries)
+            {
+                var state = entry.SetState<AudioSubject.AudioSubjectAdaptingState>();
+                state.StartSpectrumResponseCalculation();
+            }
+
+            // Adapt for 3 seconds
+            await Task.Delay(3000, adaptCts.Token);
+            
+            foreach (var entry in spawnedEntries)
+            {
+                if (!entry.TryGetState<AudioSubject.AudioSubjectAdaptingState>(out var state)) continue;
+                state.StopSpectrumResponseCalculation();
+                entry.ExitState();
+            }
         }
 
         [AppMenuItem("Spectrum Analysis")]
@@ -376,6 +368,23 @@ namespace Audio
                 if (generator == null) continue;
                 generators.Add(generator);
             }
+
+            // Noise for preparation
+            foreach (var generator in generators)
+            {
+                generator?.SetAmplitude(.5f);
+                generator?.SetWaveType(AudioGenerator.WaveType.Noise);
+                generator?.Start();
+            }
+            await Task.Delay(1000);
+
+            // Set entries to spectrum response state
+            foreach (var entry in spawnedEntries)
+            {
+                var timeState = entry.SetState<AudioSubject.AudioSubjectSpectrumResponseState>();
+                timeState.StartSpectrumResponseCalculation();
+            }
+
             // Noise blast for spectrum analysis
             foreach (var generator in generators)
             {
@@ -384,6 +393,14 @@ namespace Audio
                 generator?.Start();
             }
             await Task.Delay(10000);
+
+            // Set entries to spectrum response state
+            foreach (var entry in spawnedEntries)
+            {
+                var timeState = entry.SetState<AudioSubject.AudioSubjectSpectrumResponseState>();
+                timeState.StopSpectrumResponseCalculation();
+                entry.ExitState();
+            }
 
             foreach (var generator in generators)
             {
@@ -414,6 +431,24 @@ namespace Audio
             {
                 generator.Pause();
             }
+        }
+
+        private void StartAdapting()
+        {
+            if (adaptingTask != null && !adaptingTask.IsCompleted)
+            {
+                return;
+            }
+            adaptCts = new CancellationTokenSource();
+            adaptingTask = Task.Run(Adaptation, adaptCts.Token);
+            isAdapting = true;
+
+            Dispatcher.Invoke(() =>
+            {
+                PrepareButton.Visibility = System.Windows.Visibility.Collapsed;
+                StartButton.Visibility = System.Windows.Visibility.Collapsed;
+                StopPrepareButton.Visibility = System.Windows.Visibility.Visible;
+            });
         }
 
         private void StopAdapting()

@@ -10,7 +10,7 @@ namespace Base.Components.Chart
     public enum YScaleMode
     {
         Linear = 0,
-        Log10 = 1
+        Log10 = 1 
     }
 
     /// <summary>

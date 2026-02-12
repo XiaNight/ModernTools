@@ -24,6 +24,10 @@ namespace Audio.Receiver
         private int ringIndex;
 
         private List<TimedValue<float>> framesBuffer;
+
+        /// <summary>
+        /// Volume buffer in dB
+        /// </summary>
         private List<TimedValue<float>> volumeBuffer;
 
         // Raw samples frame event (for graphing waveforms / spectra)
@@ -51,8 +55,14 @@ namespace Audio.Receiver
         private readonly Complex[] fftBufferL;
         private readonly Complex[] fftBufferR;
 
-        // ---- Output spectrum buffers (power)
+        /// <summary>
+        /// Spectrum for Left channel in squared magnitude
+        /// </summary>
         public readonly float[] spectrumL;
+
+        /// <summary>
+        /// Spectrum for Right channel in squared magnitude
+        /// </summary>
         public readonly float[] spectrumR;
 
         // ---- Window

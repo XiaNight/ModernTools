@@ -1,6 +1,7 @@
 ﻿using Audio;
 using Base.Helpers;
 using Gamepad;
+using GenericMouseAnalyzer;
 using KeyboardHallSensor;
 using System.Windows;
 
@@ -16,9 +17,11 @@ public partial class App : Application
         ComSecurityHelper.Initialize();
         base.OnStartup(e);
 
-        typeof(AudioPage).ToString();
+        //typeof(AudioPage).ToString();
         typeof(GamepadPage).ToString();
-        typeof(RawPage).ToString();
+        //typeof(RawPage).ToString();
+
+        //typeof(GenericMouseAnalyzerPage).ToString();
 
         var window = new Base.MainWindow();
         window.Show();

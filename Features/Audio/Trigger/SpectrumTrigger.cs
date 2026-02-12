@@ -44,7 +44,7 @@ namespace Audio.Trigger
             }
         }
 
-        public void StartAdapting()
+        public void Reset()
         {
             for (int band = 0; band < bandWidth; band++)
             {

@@ -11,9 +11,9 @@
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <InformationalVersion>V99_03_14</InformationalVersion>
+    <InformationalVersion>V99_06_14</InformationalVersion>
     <CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
-    <AppName>KeyboardUI</AppName>
+    <AppName>GamepadToolset</AppName>
     <Company>AsusTek Computer Inc.</Company>
     <CompanyName>Asus</CompanyName>
     <Product>GamePad Toolset</Product>
@@ -33,6 +33,7 @@
 	  </ProjectReference>
 	  <ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
 	  <ProjectReference Include="..\Features\Gamepad\GamePadToolset.csproj" />
+	  <ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 	  <ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
   </ItemGroup>
 

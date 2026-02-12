@@ -473,6 +473,15 @@ public partial class MainWindow : Window
     }
 
 
+    public void RequestWindowFocus()
+    {
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        Focus();
+    }
+
+
     #endregion
 
     #region Menu Item
