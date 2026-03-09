@@ -61,7 +61,7 @@ namespace KeyboardHallSensor
 
         protected abstract void Enter();
         protected abstract void Exit();
-        public abstract void Parse(ReadOnlyMemory<byte> bytes);
+        public abstract void Parse(ReadOnlyMemory<byte> bytes, DateTime time);
 
         private void FormPage()
         {

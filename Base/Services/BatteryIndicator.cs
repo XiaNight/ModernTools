@@ -28,16 +28,16 @@ namespace Base.Services
 
 		public static void GetBatteryLevel()
 		{
-			if (DeviceSelection.Instance.ActiveInterface == null) return;
-			DeviceSelection.Instance.ActiveInterface.OnDataReceived += OnDataReceived;
-			ProtocalService.AppendCmd(DeviceSelection.Instance.ActiveInterface, "power_battery_information", true);
+			//if (DeviceSelection.Instance.ActiveInterface == null) return;
+			//DeviceSelection.Instance.ActiveInterface.OnDataReceived += OnDataReceived;
+			//ProtocalService.AppendCmd(DeviceSelection.Instance.ActiveInterface, "power_battery_information", true);
 
-			void OnDataReceived(ReadOnlyMemory<byte> readOnlyByte)
+			void OnDataReceived(ReadOnlyMemory<byte> readOnlyByte, DateTime time)
 			{
 				var data = readOnlyByte.Span;
 				if (data.Length < 3) return;
 				if (data[1] != 0xFA || data[2] != 0x30 || data[3] != 0x01) return;
-				DeviceSelection.Instance.ActiveInterface.OnDataReceived -= OnDataReceived;
+				//DeviceSelection.Instance.ActiveInterface.OnDataReceived -= OnDataReceived;
 
 				List<byte> batteryLevels = new();
 				int parserIndex = 5;

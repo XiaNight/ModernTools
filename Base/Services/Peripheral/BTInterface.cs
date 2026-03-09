@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace Base.Services.Peripheral
 {
-    public sealed class BTInterfaceDetail : PeripheraInterfaceDetail
+    public sealed class BTInterfaceDetail : PeripheralInterfaceDetail
     {
         public string PortName { get; }
 
@@ -24,7 +24,7 @@ namespace Base.Services.Peripheral
             PortName = portName ?? string.Empty;
         }
 
-        public override PeripheralInterface Connect(bool useAsyncRead = false) => new BTInterface(this, useAsyncRead);
+        protected override PeripheralInterface CreateConnection(bool useAsyncRead = false) => new BTInterface(this, useAsyncRead);
     }
 
     public sealed class BTInterface : PeripheralInterface

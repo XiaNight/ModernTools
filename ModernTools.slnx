@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/Feature/">
     <Project Path="Features/Audio/Audio.csproj" />
+    <Project Path="Features/CommonProtocol/CommonProtocol.csproj" Id="174beb6f-f5e8-43aa-821b-a2735486653a" />
     <Project Path="Features/Gamepad/GamePad.csproj" />
     <Project Path="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj" />
     <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj" />

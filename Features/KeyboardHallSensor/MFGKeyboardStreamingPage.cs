@@ -152,7 +152,7 @@ namespace KeyboardHallSensor
 
         #endregion
 
-        public override void Parse(ReadOnlyMemory<byte> bytes)
+        public override void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
             var span = bytes.Span;
 
@@ -185,8 +185,8 @@ namespace KeyboardHallSensor
                     int value = ParseValue(values);
                     if (isRecording)
                     {
-                        string time = DateTime.Now.ToString("MM-dd HH:mm:ss.fff");
-                        recordStream.WriteLine($"{time},\"{value}\"");
+                        string timeStr = DateTime.Now.ToString("MM-dd HH:mm:ss.fff");
+                        recordStream.WriteLine($"{timeStr},\"{value}\"");
                     }
                     Chart.AddSample(value, DateTime.Now.Ticks);
                 }

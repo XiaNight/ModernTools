@@ -13,9 +13,13 @@ namespace Audio.Generator
 
         private delegate int ReadDelegate(float[] buffer, in int offset, in int sampleCount);
         private ReadDelegate readDelegate;
-
+         
         public WaveType CurrentWaveType { get; private set; } = WaveType.Sine;
         private MMDevice device;
+
+        // MP3 reader
+        private Mp3FileReader mp3Reader;
+        private ISampleProvider sampleProvider;
 
         public AudioGenerator(MMDevice device, int sampleRate, double frequencyHz, float amplitude = 0.1f)
         {
@@ -72,6 +76,11 @@ namespace Audio.Generator
             return sampleCount;
         }
 
+        //private int MP3Read(float[] buffer, in int offset, in int sampleCount)
+        //{
+            
+        //}
+
         public void SetWaveType(WaveType waveType)
         {
             CurrentWaveType = waveType;
@@ -80,8 +89,16 @@ namespace Audio.Generator
                 WaveType.Sine => SineRead,
                 WaveType.Square => SquareRead,
                 WaveType.Noise => NoiseRead,
+                WaveType.MP3 => SineRead, // Use SetMP3 Source to set the MP3 read method
                 _ => SineRead,
             };
+        }
+
+        public void SetMP3Source(string filePath)
+        {
+            mp3Reader = new Mp3FileReader(filePath);
+            sampleProvider = mp3Reader.ToSampleProvider();
+            //readDelegate = sampleProvider.Read
         }
 
         public void Start()
@@ -114,7 +131,8 @@ namespace Audio.Generator
         {
             Sine,
             Square,
-            Noise
+            Noise,
+            MP3
         }
     }
 }

@@ -7,6 +7,7 @@
              xmlns:base="clr-namespace:Base.Pages;assembly=Base"
              xmlns:chart="clr-namespace:Base.Components.Chart;assembly=Base"
              xmlns:entries="clr-namespace:Audio.Entries"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800" d:Background="White">
     <Grid>
@@ -20,7 +21,7 @@
         </Grid.RowDefinitions>
 
         <Grid
-            Margin="0 0 10 0"
+            Margin="10"
             Grid.Row="0" Grid.Column="0"
             Grid.RowSpan="2">
             <Grid.ColumnDefinitions>
@@ -41,20 +42,51 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBlock Grid.Column="0" Grid.Row="4" Text="Cycle"/>
-            <TextBox x:Name="CycleTimeInputField" Grid.Column="2" MinWidth="60" Text="600" Grid.Row="4"/>
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="Duration (ms)"/>
 
-            <TextBlock Grid.Row="6" Grid.Column="0" Text="Threshold"/>
-            <TextBox x:Name="ThresholdInputField" Grid.Row="6" Grid.Column="2" Text="5"/>
-            
-            <TextBox x:Name="DurationInputField" Grid.Row="5" Grid.Column="2" MinWidth="60" Text="1000"/>
-            <Button x:Name="PrepareButton" Grid.Row="7" Grid.Column="0" Content="Prepare" Grid.ColumnSpan="3"/>
-            <Button x:Name="StopPrepareButton" Grid.Row="7" Grid.Column="0" Content="Stop" Grid.ColumnSpan="3" Visibility="Collapsed"/>
-            <TextBlock x:Name="RemainingDurationText" Text="Remaining: 10:00" Grid.Row="9" Grid.Column="0" HorizontalAlignment="Center"/>
-            <Button x:Name="StartButton" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Content="Start"/>
-            <Button x:Name="StopButton" Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" Content="Stop" Visibility="Collapsed"/>
+            <TextBlock Text="檢測次數" Grid.Column="0" Grid.Row="4" VerticalAlignment="Center"/>
+            <TextBox x:Name="CycleTimeInputField" Grid.Row="4" Grid.Column="2" MinWidth="80" Text="600" Margin="4" VerticalAlignment="Center"/>
+
+            <TextBlock Text="每次時長 (ms)" Grid.Row="5" Grid.Column="0" VerticalAlignment="Center"/>
+            <TextBox x:Name="DurationInputField" Grid.Row="5" Grid.Column="2" MinWidth="80" Text="1000" Margin="4" VerticalAlignment="Center"/>
+
+            <TextBlock Text="寬限值 (db)" Grid.Row="6" Grid.Column="0" VerticalAlignment="Center"/>
+            <TextBox x:Name="ToleranceInputField" Grid.Row="6" Grid.Column="2" MinWidth="80" Text="3" Margin="4"/>
+
+            <TextBlock Text="觸發門檻" Grid.Row="7" Grid.Column="0" VerticalAlignment="Center"/>
+            <TextBox x:Name="TriggerSensitivityInputField" Grid.Row="7" Grid.Column="2" MinWidth="80" Text="50" Margin="4"/>
+
+            <Grid Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Stretch">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="檢測範圍 (hz)" Grid.Column="0" VerticalAlignment="Center"/>
+                <TextBox x:Name="LowCutoffInputField" Grid.Column="1" Text="200" MinWidth="80" Margin="4" HorizontalAlignment="Stretch"/>
+                <TextBox x:Name="HighCutoffInputField" Grid.Column="2" Text="10000" MinWidth="80" Margin="4" HorizontalAlignment="Stretch"/>
+            </Grid>
+
+            <Grid Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="雜訊抑制" Grid.Column="0" VerticalAlignment="Center"/>
+                <Slider x:Name="NoiseCancelingEffectSlider" Value="1" Minimum="0" Maximum="1" Grid.Column="1" MinWidth="80" Margin="4"/>
+                <TextBlock x:Name="NoiseCancelingEffectText" Text="1" Grid.Column="2" VerticalAlignment="Center" Margin="4" MinWidth="20"/>
+            </Grid>
+
+            <Button x:Name="PrepareButton" Grid.Row="10" Grid.Column="0" Content="校正" Grid.ColumnSpan="3" Margin="4" HorizontalAlignment="Stretch"/>
+            <Button x:Name="ThresholdAdaptButton" Grid.Row="11" Grid.Column="0" Content="設定界線" Grid.ColumnSpan="3" Margin="4" HorizontalAlignment="Stretch"/>
+            <Button x:Name="StopPrepareButton" Grid.Row="10" Grid.Column="0" Content="Stop" Grid.ColumnSpan="3" Margin="4" HorizontalAlignment="Stretch" Visibility="Collapsed"/>
+            <TextBlock x:Name="RemainingDurationText" Text="Remaining: 10:00" Grid.Row="13" Grid.Column="0" Margin="4" HorizontalAlignment="Stretch"/>
+            <Button x:Name="StartButton" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Content="Start" Margin="4" HorizontalAlignment="Stretch"/>
+            <Button x:Name="StopButton" Grid.Row="12" Grid.Column="0" Grid.ColumnSpan="3" Content="Stop" Margin="4" HorizontalAlignment="Stretch" Visibility="Collapsed"/>
         </Grid>
 
         <ScrollViewer

@@ -25,18 +25,6 @@ namespace Base.Services
 
         public Device ActiveDevice { get; private set; }
 
-        /// <summary>
-        /// HID-compliant Vendor Defined Device
-        /// </summary>
-        [Deprecated("Use ActiveDevice instead.", DeprecationType.Deprecate, 0x0107)]
-        public PeripheralInterface ActiveInterface { get => activeInterface; }
-        [Deprecated("Use ActiveDevice instead.", DeprecationType.Deprecate, 0x0107)]
-        public UIEvent OnActiveInterfaceConnected = new();
-        [Deprecated("Use ActiveDevice instead.", DeprecationType.Deprecate, 0x0107)]
-        public UIEvent OnActiveInterfaceDisconnected = new();
-        [Deprecated("Use ActiveDevice instead.", DeprecationType.Deprecate, 0x0107)]
-        private PeripheralInterface activeInterface;
-
         public class UIEvent
         {
             private event Action eventAction;
@@ -88,8 +76,8 @@ namespace Base.Services
             Main.ConnectButton.Click += (_, _) => { _ = Connect(); };
             Main.DisconnectButton.Click += (_, _) => { _ = Disconnect(); };
 
-            ProtocalService.OnCmdSent += UpdatePendingCmdCount;
-            ProtocalService.OnCmdQueued += UpdatePendingCmdCount;
+            ProtocolService.OnCmdSent += (_) => UpdatePendingCmdCount();
+            ProtocolService.OnCmdQueued += (_) => UpdatePendingCmdCount();
 
             OnActiveDeviceConnected += () =>
             {
@@ -136,17 +124,21 @@ namespace Base.Services
                     //Main.FooterDeviceBattery.Text = batteryText;
                 });
             };
-            OnActiveInterfaceConnected += BatteryIndicator.GetBatteryLevel;
+            //OnActiveInterfaceConnected += BatteryIndicator.GetBatteryLevel;
 
             _ = Refresh();
         }
 
-        private void UpdatePendingCmdCount(ProtocalService.CmdData cmd)
+        private void UpdatePendingCmdCount()
         {
-            Application.Current?.Dispatcher.Invoke(() =>
+            try
             {
-                pendingCmdCountText.Text = $"Pending commands: {ProtocalService.PendingCmdCount}";
-            });
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    pendingCmdCountText.Text = $"Pending commands: {ProtocolService.PendingCmdCount}";
+                }, System.Windows.Threading.DispatcherPriority.Background);
+            }
+            catch { }
         }
 
         public override void OnApplicationQuit(System.ComponentModel.CancelEventArgs e)
@@ -215,21 +207,21 @@ namespace Base.Services
         public static List<Device> ConstructDevice(IEnumerable<IPeripheralDetail> interfaces)
         {
             List<Device> devices = [];
-            foreach (var device in interfaces)
+            foreach (var deviceInterface in interfaces)
             {
                 try
                 {
-                    var dev = devices.Find(d => d.VID == device.VID && d.PID == device.PID);
+                    var dev = devices.Find(d => d.VID == deviceInterface.VID && d.PID == deviceInterface.PID);
                     if (dev == null)
                     {
-                        dev = new Device(device.VID, device.PID, device.Product);
+                        dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product);
                         devices.Add(dev);
                     }
-                    dev.AddInterface(device);
+                    dev.AddInterface(deviceInterface);
                 }
                 catch (Exception ex)
                 {
-                    Debug.Log($"Failed to add device interface for vid:{device.VID} pid:{device.PID}\n\t{ex.Message}");
+                    Debug.Log($"Failed to add device interface for vid:{deviceInterface.VID} pid:{deviceInterface.PID}\n\t{ex.Message}");
                 }
             }
             return devices;

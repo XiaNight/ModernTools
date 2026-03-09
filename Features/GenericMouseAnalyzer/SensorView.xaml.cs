@@ -237,18 +237,7 @@ namespace GenericMouseAnalyzer
             if (index < 0) return;
 
             ActiveInterface = ActiveDevice.interfaces[index].Connect(true);
-            ActiveInterface.OnDataReceived += (data) =>
-            {
-                TryParseData(data);
-                TryParseFactory(data);
-                TryParseStopMotion(data);
-                TryParseOutputRaw(data);
-                TryParseOtherData(data);
-                TryParseFail(data);
-
-                // Mark ready after processing a packet
-                isWriteReady = true;
-            };
+            ActiveInterface.OnDataReceived += Parse;
 
             isWriteReady = true;
         }
@@ -256,13 +245,26 @@ namespace GenericMouseAnalyzer
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
+            ActiveInterface.OnDataReceived -= Parse;
 
             StopWriteTask();
             ClearQueue();
             phase = Phase.Idle;
             dataCounter = 0;
-            ActiveInterface.Close();
             ActiveInterface = null;
+        }
+
+        private void Parse(ReadOnlyMemory<byte> data, DateTime time)
+        {
+            TryParseData(data);
+            TryParseFactory(data);
+            TryParseStopMotion(data);
+            TryParseOutputRaw(data);
+            TryParseOtherData(data);
+            TryParseFail(data);
+
+            // Mark ready after processing a packet
+            isWriteReady = true;
         }
 
         private void TryParseData(ReadOnlyMemory<byte> data)

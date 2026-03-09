@@ -30,6 +30,8 @@ public partial class MainWindow : Window
 
         WindowChrome.SetIsHitTestVisibleInChrome(MenuBar, true);
         WindowChrome.SetIsHitTestVisibleInChrome(TitleBarControls, true);
+
+        Debug.OnLog += LogMessage;
     }
 
     private void ToggleNav_Click(object sender, RoutedEventArgs e)
@@ -38,10 +40,6 @@ public partial class MainWindow : Window
 
         if (isNavExpanded) NavTabsManager.Expand();
         else NavTabsManager.Collapse();
-
-        // Toggle visibility of text labels
-
-        LogMessage($"Navigation panel {(isNavExpanded ? "expanded" : "contracted")}.");
     }
 
     private void ToggleTheme_Click(object sender, RoutedEventArgs e)
@@ -60,6 +58,8 @@ public partial class MainWindow : Window
             }
         };
 
+        LocalAppDataStore.Instance.Set("Theme", ThemeManager.Current.ApplicationTheme);
+
         LogMessage($"Theme changed to {ThemeManager.Current.ApplicationTheme}.");
     }
 
@@ -67,17 +67,11 @@ public partial class MainWindow : Window
     {
         isLogVisible = !isLogVisible;
         LogPanel.Visibility = isLogVisible ? Visibility.Visible : Visibility.Collapsed;
-
-        if (isLogVisible)
-        {
-            LogMessage("Log window shown.");
-        }
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Clear();
-        LogMessage("Log cleared.");
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e)
@@ -112,7 +106,7 @@ public partial class MainWindow : Window
         Dispatcher.InvokeAsync(() =>
         {
             _ = DeviceSelection.Instance.Refresh();
-            DeviceSelection.Instance.OnActiveInterfaceConnected += ReloadPage;
+            DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
         });
     }
 
@@ -388,7 +382,12 @@ public partial class MainWindow : Window
         return Path.Combine(exeDir, "Config", Path.Combine(subFolders));
     }
 
-    public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
+    public static string GetExePath()
+    {
+        return Environment.ProcessPath!;
+	}
+
+	public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
     public static readonly string company = Util.GetAssemblyAttribute<AssemblyCompanyAttribute>(a => a.Company);
     public static readonly string version = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Application.ResourceAssembly, a => a.InformationalVersion);
     public static readonly string toolBaseVersion = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Assembly.GetExecutingAssembly(), a => a.InformationalVersion);
@@ -502,8 +501,11 @@ public partial class MainWindow : Window
             AddTool(item.Path, item.StayOpen, item.Action, item.key, item.modifierKeys);
         }
         ToolsMenu.Items.Clear();
+
+        Style toolStyle = (Style)Application.Current.FindResource(typeof(MenuItem));
         foreach (var tool in rootTools.Values)
         {
+            tool.Style = toolStyle;
             ToolsMenu.Items.Add(tool);
         }
 

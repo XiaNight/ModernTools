@@ -7,7 +7,7 @@ namespace Base.Pages
     using Services;
     using Windows.Foundation.Metadata;
 
-    public interface IPageBase
+    internal interface IPageBase
     {
         void Enable();
         void Disable();
@@ -30,8 +30,6 @@ namespace Base.Pages
         public virtual int NavOrder { get; } = int.MaxValue;
         protected static DeviceSelection.Device ActiveDevice => DeviceSelection.Instance.ActiveDevice;
 
-        [Deprecated("Use ActiveDevice instead.", DeprecationType.Deprecate, 0x0107)]
-        protected static Base.Services.Peripheral.PeripheralInterface ActiveInterface => DeviceSelection.Instance.ActiveInterface;
         protected Grid root;
         Grid IPageBase.Root => root;
         

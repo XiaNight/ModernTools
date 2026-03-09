@@ -1,6 +1,4 @@
 ﻿using System.Collections.Concurrent;
-using Windows.Devices.Bluetooth.Advertisement;
-using static Base.Services.DeviceSelection;
 
 namespace Base.Services.Peripheral
 {
@@ -20,38 +18,48 @@ namespace Base.Services.Peripheral
         string GetUniqueIdentifier();
     }
 
-    public abstract class PeripheraInterfaceDetail : IPeripheralDetail
+    public abstract class PeripheralInterfaceDetail(
+        ushort pid = 0,
+        ushort vid = 0,
+        string product = "",
+        string manufacturer = "",
+        string id = "",
+        ushort versionNumber = 0,
+        ushort usage = 0,
+        ushort usagePage = 0) : IPeripheralDetail
     {
-        public ushort PID { get; protected set; }
-        public ushort VID { get; protected set; }
-        public string Product { get; protected set; }
-        public string Manufacturer { get; protected set; }
-        public string ID { get; protected set; }
-        public ushort VersionNumber { get; protected set; }
-        public ushort UsagePage { get; protected set; }
-        public ushort Usage { get; protected set; }
+        protected static readonly Dictionary<string, PeripheralInterface> connections = new();
+        public ushort PID { get; protected set; } = pid;
+        public ushort VID { get; protected set; } = vid;
+        public string Product { get; protected set; } = product ?? string.Empty;
+        public string Manufacturer { get; protected set; } = manufacturer ?? string.Empty;
+        public string ID { get; protected set; } = id ?? string.Empty;
+        public ushort VersionNumber { get; protected set; } = versionNumber;
+        public ushort UsagePage { get; protected set; } = usagePage;
+        public ushort Usage { get; protected set; } = usage;
 
-        protected PeripheraInterfaceDetail(
-            ushort pid = 0,
-            ushort vid = 0,
-            string product = "",
-            string manufacturer = "",
-            string id = "",
-            ushort versionNumber = 0,
-            ushort usage = 0,
-            ushort usagePage = 0)
+        protected abstract PeripheralInterface CreateConnection(bool useAsyncRead = false);
+        public PeripheralInterface Connect(bool useAsyncRead = false)
         {
-            PID = pid;
-            VID = vid;
-            Product = product ?? string.Empty;
-            Manufacturer = manufacturer ?? string.Empty;
-            ID = id ?? string.Empty;
-            VersionNumber = versionNumber;
-            Usage = usage;
-            UsagePage = usagePage;
+            var key = GetUniqueIdentifier();
+            lock (connections)
+            {
+                if (connections.TryGetValue(key, out var existingConnection))
+                {
+                    return existingConnection;
+                }
+                var newConnection = CreateConnection(useAsyncRead);
+                connections[key] = newConnection;
+                newConnection.OnDisconnected += () =>
+                {
+                    lock (connections)
+                    {
+                        connections.Remove(key);
+                    }
+                };
+                return newConnection;
+            }
         }
-
-        public abstract PeripheralInterface Connect(bool useAsyncRead = false);
         public virtual string GetUniqueIdentifier() => $"{VID:X4}:{PID:X4}:{UsagePage:X4}:{Usage:X4}:{ID}";
         public bool Equals(IPeripheralDetail other) => other is not null && GetUniqueIdentifier() == other.GetUniqueIdentifier();
         public override bool Equals(object obj) => Equals(obj as IPeripheralDetail);
@@ -61,35 +69,37 @@ namespace Base.Services.Peripheral
 
     public abstract class PeripheralInterface : IDisposable
     {
-        private readonly object _lockObject = new();
-        private readonly CancellationTokenSource _cts = new();
-        private bool _disposed;
+        private readonly object lockObject = new();
+        private readonly CancellationTokenSource cts = new();
+        private bool disposed;
 
         public IPeripheralDetail ProductInfo { get; protected set; }
 
-        private bool _isDeviceConnected;
+        private bool isDeviceConnected;
         public bool IsDeviceConnected
         {
-            get { lock (_lockObject) return _isDeviceConnected; }
-            protected set { lock (_lockObject) _isDeviceConnected = value; }
+            get { lock (lockObject) return isDeviceConnected; }
+            protected set { lock (lockObject) isDeviceConnected = value; }
         }
 
         public bool UseAsyncReads { get; protected set; }
-        public bool ReadFlag { get; set; }
 
-        private Action<ReadOnlyMemory<byte>> _onDataReceived;
-        public event Action<ReadOnlyMemory<byte>> OnDataReceived
+        private Action<ReadOnlyMemory<byte>, DateTime> onDataReceived;
+        public event Action<ReadOnlyMemory<byte>, DateTime> OnDataReceived
         {
-            add { lock (_lockObject) _onDataReceived += value; }
-            remove { lock (_lockObject) _onDataReceived -= value; }
+            add { lock (lockObject) onDataReceived += value; }
+            remove { lock (lockObject) onDataReceived -= value; }
         }
 
-        private event Action _onDisconnected;
+        private event Action onDisconnected;
         public event Action OnDisconnected
         {
-            add { lock (_lockObject) _onDisconnected += value; }
-            remove { lock (_lockObject) _onDisconnected -= value; }
+            add { lock (lockObject) onDisconnected += value; }
+            remove { lock (lockObject) onDisconnected -= value; }
         }
+
+        private readonly SemaphoreSlim rxSignal = new(0, int.MaxValue);
+        private readonly ConcurrentQueue<ReadOnlyMemory<byte>> rxQueue = new();
 
         protected PeripheralInterface(IPeripheralDetail interfaceDetail, bool useAsyncReads = false)
         {
@@ -114,7 +124,7 @@ namespace Base.Services.Peripheral
                 HidInterface.GetConnectedDevices().ContinueWith(t => t.Result.Cast<IPeripheralDetail>().ToList(), cts.Token)
             };
 
-            var finishedTasks = await Task.WhenAll(tasks);
+            var finishedTasks = await Task.WhenAll(tasks).ConfigureAwait(false);
 
             var results = new List<IPeripheralDetail>();
             foreach (var t in finishedTasks)
@@ -139,8 +149,9 @@ namespace Base.Services.Peripheral
         public virtual int InputReportLength => 0;
         public virtual int OutputReportLength => 0;
         public virtual (ushort UsagePage, ushort Usage) GetTopLevelUsage() => (0, 0);
+
         // Cache latest input report per ReportId (USB HID: first byte is ReportId if > 0)
-        private readonly ConcurrentDictionary<byte, byte[]> _lastReports = new();
+        private readonly ConcurrentDictionary<byte, byte[]> lastReports = new();
 
         public virtual ushort[] GetPressedButtons(byte[] inputReport, ushort usagePage = 0x09, ushort linkCollection = 0)
             => Array.Empty<ushort>();
@@ -156,7 +167,7 @@ namespace Base.Services.Peripheral
         {
             if (report is null || report.Length == 0) return;
             byte reportId = report[0];
-            _lastReports[reportId] = (byte[])report.Clone();
+            lastReports[reportId] = (byte[])report.Clone();
         }
 
         protected bool TryGetCachedReport(byte reportId, out byte[] report)
@@ -164,85 +175,96 @@ namespace Base.Services.Peripheral
             if (reportId == 0) // single-report devices sometimes don't prepend 0
             {
                 // Prefer any cached report if ID 0 isn't explicitly present
-                foreach (var kv in _lastReports)
+                foreach (var kv in lastReports)
                 {
                     report = kv.Value;
                     return true;
                 }
             }
-            return _lastReports.TryGetValue(reportId, out report);
+            return lastReports.TryGetValue(reportId, out report);
         }
 
         public virtual Task Write(byte[] data) => WriteAsync(data, CancellationToken.None);
 
+        /// <summary>
+        /// Wait for the next received report (from InvokeDataReceived) without polling.
+        /// </summary>
+        public async Task<ReadOnlyMemory<byte>> WaitForNextReportAsync(CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+
+            await rxSignal.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            // Signal was released -> item should exist; be defensive anyway.
+            ReadOnlyMemory<byte> data;
+            while (!rxQueue.TryDequeue(out data))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await Task.Yield();
+            }
+
+            return data;
+        }
+
+        /// <summary>
+        /// Drop queued reports; useful before issuing a request/response command.
+        /// </summary>
+        public void ClearPendingReports()
+        {
+            while (rxQueue.TryDequeue(out _)) { }
+            while (rxSignal.CurrentCount > 0)
+            {
+                try { rxSignal.Wait(0); }
+                catch { break; }
+            }
+        }
+
         public async Task<byte[]> WriteAndReadAsync(byte[] data, CancellationToken cancellationToken = default)
         {
-            ReadOnlyMemory<byte> returnData = Array.Empty<byte>();
-            OnDataReceived += handler;
+            ThrowIfDisposed();
 
-            try
-            {
-                ReadFlag = false;
-                await WriteAsync(data, cancellationToken);
+            // Prevent stale earlier reports from satisfying this call.
+            ClearPendingReports();
 
-                await Task.Run(async () =>
-                {
-                    var sw = System.Diagnostics.Stopwatch.StartNew();
-                    while (!ReadFlag)
-                    {
-                        await Task.Delay(10); // Yield control
-                        if (sw.ElapsedMilliseconds > 3000) break; // 3s timeout
-                    }
-                }, cancellationToken);
-            }
-            catch
-            {
-                Debug.Log("[HID] WriteAndReadAsync operation failed.");
-            }
-            finally
-            {
-                OnDataReceived -= handler;
-            }
+            await WriteAsync(data, cancellationToken).ConfigureAwait(false);
 
-            return returnData.ToArray();
-
-            void handler(ReadOnlyMemory<byte> receivedData)
-            {
-                returnData = receivedData;
-            }
+            var report = await WaitForNextReportAsync(cancellationToken).ConfigureAwait(false);
+            return report.ToArray();
         }
 
         protected void InvokeDataReceived(ReadOnlyMemory<byte> data)
         {
-            ReadFlag = true;
+            DateTime now = DateTime.UtcNow;
             if (data.IsEmpty) return;
-            Action<ReadOnlyMemory<byte>> handler;
-            lock (_lockObject) handler = _onDataReceived;
-            handler?.Invoke(data);
+
+            rxQueue.Enqueue(data);
+            rxSignal.Release();
+
+            Action<ReadOnlyMemory<byte>, DateTime> handler;
+            lock (lockObject) handler = onDataReceived;
+            handler?.Invoke(data, now);
         }
 
         protected void InvokeDeviceDisconnected()
         {
             Action handler;
-            lock (_lockObject) handler = _onDisconnected;
+            lock (lockObject) handler = onDisconnected;
             handler?.Invoke();
         }
 
-        public void Close() => Dispose();
-
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
+            if (disposed) return;
+            disposed = true;
 
             try
             {
-                _cts.Cancel();
+                cts.Cancel();
                 CloseDevice();
-                lock (_lockObject)
+                lock (lockObject)
                 {
-                    _onDataReceived = null;
-                    _onDisconnected = null;
+                    onDataReceived = null;
+                    onDisconnected = null;
                 }
                 IsDeviceConnected = false;
                 InvokeDeviceDisconnected();
@@ -250,7 +272,11 @@ namespace Base.Services.Peripheral
             catch { /* ignore */ }
             finally
             {
-                _cts.Dispose();
+                // Ensure any waiters unblock during shutdown.
+                try { rxSignal.Release(int.MaxValue / 4); } catch { }
+                rxSignal.Dispose();
+
+                cts.Dispose();
                 GC.SuppressFinalize(this);
             }
         }
@@ -259,7 +285,7 @@ namespace Base.Services.Peripheral
 
         protected void ThrowIfDisposed()
         {
-            if (_disposed) throw new ObjectDisposedException(GetType().Name);
+            ObjectDisposedException.ThrowIf(disposed, this);
         }
 
         public struct HidValueCap
@@ -268,7 +294,6 @@ namespace Base.Services.Peripheral
             public ushort Usage { get; set; }
             public ushort LinkCollection { get; set; }
             public byte ReportId { get; set; }
-
             public int LogicalMin { get; set; }
             public int LogicalMax { get; set; }
             public ushort BitSize { get; set; }
@@ -277,7 +302,6 @@ namespace Base.Services.Peripheral
             public bool IsAbsolute { get; set; }
         }
 
-        // Prefer this overload when you have a HidValueCap with ReportId/LinkCollection
         public bool TryGetUsageValue(HidValueCap cap, out int value)
         {
             value = 0;

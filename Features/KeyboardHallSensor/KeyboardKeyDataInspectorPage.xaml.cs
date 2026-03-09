@@ -22,7 +22,7 @@ namespace KeyboardHallSensor
 
             AddButton("Send FF Command", SendFFCmd);
 
-            ProtocalService.CommandDictionary.Add("kdi_key_data", [0xFA, 0x10, 0x0B, 0x00]);
+            ProtocolService.CommandDictionary.Add("kdi_key_data", [0xFA, 0x10, 0x0B, 0x00]);
         }
 
         protected override void OnEnable()
@@ -49,8 +49,8 @@ namespace KeyboardHallSensor
 
         }
 
-        private void SendFFCmd() => ProtocalService.AppendCmd(ActiveInterface, "kdi_key_data", true, 0xff);
-        private void SendKDICmd(byte keycode) => ProtocalService.AppendCmd(ActiveInterface, "kdi_key_data", true, keycode);
+        private void SendFFCmd() => ProtocolService.AppendCmd(ActiveInterface, "kdi_key_data", true, 0xff);
+        private void SendKDICmd(byte keycode) => ProtocolService.AppendCmd(ActiveInterface, "kdi_key_data", true, keycode);
 
         protected override void OnKeyDisplayClicked(byte keycode)
         {
@@ -60,7 +60,7 @@ namespace KeyboardHallSensor
             SendKDICmd(keycode);
         }
 
-        public override void Parse(ReadOnlyMemory<byte> bytes)
+        public override void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
             byte[] cmd = [0xFA, 0x10, 0x0B, 0x00];
             var span = bytes.Span;

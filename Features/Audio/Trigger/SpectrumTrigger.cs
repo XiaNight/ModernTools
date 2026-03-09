@@ -25,6 +25,11 @@ namespace Audio.Trigger
 
         public TriggerType triggerType = TriggerType.UpperAndLower;
 
+        public float Tolerance { get; set; } = 0f; // db
+        public float LowCutOff { get; set; } = 0;
+        public float HighCutOff { get; set; } = 0;
+        public float Sensitivity { get; set; } = 0;
+
         public SpectrumTrigger(int fftWidth, float adaptStd = 3f)
         {
             this.bandWidth = fftWidth;
@@ -97,16 +102,23 @@ namespace Audio.Trigger
             bool checkLower = (triggerType & TriggerType.LowerOnly) != 0;
 
             bool isLeftOutside = false;
+            float leftDiff = 0;
             for (int i = 0; i < bandWidth; i++)
             {
+                if (i < LowCutOff) continue;
+                if (i > HighCutOff) break;
+
                 float v = left[i];
-                if ((checkLower && v < leftLowerThresholds[i]) ||
-                    (checkUpper && v > leftUpperThresholds[i]))
+                if (checkLower && v < leftLowerThresholds[i] - Tolerance)
                 {
-                    isLeftOutside = true;
-                    break;
+                    leftDiff += (leftLowerThresholds[i] - Tolerance) - v;
+                }
+                if (checkUpper && v > leftUpperThresholds[i] + Tolerance)
+                {
+                    leftDiff += v - (leftUpperThresholds[i] + Tolerance);
                 }
             }
+            if (leftDiff > Sensitivity) isLeftOutside = true;
 
             if (!isLeftOutside)
             {
@@ -123,16 +135,24 @@ namespace Audio.Trigger
             }
 
             bool isRightOutside = false;
+            float rightDiff = 0;
             for (int i = 0; i < bandWidth; i++)
             {
+                if (i < LowCutOff) continue;
+                if (i > HighCutOff) break;
+
                 float v = right[i];
-                if ((checkLower && v < rightLowerThresholds[i]) ||
-                    (checkUpper && v > rightUpperThresholds[i]))
+                if (checkLower && v < rightLowerThresholds[i] - Tolerance)
                 {
-                    isRightOutside = true;
-                    break;
+                    rightDiff += (rightLowerThresholds[i] - Tolerance) - v;
+                }
+                if (checkUpper && v > rightUpperThresholds[i] + Tolerance)
+                {
+                    rightDiff += v - (rightUpperThresholds[i] + Tolerance);
                 }
             }
+
+            if (rightDiff > Sensitivity) isRightOutside = true;
 
             if (!isRightOutside)
             {

@@ -1,4 +1,6 @@
-﻿namespace Audio.Entries
+﻿using NAudio.CoreAudioApi;
+
+namespace Audio.Entries
 {
     public partial class AudioSubject : IDisposable
     {
@@ -11,12 +13,14 @@
                 failCount = 0;
                 ranCycles = 0;
                 subject.AudioDeviceEntry.TestText.Visibility = System.Windows.Visibility.Collapsed;
-                subject.AudioDeviceEntry.SourceDeviceDropdown.IsEnabled = true;
+                subject.AudioDeviceEntry.SourceDeviceDropdown.IsEnabled = false;
                 subject.handler?.StartRecorder();
             }
             public override void Exit()
             {
-                subject.AudioDeviceEntry.TestText.Text = $"Test Finished. Failed Cycles: {failCount}/{ranCycles}";
+                float percentage = (float)(ranCycles - failCount) / ranCycles;
+                subject.AudioDeviceEntry.TestText.Text = $"Test Finished. Failed Cycles: {failCount}/{ranCycles}, {percentage:P1}";
+                subject.AudioDeviceEntry.SourceDeviceDropdown.IsEnabled = true;
                 subject.handler?.StopRecorder();
             }
             public void TestTick()
@@ -36,7 +40,12 @@
             public override void SpectrumUpdate(TimedSpectrum spectrum)
             {
                 base.SpectrumUpdate(spectrum);
-                subject.spectrumTrigger.Parse(spectrum.leftSpectrum, spectrum.rightSpectrum);
+                if (subject == null) return;
+
+                if(subject.Flow == DataFlow.Capture)
+                {
+                    subject.spectrumTrigger.Parse(spectrum.leftSpectrum, spectrum.rightSpectrum);
+                }
             }
         }
     }

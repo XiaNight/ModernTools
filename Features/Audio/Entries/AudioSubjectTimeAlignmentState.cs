@@ -16,6 +16,8 @@ namespace Audio.Entries
             private readonly MeanCalculator leftNoiseMeanCalculator = new();
             private readonly MeanCalculator rightNoiseMeanCalculator = new();
 
+            private SpectrumMeanCalculator noiseSpectrumCalculator;
+
             private bool isCalculatingVolumeMean = false;
             private readonly MeanCalculator leftMeanCalculator = new();
             private readonly MeanCalculator rightMeanCalculator = new();
@@ -25,18 +27,24 @@ namespace Audio.Entries
 
             public override void Enter()
             {
+                if (subject.handler == null) return;
                 subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
                 {
                     subject.AudioDeviceEntry.TestText.Visibility = System.Windows.Visibility.Visible;
                 });
                 volumeTrigger.triggerType = VolumeTrigger.TriggerType.UpperOnly;
+
+                noiseSpectrumCalculator = new(subject.handler.HalfBins);
             }
 
             public override void Exit()
             {
+                if (subject.handler == null) return;
                 volumeTrigger.OnVolumeTriggered -= VolumeTriggered;
-            }
 
+                Array.Copy(noiseSpectrumCalculator.LeftMeans, subject.noiseLeftSpectrum, noiseSpectrumCalculator.LeftMeans.Length);
+                Array.Copy(noiseSpectrumCalculator.RightMeans, subject.noiseRightSpectrum, noiseSpectrumCalculator.RightMeans.Length);
+            }
 
             public override void VolumeUpdate(List<AudioChannelHandler.TimedValue<float>> volumes)
             {
@@ -62,8 +70,25 @@ namespace Audio.Entries
                     volumeTrigger.Parse(volumes);
                 }
             }
+
+            public override void SpectrumUpdate(TimedSpectrum spectrum)
+            {
+                base.SpectrumUpdate(spectrum);
+                if (isCalculatingNoiseMean)
+                {
+                    noiseSpectrumCalculator.Push(spectrum);
+
+                    subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
+                    {
+                        subject.AudioDeviceEntry.LeftFFTUpperChart.SetData(noiseSpectrumCalculator.LeftMeans);
+                        subject.AudioDeviceEntry.RightFFTUpperChart.SetData(noiseSpectrumCalculator.RightMeans);
+                    });
+                }
+            }
+
             public void StartNoiseCalculation()
             {
+                if (subject.handler == null) return;
                 isCalculatingNoiseMean = true;
                 subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
                 {
@@ -73,6 +98,7 @@ namespace Audio.Entries
 
             public void StopNoiseCalculation()
             {
+                if (subject.handler == null) return;
                 isCalculatingNoiseMean = false;
                 subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
                 {
@@ -82,6 +108,7 @@ namespace Audio.Entries
 
             public void StartVolumeCalculation()
             {
+                if (subject.handler == null) return;
                 isCalculatingVolumeMean = true;
                 subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
                 {
@@ -91,6 +118,7 @@ namespace Audio.Entries
 
             public void StopVolumeCalculation()
             {
+                if (subject.handler == null) return;
                 isCalculatingVolumeMean = false;
                 subject.AudioDeviceEntry.Dispatcher.Invoke(() =>
                 {
@@ -103,6 +131,7 @@ namespace Audio.Entries
 
             public void SetupVolumeTrigger(float stfFactor)
             {
+                if (subject.handler == null) return;
                 float leftMean = leftNoiseMeanCalculator.Mean;
                 float leftMax = leftNoiseMeanCalculator.Max;
                 float leftMin = leftNoiseMeanCalculator.Min;
@@ -123,6 +152,7 @@ namespace Audio.Entries
 
             private void VolumeTriggered(long timestamp)
             {
+                if (subject.handler == null) return;
                 volumeTrigger.OnVolumeTriggered -= VolumeTriggered;
 
                 isTriggered = true;

@@ -1,7 +1,8 @@
-
 namespace Base.Services
 {
 	using System.Text;
+	using System.Windows;
+
 	public static class Debug
 	{
 		public static event Action<string> OnLog;
@@ -12,9 +13,18 @@ namespace Base.Services
 			foreach (var message in messages)
 			{
 				sb.Append(message);
-				sb.Append(" ");
+				sb.Append(' ');
 			}
-			OnLog?.Invoke(sb.ToString());
+
+			bool isOnUiThread = Application.Current.Dispatcher.CheckAccess();
+			if(isOnUiThread)
+			{
+				OnLog?.Invoke(sb.ToString());
+			}
+			else
+			{
+				Application.Current.Dispatcher.Invoke(() => OnLog?.Invoke(sb.ToString()));
+			}
 		}
 	}
 }

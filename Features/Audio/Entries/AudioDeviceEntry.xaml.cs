@@ -1,7 +1,5 @@
 ﻿using NAudio.CoreAudioApi;
-using System.Windows;
 using System.Windows.Controls;
-using static Base.Services.DeviceSelection;
 
 namespace Audio.Entries
 {
@@ -35,6 +33,9 @@ namespace Audio.Entries
             SourceDeviceDropdown.DropDownOpened += OnSourceDeviceDropdownOpened;
             CompareDeviceDropdown.DropDownOpened += OnCompareDeviceDropdownOpened;
 
+            SourceDeviceDropdown.SelectionChanged += SourceDeviceSelected;
+            CompareDeviceDropdown.SelectionChanged += CompareDeviceSelected;
+
             OffsetTimer.ValueChanged += (s, e) => OnOffsetChanged?.Invoke((long)(OffsetTimer.Value * 10_000_000));
             MagnitudeOffset.ValueChanged += (s, e) => OnVolumeOffsetChanged?.Invoke(MagnitudeOffset.Value);
 
@@ -47,20 +48,18 @@ namespace Audio.Entries
             CompareDeviceDropdown.Items.Clear();
             var devices = OnCompareableDeviceRequest?.Invoke() ?? [];
 
-            var noneItem = new MenuItem() { Header = "None" };
-            noneItem.Click += CompareDeviceSelected;
+            var noneItem = new DeviceItem() { Header = "None" };
             CompareDeviceDropdown.Items.Add(noneItem);
 
             foreach (var device in devices)
             {
-                var item = new MenuItem() { Header = device.FriendlyName, Tag = device };
-                item.Click += CompareDeviceSelected;
+                var item = new DeviceItem() { Header = device.FriendlyName, Tag = device };
                 CompareDeviceDropdown.Items.Add(item);
             }
 
             if (ComparingDevice != null)
             {
-                foreach (MenuItem item in CompareDeviceDropdown.Items)
+                foreach (DeviceItem item in CompareDeviceDropdown.Items)
                 {
                     if (item.Tag is MMDevice device && device.ID == ComparingDevice.ID)
                     {
@@ -71,36 +70,35 @@ namespace Audio.Entries
             }
         }
 
-        private void CompareDeviceSelected(object sender, RoutedEventArgs e)
+        private void CompareDeviceSelected(object sender, SelectionChangedEventArgs e)
         {
-            if (sender is MenuItem item && item.Tag is MMDevice device)
+            if (CompareDeviceDropdown.SelectedItem is DeviceItem item)
             {
-                if (ComparingDevice != null && ComparingDevice.ID == device.ID) return;
-                CompareDeviceDropdown.SelectedItem = item;
-                OnCompareDeviceSelected?.Invoke(device);
-                CompareDeviceDropdown.IsDropDownOpen = false;
-            }
-            else if(sender is MenuItem noneItem && noneItem.Header as string == "None")
-            {
-                CompareDeviceDropdown.SelectedItem = noneItem;
-                OnCompareDeviceSelected?.Invoke(null);
-                CompareDeviceDropdown.IsDropDownOpen = false;
+                if (item.Tag is MMDevice device)
+                {
+                    if (ComparingDevice != null && ComparingDevice.ID == device.ID) return;
+                    OnCompareDeviceSelected?.Invoke(device);
+                }
+                else if (item.Header as string == "None")
+                {
+                    OnCompareDeviceSelected?.Invoke(null);
+                }
             }
         }
 
         private void OnSourceDeviceDropdownOpened(object sender, EventArgs e)
         {
             SourceDeviceDropdown.Items.Clear();
+
             foreach (var device in FindAllAudioDevices())
             {
-                var item = new MenuItem() { Header = device.FriendlyName, Tag = device };
-                item.Click += SourceDeviceSelected;
+                var item = new DeviceItem() { Header = device.FriendlyName, Tag = device };
                 SourceDeviceDropdown.Items.Add(item);
             }
 
-            if(SelectedDevice != null)
+            if (SelectedDevice != null)
             {
-                foreach (MenuItem item in SourceDeviceDropdown.Items)
+                foreach (DeviceItem item in SourceDeviceDropdown.Items)
                 {
                     if (item.Tag is MMDevice device && device.ID == SelectedDevice.ID)
                     {
@@ -111,16 +109,17 @@ namespace Audio.Entries
             }
         }
 
-        private void SourceDeviceSelected(object sender, RoutedEventArgs e)
+        private void SourceDeviceSelected(object sender, SelectionChangedEventArgs e)
         {
-            if (sender is MenuItem item && item.Tag is MMDevice device)
+            if (SourceDeviceDropdown.SelectedItem is DeviceItem item)
             {
-                if(SelectedDevice != null && SelectedDevice.ID == device.ID) return;
+                if (item.Tag is MMDevice device)
+                {
+                    if (SelectedDevice != null && SelectedDevice.ID == device.ID) return;
 
-                SourceDeviceDropdown.SelectedItem = item;
-                SelectedDevice = device;
-                OnSourceDeviceSelected?.Invoke(device);
-                SourceDeviceDropdown.IsDropDownOpen = false;
+                    SelectedDevice = device;
+                    OnSourceDeviceSelected?.Invoke(device);
+                }
             }
         }
 
@@ -131,6 +130,17 @@ namespace Audio.Entries
             foreach (var device in devices)
             {
                 yield return device;
+            }
+        }
+
+        public class DeviceItem
+        {
+            public string Header { get; set; } = "";
+            public MMDevice Tag { get; set; }
+
+            public override string ToString()
+            {
+                return Header;
             }
         }
     }

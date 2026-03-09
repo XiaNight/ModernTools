@@ -12,7 +12,7 @@ using Windows.Storage.Streams;
 
 namespace Base.Services.Peripheral
 {
-    public sealed class HidInterfaceDetail : PeripheraInterfaceDetail
+    public sealed class HidInterfaceDetail : PeripheralInterfaceDetail
     {
         public int InputReportByteLength { get; set; }
         public int OutputReportByteLength { get; set; }
@@ -30,7 +30,7 @@ namespace Base.Services.Peripheral
             
         }
 
-        public override PeripheralInterface Connect(bool useAsyncRead = false)
+        protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
             var connectionTask = Task.Run(() =>
             {

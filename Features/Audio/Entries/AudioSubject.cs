@@ -5,7 +5,6 @@ using Audio.Util;
 using Base.Components.Chart;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
-using System.Windows.Controls;
 using TimedFloat = Audio.Receiver.AudioChannelHandler.TimedValue<float>;
 
 namespace Audio.Entries
@@ -26,6 +25,13 @@ namespace Audio.Entries
         //- Spectrum Ring Buffer
         private const int MaxSpectrumLength = 256;
         private SpectrumGaussianBlurRingBuffer spectrumRing;
+
+        //- Noise Data
+        private float noiseLeft = 0;
+        private float noiseRight = 0;
+        private float noiseCancelingEffect = 1; // 0 ~ 1
+        private float[] noiseLeftSpectrum = null;
+        private float[] noiseRightSpectrum = null;
 
         //- Compare Device
         private AudioSubject comparingSubject;
@@ -53,6 +59,8 @@ namespace Audio.Entries
 
         private State currentState;
         public MMDevice SelectedSource { get; private set; }
+        public DataFlow Flow { get; private set; }
+        public string SourceName { get; private set; }
 
         public AudioSubject(int frameSize, int fftLength, long debounceDuration)
         {
@@ -61,11 +69,8 @@ namespace Audio.Entries
             spectrumTrigger = new SpectrumTrigger(fftLength / 2, 5);
             spectrumTrigger.OnTriggered += () =>
             {
-                string name = AudioDeviceEntry.SourceDeviceDropdown.SelectedItem is MenuItem item && item.Tag is MMDevice device
-                    ? device.FriendlyName
-                    : "Unknown Device";
                 isTriggered = true;
-                Base.Services.Debug.Log($"Volume Triggered at {DateTime.Now:HH:mm:ss.fff} for device: {name}");
+                Base.Services.Debug.Log($"Volume Triggered at {DateTime.Now:HH:mm:ss.fff} for device: {SourceName}");
             };
 
             AudioDeviceEntry = new();
@@ -108,7 +113,15 @@ namespace Audio.Entries
                 DataFlow.Capture => new WasapiCapture(device),
                 _ => throw new InvalidOperationException("Unsupported device data flow."),
             };
+            Flow = device.DataFlow;
+            SourceName = device.FriendlyName;
             handler = new AudioChannelHandler(capture, fftLength, frameSize, device.FriendlyName);
+            if(handler.IsInitialized == false)
+            {
+                handler = null;
+                return;
+            }
+            
             handler.SpectrumFrameAvailable += OnSpectrumFrame;
             handler.VolumeAvailable += OnVolumeFrame;
 
@@ -126,6 +139,13 @@ namespace Audio.Entries
 
             volumeSpectrumOffsetLeft = new float[handler.HalfBins];
             volumeSpectrumOffsetRight = new float[handler.HalfBins];
+            Array.Fill(volumeSpectrumOffsetLeft, 1);
+            Array.Fill(volumeSpectrumOffsetRight, 1);
+
+            noiseLeftSpectrum = new float[handler.HalfBins];
+            noiseRightSpectrum = new float[handler.HalfBins];
+            Array.Fill(noiseLeftSpectrum, 0.00000001f);
+            Array.Fill(noiseRightSpectrum, 0.00000001f);
 
             if (isStreaming)
             {
@@ -167,18 +187,20 @@ namespace Audio.Entries
             YScaleMode scaleMode = comparingSubject == null ? YScaleMode.Log10 : YScaleMode.Linear;
             AudioDeviceEntry.LeftFFTChart.ScaleMode = scaleMode;
             AudioDeviceEntry.RightFFTChart.ScaleMode = scaleMode;
+            SetThresholdMode(scaleMode);
 
             // Set spectrum line charts
-            double minY = comparingSubject == null ? -60 : -60;
-            double maxY = comparingSubject == null ? 0 : 60;
+            double minY = comparingSubject == null ? -60 : -30;
+            double maxY = comparingSubject == null ? 0 : 30;
             AudioDeviceEntry.RightFFTChart.MinY = minY;
             AudioDeviceEntry.RightFFTChart.MaxY = maxY;
             AudioDeviceEntry.LeftFFTChart.MinY = minY;
             AudioDeviceEntry.LeftFFTChart.MaxY = maxY;
+            SetThresholdMinMax(minY, maxY);
 
             // Set spectrograms
-            minY = comparingSubject == null ? -60 : -20;
-            maxY = comparingSubject == null ? 0 : 20;
+            minY = comparingSubject == null ? -60 : -30;
+            maxY = comparingSubject == null ? 0 : 30;
             AudioDeviceEntry.LeftSpectrogram.MinDb = minY;
             AudioDeviceEntry.LeftSpectrogram.MaxDb = maxY;
             AudioDeviceEntry.RightSpectrogram.MinDb = minY;
@@ -251,12 +273,18 @@ namespace Audio.Entries
                     {
                         value.leftSpectrum[i] = MinThresholdValue(LogorithmicCompare(
                             currentSpectrum.leftSpectrum[i],
-                            peek.leftSpectrum[i], comparingSubject.volumeSpectrumOffsetLeft[i] / volumeSpectrumOffsetLeft[i]
+                            peek.leftSpectrum[i],
+                            comparingSubject.volumeSpectrumOffsetLeft[i] / volumeSpectrumOffsetLeft[i],
+                            noiseLeftSpectrum[i],
+                            noiseCancelingEffect
                         ), manualVolumeOffset);
 
                         value.rightSpectrum[i] = MinThresholdValue(LogorithmicCompare(
                             currentSpectrum.rightSpectrum[i],
-                            peek.rightSpectrum[i], comparingSubject.volumeSpectrumOffsetRight[i] / volumeSpectrumOffsetRight[i]
+                            peek.rightSpectrum[i],
+                            comparingSubject.volumeSpectrumOffsetRight[i] / volumeSpectrumOffsetRight[i],
+                            noiseRightSpectrum[i],
+                            noiseCancelingEffect
                         ), manualVolumeOffset);
                     }
                     value.timestampTick = currentSpectrum.timestampTick;
@@ -281,7 +309,7 @@ namespace Audio.Entries
         /// <param name="a"></param>
         /// <param name="b"></param>
         /// <returns></returns>
-        private static float LogorithmicCompare(float a, float b, float offset)
+        private static float LogorithmicCompare(float a, float b, float offset, float noiseBase, float noiseSigma)
         {
             if (a == 0 && b == 0)
             {
@@ -296,9 +324,14 @@ namespace Audio.Entries
             float logB = MathF.Max(MathF.Log10(b), -80);
             float logOffset = MathF.Log10(offset);
             float logMax = Math.Max(logA, logB);
-            float noiseFix = MathF.Max(0, logMax + 8);
-            noiseFix = 1 - MathF.Exp(-noiseFix);
 
+            float noiseFix = 1;
+            if(noiseSigma > 0)
+            { 
+                float noiseDb = MathF.Log10(noiseBase);
+                noiseFix = MathF.Max(0, logMax - noiseDb - 2);
+                noiseFix = 1 - MathF.Exp(-noiseFix * (1 / noiseSigma));
+            }
             return 10 * (logA - logB + logOffset) * noiseFix;
         }
 
@@ -387,7 +420,7 @@ namespace Audio.Entries
                         AudioDeviceEntry.LeftFFTChart.SetData(spectrum.leftSpectrum);
                     }
                 }
-                while (spectrumRing.Count > differenceRing.Capacity / 2)
+                while (spectrumRing.Count > spectrumRing.Capacity / 2)
                 {
                     spectrumRing.AdvanceTail();
                 }
@@ -433,6 +466,53 @@ namespace Audio.Entries
             AudioDeviceEntry.LeftFFTUpperChart.SetData(spectrumTrigger.leftUpperThresholds);
             AudioDeviceEntry.RightFFTLowerChart.SetData(spectrumTrigger.rightLowerThresholds);
             AudioDeviceEntry.RightFFTUpperChart.SetData(spectrumTrigger.rightUpperThresholds);
+        }
+
+        public void SetTriggerTolerance(float value)
+        {
+            spectrumTrigger.Tolerance = value;
+        }
+
+        public void SetNoiseCancelingEffect(float value)
+        {
+            noiseCancelingEffect = value;
+        }
+
+        public void SetTriggerCutOff(int lower, int upper)
+        {
+            if (handler == null) return;
+
+            int index = FFTUtil.FrequencyToFftIndex(lower, handler.SampleRate, handler.FftLength);
+            spectrumTrigger.LowCutOff = index;
+
+            index = FFTUtil.FrequencyToFftIndex(upper, handler.SampleRate, handler.FftLength);
+            spectrumTrigger.HighCutOff = index;
+        }
+
+        public void SetTriggerSnesitivity(int value)
+        {
+            spectrumTrigger.Sensitivity = value;
+        }
+
+        public void SetThresholdMinMax(double min, double max)
+        {
+            AudioDeviceEntry.LeftFFTLowerChart.MinY = min;
+            AudioDeviceEntry.LeftFFTLowerChart.MaxY = max;
+            AudioDeviceEntry.RightFFTLowerChart.MinY = min;
+            AudioDeviceEntry.RightFFTLowerChart.MaxY = max;
+
+            AudioDeviceEntry.LeftFFTUpperChart.MinY = min;
+            AudioDeviceEntry.LeftFFTUpperChart.MaxY = max;
+            AudioDeviceEntry.RightFFTUpperChart.MinY = min;
+            AudioDeviceEntry.RightFFTUpperChart.MaxY = max;
+        }
+
+        public void SetThresholdMode(YScaleMode scaleMode)
+        {
+            AudioDeviceEntry.LeftFFTLowerChart.ScaleMode = scaleMode;
+            AudioDeviceEntry.LeftFFTUpperChart.ScaleMode = scaleMode;
+            AudioDeviceEntry.RightFFTLowerChart.ScaleMode = scaleMode;
+            AudioDeviceEntry.RightFFTUpperChart.ScaleMode = scaleMode;
         }
 
         public void StartAudioStream()
@@ -481,7 +561,7 @@ namespace Audio.Entries
 
         public void ExitState()
         {
-            currentState.Exit();
+            currentState?.Exit();
             currentState = null;
         }
 

@@ -6,7 +6,7 @@ using Base.Services.Peripheral.Native;
 
 namespace Base.Services.Peripheral
 {
-    public sealed class USBInterfaceDetail : PeripheraInterfaceDetail
+    public sealed class USBInterfaceDetail : PeripheralInterfaceDetail
     {
         public int SerialNumber { get; set; }
         public int InputReportByteLength { get; set; }
@@ -25,7 +25,7 @@ namespace Base.Services.Peripheral
         {
         }
 
-        public override PeripheralInterface Connect(bool useAsyncRead = false) => new UsbInterface(this, useAsyncRead);
+        protected override PeripheralInterface CreateConnection(bool useAsyncRead = false) => new UsbInterface(this, useAsyncRead);
     }
 
     public sealed class UsbInterface : PeripheralInterface

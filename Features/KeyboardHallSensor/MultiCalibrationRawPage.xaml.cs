@@ -54,7 +54,7 @@ namespace KeyboardHallSensor
         {
             KeyboardCommonProtocol.Instance.OnInterfaceDisconnected -= Exit;
             if (ActiveInterface == null) return;
-            ProtocalService.ExitHallProdTest(ActiveInterface);
+            ProtocolService.ExitHallProdTest(ActiveInterface);
         }
 
         [AppMenuItem("Send Command")]
@@ -65,12 +65,12 @@ namespace KeyboardHallSensor
             {
                 for(byte row = 0; row < 8; row++)
                 {
-                    ProtocalService.AppendCmd(ActiveInterface, MfgCmdName, true, depth, row);
+                    ProtocolService.AppendCmd(ActiveInterface, MfgCmdName, true, depth, row);
                 }
             }
         }
 
-        public void Parse(ReadOnlyMemory<byte> bytes)
+        public void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
             var span = bytes.Span;
 

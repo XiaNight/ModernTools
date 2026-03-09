@@ -113,14 +113,13 @@ namespace GenericMouseAnalyzer
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
-            ActiveInterface.Close();
             ActiveInterface = null;
 
             stopwatch.Stop();
             timestamps.Clear();
         }
 
-        private void Parse(ReadOnlyMemory<byte> readOnlyByte)
+        private void Parse(ReadOnlyMemory<byte> readOnlyByte, DateTime time)
         {
             var data = readOnlyByte.Span;
 

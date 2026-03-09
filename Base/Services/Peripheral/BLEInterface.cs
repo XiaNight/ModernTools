@@ -10,7 +10,7 @@ using Windows.Storage.Streams;
 
 namespace Base.Services.Peripheral
 {
-    public sealed class BLEInterfaceDetail : PeripheraInterfaceDetail
+    public sealed class BLEInterfaceDetail : PeripheralInterfaceDetail
     {
         public ulong SerialNumber { get; internal set; }
         public ulong Mac { get; internal set; }
@@ -31,7 +31,7 @@ namespace Base.Services.Peripheral
             VIDUInt = vid;
         }
 
-        public override PeripheralInterface Connect(bool useAsyncRead = false)
+        protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
             var ble_task = Task.Run(() =>
             {

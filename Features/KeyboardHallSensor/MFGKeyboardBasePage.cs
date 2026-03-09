@@ -56,7 +56,7 @@ namespace KeyboardHallSensor
         {
             KeyboardCommonProtocol.Instance.OnInterfaceDisconnected -= Exit;
             if (ActiveInterface == null) return;
-            ProtocalService.ExitHallProdTest(ActiveInterface);
+            ProtocolService.ExitHallProdTest(ActiveInterface);
         }
 
         protected override void Enter()
@@ -64,17 +64,17 @@ namespace KeyboardHallSensor
             KeyboardCommonProtocol.Instance.OnInterfaceDisconnected += Exit;
             if (ActiveInterface == null) return;
 
-            ProtocalService.EnterHallProdTest(ActiveInterface, true /*Main.IsBlockEvent*/);
+            ProtocolService.EnterHallProdTest(ActiveInterface, true /*Main.IsBlockEvent*/);
             SendCmd();
         }
 
         protected virtual void SendCmd()
         {
             if (ActiveInterface == null) return;
-            ProtocalService.AppendCmd(ActiveInterface, MfgCmdName, false);
+            ProtocolService.AppendCmd(ActiveInterface, MfgCmdName, true);
         }
 
-        public override void Parse(ReadOnlyMemory<byte> bytes)
+        public override void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
             var span = bytes.Span;
 
