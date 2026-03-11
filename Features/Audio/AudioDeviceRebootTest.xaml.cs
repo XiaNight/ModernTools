@@ -182,7 +182,7 @@ namespace Audio
             }
         }
 
-        private bool FindDeviceById(string id, out MMDevice device)
+        private static bool FindDeviceById(string id, out MMDevice device)
         {
             var devices = FindAllAudioDevices();
             device = devices.FirstOrDefault(d => d.ID == id);
@@ -253,28 +253,28 @@ namespace Audio
             }
         }
 
-        private void Reboot()
+        private static void Reboot()
         {
 #if !DEBUG
             WindowsRebootHandler.Reboot(secondsDelay: 10, reasonComment: "Audio Device Reboot Test");
 #endif
         }
 
-        private void AbortReboot()
+        private static void AbortReboot()
         {
 #if !DEBUG
             WindowsRebootHandler.AbortRebootOrShutdown();
 #endif
         }
 
-        private void RegisterRunAtStartup()
+        private static void RegisterRunAtStartup()
         {
 #if !DEBUG
             WindowsRebootHandler.RegisterRunAtStartupCurrentUser(AUDIO_DEVICE_REBOOT_TEST_RUN_AT_STARTUP_KEY, Base.MainWindow.GetExePath());
 #endif
         }
 
-        private void UnregisterRunAtStartup()
+        private static void UnregisterRunAtStartup()
         {
 #if !DEBUG
             WindowsRebootHandler.UnregisterRunAtStartupCurrentUser(AUDIO_DEVICE_REBOOT_TEST_RUN_AT_STARTUP_KEY);

@@ -21,8 +21,8 @@ public partial class App : Application
         ComSecurityHelper.Initialize();
         base.OnStartup(e);
 
-        typeof(AudioPage).ToString();
-        //typeof(GamepadPage).ToString();
+        //typeof(AudioPage).ToString();
+        typeof(GamepadPage).ToString();
         //typeof(CommonProtocol.CommonProtocol).ToString();
         //typeof(RawPage).ToString();
         //typeof(GenericMouseAnalyzerPage).ToString();

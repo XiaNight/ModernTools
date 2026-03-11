@@ -13,20 +13,36 @@ using System.Windows.Shell;
 namespace Base;
 
 using Components;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows.Threading;
+using static Base.Components.VerticalTabsManager;
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private bool isNavExpanded = true;
     private bool isLogVisible = false;
+
+    private LayoutMode _currentLayoutMode = LayoutMode.Normal;
+    public LayoutMode CurrentLayoutMode
+    {
+        get => _currentLayoutMode;
+        private set
+        {
+            if (_currentLayoutMode == value) return;
+            _currentLayoutMode = value;
+            OnPropertyChanged();
+        }
+    }
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += MainWindowLoadingAsync;
+        SizeChanged += OnSizeChanged;
 
         WindowChrome.SetIsHitTestVisibleInChrome(MenuBar, true);
         WindowChrome.SetIsHitTestVisibleInChrome(TitleBarControls, true);
@@ -38,8 +54,8 @@ public partial class MainWindow : Window
     {
         isNavExpanded = !isNavExpanded;
 
-        if (isNavExpanded) NavTabsManager.Expand();
-        else NavTabsManager.Collapse();
+        if (isNavExpanded) NavTabsManager.ExitCompactMode();
+        else NavTabsManager.EnterCompactMode();
     }
 
     private void ToggleTheme_Click(object sender, RoutedEventArgs e)
@@ -90,6 +106,7 @@ public partial class MainWindow : Window
 
     private async void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
     {
+        UpdateLayoutMode(ActualWidth);
         _ = Task.Run(MainWindowLoading);
     }
 
@@ -131,6 +148,20 @@ public partial class MainWindow : Window
         Debug.Log("MainWindow has closed – app will now exit");
     }
 
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged)
+            UpdateLayoutMode(e.NewSize.Width);
+    }
+
+    private void UpdateLayoutMode(double width)
+    {
+        CurrentLayoutMode =
+            width < 900 ? LayoutMode.Compact :
+            width < 1100 ? LayoutMode.Normal :
+            LayoutMode.Wide;
+    }
+
     private async void PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
     {
         var openBase = typeof(WpfBehaviourSingleton<>);
@@ -167,7 +198,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private readonly Dictionary<IPageBase, NavigationButton> navPageMap = new();
+    private readonly Dictionary<IPageBase, INavigationItem> navPageMap = new();
 
     private static bool IsSelfReferencingSingleton(Type t, Type openBase)
     {
@@ -216,27 +247,32 @@ public partial class MainWindow : Window
 
                 if(newPage.NavOrder >= 0)
                 {
-                    NavigationButton newTab;
-                    if (newPage.NavAlignment == PageBase.NavigationAlignment.Front)
+                    string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
+                    INavigationItem newTab;
+
+                    AddButtonDelegate add = newPage.NavAlignment switch
                     {
-                        newTab = NavTabsManager.AddTop(newPage.PageName, newPage.Glyph, newPage.SecondaryGlyph, newPage.NavOrder);
-                        newTab.SecondaryLabel.Text = newPage.ShortName;
-                    }
-                    else
-                    {
-                        newTab = NavTabsManager.AddBottom(newPage.PageName, newPage.Glyph, newPage.SecondaryGlyph, newPage.NavOrder);
-                        newTab.SecondaryLabel.Text = newPage.ShortName;
-                    }
+                        PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+                        PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+                        _ => NavTabsManager.AddTop
+                    };
+
+                    newTab = add(
+                        text: newPage.PageName,
+                        path: path,
+                        glyph: newPage.Glyph,
+                        secondaryGlyph: newPage.SecondaryGlyph,
+                        order: newPage.NavOrder);
 
                     newTab.OnClick += () => SelectPage(t);
                     navPageMap.Add(newPage, newTab);
                 }
-
+                
                 sw.Stop();
                 LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
                 sw = null;
                 jobs[t].Finish();
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Loaded);
         }
     }
 
@@ -647,4 +683,9 @@ public partial class MainWindow : Window
     }
 
     #endregion
+
+    
+    public event PropertyChangedEventHandler PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

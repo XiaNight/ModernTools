@@ -28,6 +28,7 @@ namespace Base.Pages
         public virtual string Description { get; } = "There is no description for this page.";
         public virtual NavigationAlignment NavAlignment { get; } = NavigationAlignment.Front;
         public virtual int NavOrder { get; } = int.MaxValue;
+        public virtual bool ShowDeviceSelection { get; } = true;
         protected static DeviceSelection.Device ActiveDevice => DeviceSelection.Instance.ActiveDevice;
 
         protected Grid root;

@@ -61,7 +61,7 @@
                 <TextBlock Grid.Column="0" Grid.Row="3" Text="Tool Base Version" FontSize="14" HorizontalAlignment="Left"/>
                 <TextBlock Grid.Column="1" Grid.Row="3" x:Name="ToolBaseVersionText" FontSize="14" HorizontalAlignment="Right"/>
                 <TextBlock Grid.Column="0" Grid.Row="4" Text="Developer" FontSize="14" HorizontalAlignment="Left"/>
-                <TextBlock Grid.Column="1" Grid.Row="4" Text="JimmyTM_Lai@asus.com" FontSize="14" HorizontalAlignment="Right"/>
+                <TextBlock Grid.Column="1" Grid.Row="4" Text="JimmyTM_Lai, Tung_Ku" FontSize="14" HorizontalAlignment="Right"/>
             </Grid>
         </StackPanel>
 

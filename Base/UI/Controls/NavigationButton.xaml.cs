@@ -7,10 +7,14 @@ namespace Base.Components
     /// <summary>
     /// Interaction logic for NavigationButton.xaml
     /// </summary>
-    public partial class NavigationButton : UserControl
+    public partial class NavigationButton : UserControl, INavigationItem
     {
         public static readonly DependencyProperty TextProperty =
             DependencyProperty.Register(nameof(Text), typeof(string), typeof(NavigationButton),
+                new PropertyMetadata("Home"));
+
+        public static readonly DependencyProperty ShortTextProperty =
+            DependencyProperty.Register(nameof(ShortText), typeof(string), typeof(NavigationButton),
                 new PropertyMetadata("Home"));
 
         public static readonly DependencyProperty GlyphProperty =
@@ -21,10 +25,19 @@ namespace Base.Components
             DependencyProperty.Register(nameof(SecondaryGlyph), typeof(string), typeof(NavigationButton),
                 new PropertyMetadata(""));
 
+        public static readonly DependencyProperty ItemHeightProperty =
+            DependencyProperty.Register(nameof(ItemHeight), typeof(int), typeof(NavigationButton),
+                new PropertyMetadata(48));
+
         public string Text
         {
             get => (string)GetValue(TextProperty);
             set => SetValue(TextProperty, value);
+        }
+        public string ShortText
+        {
+            get => (string)GetValue(ShortTextProperty);
+            set => SetValue(ShortTextProperty, value);
         }
 
         public string Glyph
@@ -47,7 +60,16 @@ namespace Base.Components
             }
         }
 
+        public int ItemHeight
+        {
+            get => (int)GetValue(ItemHeightProperty);
+            set => SetValue(ItemHeightProperty, value);
+        }
+
         public int OrderIndex { get; set; } = 0;
+        public bool IsChild { get; set; } = false;
+
+        public int Size => 1;
 
         public event Action OnClick;
 
@@ -58,14 +80,12 @@ namespace Base.Components
             NavButton.Click += (s, e) => OnClick?.Invoke();
         }
 
-        public void Expand()
+        public void ExitCompactMode()
         {
-            Label.Visibility = System.Windows.Visibility.Visible;
         }
 
-        public void Collapse()
+        public void EnterCompactMode()
         {
-            Label.Visibility = System.Windows.Visibility.Collapsed;
         }
 
         public void SetHighlightedState(bool state)

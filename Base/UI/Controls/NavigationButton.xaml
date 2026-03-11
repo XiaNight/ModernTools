@@ -8,7 +8,7 @@
              xmlns:helper="clr-namespace:Base.Helpers"
              mc:Ignorable="d"
              x:Name="Root"
-             d:DesignHeight="40" d:DesignWidth="100" d:Background="White">
+             d:DesignHeight="40" d:DesignWidth="200" d:Background="White">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition/>
@@ -32,10 +32,15 @@
                 HorizontalAlignment="Left"/>
         </Grid>
         <Button x:Name="NavButton" Style="{DynamicResource NavButtonStyle}">
-            <StackPanel Orientation="Horizontal">
-                <Grid>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="0"/>
+                    <ColumnDefinition Width="32"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="32"/>
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="1">
                     <ui:FontIcon x:Name="NavIcon"
-                                 Margin="4,0"
                                  Glyph="{Binding Glyph, ElementName=Root}"
                                  d:Glyph="&#xe765;"
                                  FontSize="22"
@@ -70,12 +75,13 @@
                     </Grid>
                 </Grid>
                 <TextBlock x:Name="Label"
+                           Grid.Column="2"
                            Text="{Binding Text, ElementName=Root}"
                            d:Text="Home"
                            Margin="12,0,0,0"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource TextControlForeground}"/>
-            </StackPanel>
+            </Grid>
         </Button>
     </Grid>
 </UserControl>
