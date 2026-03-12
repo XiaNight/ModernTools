@@ -1,9 +1,11 @@
+using Base.Core;
 using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
     public class GainPage : MFGKeyboardBasePage
     {
+        [Path("Keyboard")]
         public override string PageName => "Gain";
         public override string ShortName => "GAN";
         public override int NavOrder => 3;

@@ -37,7 +37,6 @@
                     <ColumnDefinition Width="0"/>
                     <ColumnDefinition Width="32"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="32"/>
                 </Grid.ColumnDefinitions>
                 <Grid Grid.Column="1">
                     <ui:FontIcon x:Name="NavIcon"
@@ -65,6 +64,7 @@
                         </Grid.RenderTransform>
 
                         <TextBlock x:Name="SecondaryLabel"
+                                   Text="{Binding ShortText, ElementName=Root}"
                                    d:Text="RAW"
                                    FontFamily="Cascadia Mono"
                                    FontSize="12"

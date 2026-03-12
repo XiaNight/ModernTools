@@ -1,4 +1,5 @@
-﻿using System.Windows.Controls;
+﻿using Base.Core;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 
@@ -6,6 +7,7 @@ namespace KeyboardHallSensor
 {
     internal class CustomizedSegmentPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Customized Segment";
         public override string ShortName => "CSG";
         protected override string MfgCmdName => "hall_analog";

@@ -8,8 +8,9 @@ namespace KeyboardHallSensor
 {
     public partial class MultiCalibrationRawPage : PageBase
     {
+        [Path("Keyboard")]
         public override string PageName => "Multi Calibration Raw";
-        public override string ShortName => "MCL";
+        public override string ShortName => "MCR";
         public override int NavOrder => 3;
         protected string MfgCmdName => "get_raw_multi_calibration";
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;

@@ -65,19 +65,19 @@ namespace Base.Components
             OnTabChanged?.Invoke(button);
         }
 
-        public delegate INavigationItem AddButtonDelegate(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", int order = int.MaxValue);
+        public delegate INavigationItem AddButtonDelegate(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", string secondaryText = "", int order = int.MaxValue);
 
-        public INavigationItem AddTop(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", int order = int.MaxValue)
+        public INavigationItem AddTop(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", string secondaryText = "", int order = int.MaxValue)
         {
-            return Add(text, path, glyph, secondaryGlyph, order, TopButtons);
+            return Add(text, path, glyph, secondaryGlyph, secondaryText, order, TopButtons);
         }
 
-        public INavigationItem AddBottom(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", int order = int.MaxValue)
+        public INavigationItem AddBottom(string text, string[] path, string glyph = "\uE7EF", string secondaryGlyph = "", string secondaryText = "", int order = int.MaxValue)
         {
-            return Add(text, path, glyph, secondaryGlyph, order, BottomButtons);
+            return Add(text, path, glyph, secondaryGlyph, secondaryText, order, BottomButtons);
         }
 
-        private INavigationItem Add(string text, string[] path, string glyph, string secondaryGlyph, int order, ObservableCollection<INavigationItem> collection)
+        private INavigationItem Add(string text, string[] path, string glyph, string secondaryGlyph, string secondaryText, int order, ObservableCollection<INavigationItem> collection)
         {
             if (path != null && path.Length > 0 && !string.IsNullOrEmpty(path[0]))
             {
@@ -92,6 +92,7 @@ namespace Base.Components
                 Text = text,
                 Glyph = glyph,
                 SecondaryGlyph = secondaryGlyph,
+                ShortText = secondaryText,
                 OrderIndex = order
             };
             newButton.OnClick += () => NavButtonClicked(newButton);

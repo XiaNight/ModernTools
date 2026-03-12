@@ -1,7 +1,10 @@
+using Base.Core;
+
 namespace KeyboardHallSensor
 {
     public class BottomAveragePage : MFGKeyboardBasePage
     {
+        [Path("Keyboard")]
         public override string PageName => "Bottom Average";
         public override string ShortName => "BMA";
         public override int NavOrder => 4;

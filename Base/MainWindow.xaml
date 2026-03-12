@@ -102,6 +102,8 @@
                     </MenuItem>
                     <MenuItem Header="_Help">
                         <MenuItem Header="_About" Click="ShowAbout"/>
+                        <MenuItem Header="Report a Problem..." Click="RedirectToFeedbackURL"/>
+                        <MenuItem Header="Suggest a Feature..." Click="RedirectToFeatureRequestURL"/>
                     </MenuItem>
                 </Menu>
                 <StackPanel x:Name="TitleBarControls"
@@ -178,6 +180,11 @@
                                              Margin="0,0,0,0" VerticalAlignment="Stretch"
                                              OpenWidth="270" ClosedWidth="60">
                         <mtc:VerticalTabsManager.TopButtons>
+                            <mtc:NavigationExpander Text="Keyboard" Glyph="&#xE765;"/>
+                            <mtc:NavigationExpander Text="Gamepad" Glyph="&#xE7FC;"/>
+                            <mtc:NavigationExpander Text="Mouse" Glyph="&#xE962;"/>
+                            <mtc:NavigationExpander Text="Audio" Glyph="&#xE8D6;"/>
+                            
                         </mtc:VerticalTabsManager.TopButtons>
 
                         <mtc:VerticalTabsManager.BottomButtons>

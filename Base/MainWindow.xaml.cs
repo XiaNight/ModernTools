@@ -69,7 +69,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             foreach (WpfBehaviour wpfObject in registeredWpfObjects)
             {
-                if(wpfObject.IsEnabled)
+                if (wpfObject.IsEnabled)
                     wpfObject?.ThemeChanged();
             }
         };
@@ -133,7 +133,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. 讀取 MSBuild 自動產生的秘密清單 (嵌入式資源)
         try
         {
             var assembly = Assembly.GetEntryAssembly();
@@ -150,7 +149,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
                         try
                         {
-                            // 強制載入，這在單一檔案發佈時非常穩定
                             var loadedAsm = Assembly.Load(subName);
                             processed.Add(loadedAsm.FullName);
                             LogMessage($"[AutoLoad] Loaded from Manifest: {subName}");
@@ -165,7 +163,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             LogMessage($"[AutoLoad] Manifest read error: {ex.Message}");
         }
 
-        // 2. 目錄掃描備援 (支援非單一檔案模式下的動態 DLL 放置)
         try
         {
             string exeDir = AppContext.BaseDirectory;
@@ -178,7 +175,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         var asmName = AssemblyName.GetAssemblyName(dllPath);
                         if (processed.Contains(asmName.FullName)) continue;
 
-                        // 避免加載系統 DLL
                         if (asmName.Name.StartsWith("System") || asmName.Name.StartsWith("Microsoft")) continue;
 
                         var loadedAsm = Assembly.LoadFrom(dllPath);
@@ -250,7 +246,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 jobs[t].Finish();
                 continue;
             }
-            
+
             await Dispatcher.InvokeAsync(() =>
             {
                 // Force creation: WpfBehaviourSingleton<T>.Instance
@@ -310,7 +306,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 PageBase newPage = (PageBase)Activator.CreateInstance(t);
                 RegisterWpfObject(newPage);
 
-                if(newPage.NavOrder >= 0)
+                if (newPage.NavOrder >= 0)
                 {
                     string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
                     INavigationItem newTab;
@@ -327,12 +323,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         path: path,
                         glyph: newPage.Glyph,
                         secondaryGlyph: newPage.SecondaryGlyph,
+                        secondaryText: newPage.ShortName,
                         order: newPage.NavOrder);
 
                     newTab.OnClick += () => SelectPage(t);
                     navPageMap.Add(newPage, newTab);
                 }
-                
+
                 sw.Stop();
                 LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
                 sw = null;
@@ -363,9 +360,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ContentFrame.Children.Add(page);
         return page;
     }
+
     private void ShowAbout(object sender, RoutedEventArgs e)
     {
         AboutWindow.Show(this);
+    }
+
+    private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(bugReportUrl);
+    }
+
+    private void RedirectToFeatureRequestURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(featureRequestUrl);
     }
 
     #endregion
@@ -493,9 +501,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public static string GetExePath()
     {
         return Environment.ProcessPath!;
-	}
+    }
 
-	public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
+    public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
     public static readonly string company = Util.GetAssemblyAttribute<AssemblyCompanyAttribute>(a => a.Company);
     public static readonly string version = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Application.ResourceAssembly, a => a.InformationalVersion);
     public static readonly string toolBaseVersion = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Assembly.GetExecutingAssembly(), a => a.InformationalVersion);
@@ -506,6 +514,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public static readonly string title = Util.GetAssemblyAttribute<AssemblyTitleAttribute>(a => a.Title);
     public static readonly string trademark = Util.GetAssemblyAttribute<AssemblyTrademarkAttribute>(a => a.Trademark);
     public static readonly string applicationIcon = FindIconPath();
+
+    private const string bugReportUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMlQ0RVcxWVo2Q1RTSFRIUzVOVlMzVVc2US4u";
+    private const string featureRequestUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMUhIWFJMOFdFWjRSWDNXT0RFRjNGOThXVi4u";
 
     private static string FindIconPath()
     {
@@ -579,7 +590,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-
     public void RequestWindowFocus()
     {
         if (WindowState == WindowState.Minimized)
@@ -588,6 +598,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Focus();
     }
 
+    public static void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            MessageBox.Show("The link is not configured.", "Oops", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Failed to open the browser.\n\n{ex.Message}",
+                "Oops",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
 
     #endregion
 
@@ -756,7 +791,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     #endregion
 
-    
+
     public event PropertyChangedEventHandler PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));

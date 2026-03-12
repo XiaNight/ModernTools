@@ -1,3 +1,4 @@
+using Base.Core;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -5,6 +6,7 @@ namespace KeyboardHallSensor
 {
     public class RawPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Raw";
         public override string ShortName => "RAW";
         public override int NavOrder => 0;

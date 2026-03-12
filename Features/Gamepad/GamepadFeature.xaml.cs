@@ -23,6 +23,7 @@ namespace Gamepad
 
     public class GamepadPage : PageBase
     {
+        [Path("Gamepad")]
         public override string PageName => "Gamepad";
         public override string Glyph => "\uE7FC";
         public override int NavOrder => 0;

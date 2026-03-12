@@ -208,6 +208,7 @@ namespace Audio
             RemainingDurationText.Text = $"Remaining Duration: {remaining} s";
         }
 
+        [Path("Audio")]
         public override string PageName => "Audio";
         public override string Description => "Place AudioTrigger.bat under ./Tools folder.";
 

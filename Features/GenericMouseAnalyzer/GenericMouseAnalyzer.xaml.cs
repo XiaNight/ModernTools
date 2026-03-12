@@ -1,4 +1,5 @@
-﻿using Base.Services;
+﻿using Base.Core;
+using Base.Services;
 using Base.Services.Peripheral;
 using System.Collections.Concurrent;
 using System.Data;
@@ -21,6 +22,7 @@ namespace GenericMouseAnalyzer
 
     public class GenericMouseAnalyzerPage : Base.Pages.PageBase
     {
+        [Path("Mouse")]
         public override string PageName => "Genric Mouse Analyzer";
 
         protected GenericMouseAnalyzer page;

@@ -11,11 +11,11 @@ namespace Base.Components
     {
         public static readonly DependencyProperty TextProperty =
             DependencyProperty.Register(nameof(Text), typeof(string), typeof(NavigationButton),
-                new PropertyMetadata("Home"));
+                new PropertyMetadata("Button"));
 
         public static readonly DependencyProperty ShortTextProperty =
             DependencyProperty.Register(nameof(ShortText), typeof(string), typeof(NavigationButton),
-                new PropertyMetadata("Home"));
+                new PropertyMetadata(""));
 
         public static readonly DependencyProperty GlyphProperty =
             DependencyProperty.Register(nameof(Glyph), typeof(string), typeof(NavigationButton),

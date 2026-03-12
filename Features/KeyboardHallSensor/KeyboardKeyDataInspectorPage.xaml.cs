@@ -1,4 +1,5 @@
-﻿using Base.Services;
+﻿using Base.Core;
+using Base.Services;
 using Base.Services.Peripheral;
 
 namespace KeyboardHallSensor
@@ -8,6 +9,7 @@ namespace KeyboardHallSensor
     /// </summary>
     public partial class KeyboardKeyDataInspectorPage : KeyboardPageBase
     {
+        [Path("Keyboard")]
         public override string PageName => "Key Data";
         private new PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
 

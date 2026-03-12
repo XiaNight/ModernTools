@@ -13,6 +13,7 @@ namespace Audio
     /// </summary>
     public partial class AudioDeviceRebootTest : PageBase
     {
+        [Path("Audio")]
         public override string PageName => "Audio Device Reboot Test";
 
         public const string AUDIO_DEVICE_REBOOT_TEST_RUN_AT_STARTUP_KEY = "AudioDeviceRebootTestRunAtStartup";
