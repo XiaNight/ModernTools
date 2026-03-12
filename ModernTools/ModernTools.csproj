@@ -11,12 +11,12 @@
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <InformationalVersion>V99_13_14</InformationalVersion>
+    <InformationalVersion>V01_00_03</InformationalVersion>
     <CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
-    <AppName>AudioToolset</AppName>
+    <AppName>GamepadToolset</AppName>
     <Company>AsusTek Computer Inc.</Company>
     <CompanyName>Asus</CompanyName>
-    <Product>Audio Toolset</Product>
+    <Product>Gamepad Toolset</Product>
     <ProductName>$(Product)</ProductName>
     <Copyright>Copyright © AsusTek Computer Inc. All rights reserved.</Copyright>
     <AssemblyName>$(AppName)_$(CleanInformationalVersion)</AssemblyName>
@@ -37,5 +37,4 @@
 	  <ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 	  <ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
   </ItemGroup>
-
 </Project>

@@ -77,7 +77,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <Image x:Name="AppIcon" Grid.Column="0" Margin="6, 0, 6, 0" Source="/Base;component/Resource/Icons/AppIcon_Flat_64.png" Width="40" Height="40">
+                <Image x:Name="AppIcon" Grid.Column="0" Margin="6, 0, 6, 0" Source="/Base;component/Assets/Icons/AppIcon_Flat_64.png" Width="40" Height="40">
                     <Image.RenderTransform>
                         <ScaleTransform ScaleX="1.0" ScaleY="1.0" CenterX="12" CenterY="12"/>
                     </Image.RenderTransform>

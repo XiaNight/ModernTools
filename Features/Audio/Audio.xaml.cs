@@ -16,6 +16,7 @@ namespace Audio
     public partial class AudioPage : PageBase
     {
         public override string Glyph => "\uE189";
+        public override bool ShowDeviceSelection => false;
         public bool IsTesting { get; private set; } = false;
         public int Cycle
         {

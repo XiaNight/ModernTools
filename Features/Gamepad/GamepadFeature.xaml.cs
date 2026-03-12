@@ -73,7 +73,7 @@ namespace Gamepad
         private Action<long> appendChartData = (_) => { }; // Add data point to chart
         private Action<long> tickChartData;
         private int chartType = 0;
-        private ChartRenderMode renderMode = ChartRenderMode.Combined;
+        private ChartRenderMode renderMode = ChartRenderMode.Line;
         private bool isChartPaused = false;
         private FullWindowChart fullWindowChart = null;
         private ScatterChartControl XYChart;
@@ -171,6 +171,7 @@ namespace Gamepad
 
                 SetRenderMode(renderMode);
             };
+            SetRenderMode(renderMode);
 
             page.FullWindowChart.Click += (_, _) =>
             {
@@ -364,7 +365,7 @@ namespace Gamepad
             switch (chartType)
             {
                 case 0:
-                    StripChart.MaxY = 1200; StripChart.MinY = 0; break;
+                    StripChart.MaxY = 9000; StripChart.MinY = 0; break;
                 case 1:
                 case 2:
                 case 3:

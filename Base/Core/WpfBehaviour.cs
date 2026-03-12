@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace Base.Core
 {
@@ -7,6 +8,12 @@ namespace Base.Core
     {
         private static readonly Lazy<T> instance = new(() => new T());
         public static T Instance => instance.Value;
+
+        public override void Awake()
+        {
+            base.Awake();
+            Dispatcher.Invoke(Start, DispatcherPriority.Loaded);
+        }
 
         protected WpfBehaviourSingleton() : base()
         {

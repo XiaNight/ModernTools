@@ -292,6 +292,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         currentPage?.Enable();
         navPageMap[currentPage].SetHighlightedState(true);
 
+        SetDeviceSelectionVisibility(currentPage.ShowDeviceSelection);
+
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
         return page;
@@ -375,6 +377,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         currentPage?.Disable();
         //currentPage = pages[MainTabControl.SelectedIndex];
         currentPage?.Enable();
+    }
+
+    public void SetDeviceSelectionVisibility(bool state)
+    {
+        TitleBarControls.Visibility = state ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetTabsEnabled(bool enabled)

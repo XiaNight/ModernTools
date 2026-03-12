@@ -21,19 +21,18 @@
 
   <ItemGroup>
     <None Remove="Assets\DropFile.png" />
-    <None Remove="Helpers\InvertEffect.ps" />
     <None Remove="Properties\Settings.settings" />
-    <None Remove="Resource\Fonts\NotoSansTC-VariableFont_wght.ttf" />
-    <None Remove="Resource\Icons\AppIcon_1024.png" />
-    <None Remove="Resource\Icons\AppIcon_128.png" />
-    <None Remove="Resource\Icons\AppIcon_256.png" />
-    <None Remove="Resource\Icons\AppIcon_512.png" />
-    <None Remove="Resource\Icons\AppIcon_64.png" />
-    <None Remove="Resource\Icons\AppIcon_Flat_1024.png" />
-    <None Remove="Resource\Icons\AppIcon_Flat_128.png" />
-    <None Remove="Resource\Icons\AppIcon_Flat_256.png" />
-    <None Remove="Resource\Icons\AppIcon_Flat_512.png" />
-    <None Remove="Resource\Icons\AppIcon_Flat_64.png" />
+    <None Remove="Assets\Fonts\NotoSansTC-VariableFont_wght.ttf" />
+    <None Remove="Assets\Icons\AppIcon_1024.png" />
+    <None Remove="Assets\Icons\AppIcon_128.png" />
+    <None Remove="Assets\Icons\AppIcon_256.png" />
+    <None Remove="Assets\Icons\AppIcon_512.png" />
+    <None Remove="Assets\Icons\AppIcon_64.png" />
+    <None Remove="Assets\Icons\AppIcon_Flat_1024.png" />
+    <None Remove="Assets\Icons\AppIcon_Flat_128.png" />
+    <None Remove="Assets\Icons\AppIcon_Flat_256.png" />
+    <None Remove="Assets\Icons\AppIcon_Flat_512.png" />
+    <None Remove="Assets\Icons\AppIcon_Flat_64.png" />
     <None Remove="Tools\Bluetooth\bluetooth.ps1" />
     <None Remove="Tools\Bluetooth\BluetoothOff.bat" />
     <None Remove="Tools\Bluetooth\BluetoothOn.bat" />
@@ -46,36 +45,29 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Helpers\InvertEffect.ps">
+    <Resource Include="UI\Themes\InvertEffect.ps">
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </Resource>
-    <Content Include="Resource\Fonts\NotoSansTC-VariableFont_wght.ttf" />
-    <Resource Include="Resource\Icons\AppIcon_1024.png" />
-    <Resource Include="Resource\Icons\AppIcon_128.png" />
-    <Resource Include="Resource\Icons\AppIcon_256.png" />
-    <Resource Include="Resource\Icons\AppIcon_512.png" />
-    <Resource Include="Resource\Icons\AppIcon_64.png" />
-    <Content Include="Themes\Brushes.xaml" />
-    <Content Include="Themes\Generic.xaml" />
-    <Content Include="Themes\Palette.Dark.xaml" />
-    <Content Include="Themes\Palette.Light.xaml" />
+    <Content Include="Assets\Fonts\NotoSansTC-VariableFont_wght.ttf" />
+    <Resource Include="Assets\Icons\AppIcon_1024.png" />
+    <Resource Include="Assets\Icons\AppIcon_128.png" />
+    <Resource Include="Assets\Icons\AppIcon_256.png" />
+    <Resource Include="Assets\Icons\AppIcon_512.png" />
+    <Resource Include="Assets\Icons\AppIcon_64.png" />
+    <Content Include="UI\Themes\Brushes.xaml" />
+    <Content Include="UI\Themes\Generic.xaml" />
+    <Content Include="UI\Themes\Palette.Dark.xaml" />
+    <Content Include="UI\Themes\Palette.Light.xaml" />
     <Resource Include="Keyboard.ico" />
-    <Resource Include="Resource\Icons\AppIcon_Flat_1024.png" />
-    <Resource Include="Resource\Icons\AppIcon_Flat_128.png" />
-    <Resource Include="Resource\Icons\AppIcon_Flat_256.png" />
-    <Resource Include="Resource\Icons\AppIcon_Flat_512.png" />
-    <Resource Include="Resource\Icons\AppIcon_Flat_64.png" />
-    <Resource Include="Themes\Brushes.xaml" />
-    <Resource Include="Themes\Generic.xaml" />
-    <Resource Include="Themes\Palette.Dark.xaml" />
-    <Resource Include="Themes\Palette.Light.xaml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Page Remove="Themes\brushes.xaml" />
-    <Page Remove="Themes\generic.xaml" />
-    <Page Remove="Themes\palette.dark.xaml" />
-    <Page Remove="Themes\palette.light.xaml" />
+    <Resource Include="Assets\Icons\AppIcon_Flat_1024.png" />
+    <Resource Include="Assets\Icons\AppIcon_Flat_128.png" />
+    <Resource Include="Assets\Icons\AppIcon_Flat_256.png" />
+    <Resource Include="Assets\Icons\AppIcon_Flat_512.png" />
+    <Resource Include="Assets\Icons\AppIcon_Flat_64.png" />
+    <Resource Include="UI\Themes\Brushes.xaml" />
+    <Resource Include="UI\Themes\Generic.xaml" />
+    <Resource Include="UI\Themes\Palette.Dark.xaml" />
+    <Resource Include="UI\Themes\Palette.Light.xaml" />
   </ItemGroup>
 
   <ItemGroup>
@@ -87,21 +79,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="Components\Chart\FastStripChartControl.xaml.cs">
+    <Compile Update="UI\Controls\Charts\FastStripChartControl.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Components\Chart\ScatterChartControl.xaml.cs">
+    <Compile Update="UI\Controls\Charts\ScatterChartControl.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Components\NavigationButton.xaml.cs">
+    <Compile Update="UI\Controls\NavigationButton.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Update="Components\VerticalTabsManager.xaml.cs">
+    <Compile Update="UI\Controls\VerticalTabsManager.xaml.cs">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Framework\Behaviors\" />
     <Folder Include="Properties\PublishProfiles\" />
   </ItemGroup>
 

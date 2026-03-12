@@ -5,7 +5,6 @@ namespace Base.Pages
 {
     using Core;
     using Services;
-    using Windows.Foundation.Metadata;
 
     internal interface IPageBase
     {
@@ -14,6 +13,7 @@ namespace Base.Pages
         Grid Root { get; }
         string PageName { get; }
         string Description { get; }
+        bool ShowDeviceSelection { get; }
     }
 
     /// <summary>
