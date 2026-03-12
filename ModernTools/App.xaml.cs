@@ -1,10 +1,5 @@
-﻿using Audio;
-using Base.Core;
+﻿using Base.Core;
 using Base.Helpers;
-using Gamepad;
-using GenericMouseAnalyzer;
-using KeyboardHallSensor;
-using CommonProtocol;
 using ModernWpf;
 using System.Reflection;
 using System.Windows;
@@ -20,12 +15,6 @@ public partial class App : Application
     {
         ComSecurityHelper.Initialize();
         base.OnStartup(e);
-
-        typeof(AudioPage).ToString();
-        typeof(GamepadPage).ToString();
-        typeof(CommonProtocol.CommonProtocol).ToString();
-        //typeof(RawPage).ToString();
-        //typeof(GenericMouseAnalyzerPage).ToString();
 
         string app_name = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
 

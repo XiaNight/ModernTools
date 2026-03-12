@@ -117,6 +117,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             LoadingBlur.Radius = Math.Max(0, LoadingBlur.Radius - t * 20);
         });
 
+        EnsureAllAssembliesLoaded();
+
         Task.Run(() => PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies()));
         Task.Run(() => BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies()));
 
@@ -125,6 +127,69 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             _ = DeviceSelection.Instance.Refresh();
             DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
         });
+    }
+
+    private void EnsureAllAssembliesLoaded()
+    {
+        var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 1. 讀取 MSBuild 自動產生的秘密清單 (嵌入式資源)
+        try
+        {
+            var assembly = Assembly.GetEntryAssembly();
+            if (assembly != null)
+            {
+                using var stream = assembly.GetManifestResourceStream("submodules.txt");
+                if (stream != null)
+                {
+                    using var reader = new StreamReader(stream);
+                    while (!reader.EndOfStream)
+                    {
+                        string subName = reader.ReadLine()?.Trim();
+                        if (string.IsNullOrEmpty(subName) || processed.Contains(subName)) continue;
+
+                        try
+                        {
+                            // 強制載入，這在單一檔案發佈時非常穩定
+                            var loadedAsm = Assembly.Load(subName);
+                            processed.Add(loadedAsm.FullName);
+                            LogMessage($"[AutoLoad] Loaded from Manifest: {subName}");
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"[AutoLoad] Manifest read error: {ex.Message}");
+        }
+
+        // 2. 目錄掃描備援 (支援非單一檔案模式下的動態 DLL 放置)
+        try
+        {
+            string exeDir = AppContext.BaseDirectory;
+            if (Directory.Exists(exeDir))
+            {
+                foreach (string dllPath in Directory.GetFiles(exeDir, "*.dll"))
+                {
+                    try
+                    {
+                        var asmName = AssemblyName.GetAssemblyName(dllPath);
+                        if (processed.Contains(asmName.FullName)) continue;
+
+                        // 避免加載系統 DLL
+                        if (asmName.Name.StartsWith("System") || asmName.Name.StartsWith("Microsoft")) continue;
+
+                        var loadedAsm = Assembly.LoadFrom(dllPath);
+                        processed.Add(loadedAsm.FullName);
+                        LogMessage($"[AutoLoad] Loaded from File: {asmName.Name}");
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)

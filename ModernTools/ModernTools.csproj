@@ -25,6 +25,17 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- 自動收集子模組清單的黑科技 -->
+  <Target Name="GenerateSubmoduleManifest" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <SubmoduleName Include="@(ProjectReference->'%(Filename)')" Condition="'%(ProjectReference.ReferenceOutputAssembly)' != 'false' AND '%(ProjectReference.Filename)' != 'Base'" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)submodules.txt" Lines="@(SubmoduleName)" Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)submodules.txt" LogicalName="submodules.txt" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
 	  <PackageReference Include="ModernWpfUI" Version="0.9.6" />
 	  <ProjectReference Include="..\Features\Audio\Audio.csproj">
@@ -33,7 +44,6 @@
 	  </ProjectReference>
 	  <ProjectReference Include="..\Features\CommonProtocol\CommonProtocol.csproj" />
 	  <ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
-	  <ProjectReference Include="..\Features\Gamepad\GamePadToolset.csproj" />
 	  <ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 	  <ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
   </ItemGroup>

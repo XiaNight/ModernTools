@@ -26,7 +26,6 @@ namespace CommonProtocol
             ttLog.OnTriggered += TTLog;
 
             var deviceInfo = parser.AddTrigger([0x12, 0x00]);
-            deviceInfo.OnTriggered += DeviceInfo;
         }
 
         private void ConnectToInterface()
@@ -62,7 +61,7 @@ namespace CommonProtocol
             activeInterface = null;
         }
 
-        private void TTLog(CmdParser.Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
+        private void TTLog(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
         {
             ReadOnlySpan<byte> data = bytes.Span.Slice(5);
 
