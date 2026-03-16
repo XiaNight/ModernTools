@@ -12,7 +12,8 @@
         public int ItemHeight { get; set; }
 
         public event Action OnClick;
-        
+        public void Click();
+
         public void EnterCompactMode();
         public void ExitCompactMode();
         public void SetHighlightedState(bool state);

@@ -81,6 +81,7 @@ namespace Base.Components
         public ObservableCollection<INavigationItem> Items { get; } = new();
 
         public event Action OnClick;
+        public void Click() => OnClick?.Invoke();
 
         public NavigationExpander()
         {

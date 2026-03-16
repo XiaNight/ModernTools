@@ -104,28 +104,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     #region WPF public
 
-    private async void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
+    private void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
     {
         UpdateLayoutMode(ActualWidth);
-        _ = Task.Run(MainWindowLoading);
+        MainWindowLoading();
     }
 
-    private void MainWindowLoading()
+    private async void MainWindowLoading()
     {
+        EnsureAllAssembliesLoaded();
+
+        await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
+        await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
+
+        SelectTabIndex(0);
+        _ = DeviceSelection.Instance.Refresh();
+        DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
+        
         LoadingCover.AutoFinish((t) =>
         {
             LoadingBlur.Radius = Math.Max(0, LoadingBlur.Radius - t * 20);
-        });
-
-        EnsureAllAssembliesLoaded();
-
-        Task.Run(() => PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies()));
-        Task.Run(() => BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies()));
-
-        Dispatcher.InvokeAsync(() =>
-        {
-            _ = DeviceSelection.Instance.Refresh();
-            DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
         });
     }
 
@@ -223,7 +221,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             LayoutMode.Wide;
     }
 
-    private async void PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
+    private async Task PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
     {
         var openBase = typeof(WpfBehaviourSingleton<>);
 
@@ -285,7 +283,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return types;
     }
 
-    private void BuildNavigationTabs(IEnumerable<Assembly> assemblies)
+    private async Task BuildNavigationTabs(IEnumerable<Assembly> assemblies)
     {
         // find all PageBase and none abstract
         Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
@@ -299,7 +297,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         foreach (Type t in allTypes)
         {
-            Dispatcher.InvokeAsync(() =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -359,6 +357,37 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
         return page;
+    }
+
+    public void SetFWVersion(byte major, byte inter, byte minor)
+    {
+        SetFWVersion($"V{major:D2}_{inter:D2}_{minor:D2}");
+    }
+
+    public void SetFWVersion(string version)
+    {
+        string text = string.IsNullOrEmpty(version) ? "FW: ----" : $"FW: {version}";
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
+        {
+            MainFooter.DeviceVersion.Text = text;
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => MainFooter.DeviceVersion.Text = text);
+        }
+    }
+
+    public void SetBatteryStatus(bool isCharging, byte[] level)
+    {
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
+        {
+            MainFooter.BatteryIndicator.SetBatteryLevel(level);
+            MainFooter.BatteryIndicator.SetBatteryStatus(isCharging);
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => { SetBatteryStatus(isCharging, level); });
+        }
     }
 
     private void ShowAbout(object sender, RoutedEventArgs e)
@@ -457,23 +486,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         TitleBarControls.Visibility = state ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    public void SetTabsEnabled(bool enabled)
-    {
-        //foreach (TabItem item in MainTabControl.Items)
-        //{
-        //    if (item.Content is Grid grid)
-        //    {
-        //        grid.IsEnabled = enabled;
-        //    }
-        //}
-    }
-
     public void SelectTabIndex(int index)
     {
-        //if (index >= 0 && index < MainTabControl.Items.Count)
-        //{
-        //    MainTabControl.SelectedIndex = index;
-        //}
+        List<IEnumerable<INavigationItem>> walkCollection = new()
+        {
+            NavTabsManager.BottomButtons,
+            NavTabsManager.TopButtons,
+        };
+        int walk = 0;
+
+        while (walkCollection.Count > 0)
+        {
+            foreach(INavigationItem item in walkCollection.Last())
+            {
+                if(item is NavigationButton button)
+                {
+                    if (walk == index)
+                    {
+                        button.Click();
+                        return;
+                    }
+                    walk++;
+                }
+                else if(item is NavigationExpander expander)
+                {
+                    walkCollection.Add(expander.Items);
+                }
+            }
+            walkCollection.RemoveAt(walkCollection.Count - 1);
+        }
     }
 
     public static string GetOutputFolder()

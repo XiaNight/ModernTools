@@ -90,8 +90,6 @@ namespace GenericMouseAnalyzer
             base.OnEnable();
             phase = Phase.Idle;
 
-            StartLoop(600);
-
             timer = new System.Timers.Timer(500);
             timer.AutoReset = true;
             timer.Elapsed += (_, _) => ReadOtherData();
@@ -109,7 +107,6 @@ namespace GenericMouseAnalyzer
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
         }
 
         protected override void Update()

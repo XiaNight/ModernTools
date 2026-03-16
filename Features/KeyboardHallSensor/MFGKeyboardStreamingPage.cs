@@ -81,14 +81,12 @@ namespace KeyboardHallSensor
         {
             base.OnEnable();
             Chart.Start();
-            StartLoop(60);
             Chart.MaxY = MaxValue;
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
             Chart.Stop();
             StopRecording();
         }

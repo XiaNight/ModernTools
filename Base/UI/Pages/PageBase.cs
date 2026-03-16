@@ -5,6 +5,7 @@ namespace Base.Pages
 {
     using Core;
     using Services;
+    using System.Windows.Media;
 
     internal interface IPageBase
     {
@@ -43,6 +44,23 @@ namespace Base.Pages
             FormPage();
         }
 
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            CompositionTarget.Rendering += OnRendering;
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            CompositionTarget.Rendering -= OnRendering;
+        }
+
+        private void OnRendering(object sender, EventArgs e)
+        {
+            Update();
+        }
+
         public static T Create<T>() where T : PageBase, new()
         {
             return new T();
@@ -52,52 +70,6 @@ namespace Base.Pages
         {
             Content ??= new Grid();
             root = Content as Grid;
-        }
-
-        protected void StartLoop(double fps = 60)
-        {
-            if (updateLoop != null) return;
-
-            cts = new CancellationTokenSource();
-            updateLoop = Task.Run(() => LoopAsync(fps, cts.Token), cts.Token);
-        }
-
-        protected void StopLoop()
-        {
-            if (updateLoop != null) cts.Cancel();
-            updateLoop = null;
-        }
-
-        private async Task LoopAsync(double fps, CancellationToken token)
-        {
-            try
-            {
-                var frameTime = TimeSpan.FromMilliseconds(1000.0 / fps);
-                var stopwatch = new System.Diagnostics.Stopwatch();
-
-                while (!token.IsCancellationRequested)
-                {
-                    // Reset the stopwatch
-                    stopwatch.Restart();
-
-                    // Call main loop
-                    await Application.Current.Dispatcher.InvokeAsync(Update);
-
-                    // Calculated delay to maintain frame rate
-                    var elapsed = stopwatch.Elapsed;
-                    var remaining = frameTime - elapsed;
-                    if (remaining > TimeSpan.Zero)
-                        await Task.Delay(remaining, token);
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected on cancellation: do nothing or log if needed
-            }
-            catch (Exception ex)
-            {
-                Debug.Log($"[Error] Page Update: {ex}");
-            }
         }
 
         protected virtual void Update() { }

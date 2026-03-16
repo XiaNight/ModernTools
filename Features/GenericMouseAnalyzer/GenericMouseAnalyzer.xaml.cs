@@ -56,7 +56,6 @@ namespace GenericMouseAnalyzer
         {
             base.OnEnable();
 
-            StartLoop();
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
         }
 
@@ -64,7 +63,6 @@ namespace GenericMouseAnalyzer
         {
             base.OnDisable();
 
-            StopLoop();
             DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectToInterface;
         }
 

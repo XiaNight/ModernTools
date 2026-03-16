@@ -43,7 +43,7 @@ namespace Base.Services
 		private static CancellationTokenSource workerCts;
 		private static Task workerTask;
 
-		private const int DefaultWaitTimeoutMs = 3000;
+		private const int DefaultWaitTimeoutMs = 250;
 		private const int DefaultInterCommandDelayMs = 100;
 
 		public static int PendingCmdCount => pendingCommands.Count;
@@ -161,7 +161,7 @@ namespace Base.Services
 					}
 					catch (OperationCanceledException)
 					{
-						return;
+                        continue;
 					}
 					catch (Exception ex)
 					{

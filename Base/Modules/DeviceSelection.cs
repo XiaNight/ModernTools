@@ -86,9 +86,9 @@ namespace Base.Services
                 Main.RefreshButton.IsEnabled = false;
                 Main.ConnectButton.Visibility = Visibility.Hidden;
                 Main.DisconnectButton.Visibility = Visibility.Visible;
-                Main.MainFooter.DeviceName.Text = $"Connected: {ActiveDevice.productName}";
+                Main.MainFooter.DeviceName.Text = $"{ActiveDevice.productName}";
                 Main.MainFooter.DeviceVersion.Text = $"FW: ----";
-                Main.MainFooter.DeviceBattery.Text = "Battery: ----";
+                Main.MainFooter.DeviceVersion.Visibility = Visibility.Visible;
             };
             OnActiveDeviceDisconnected += () =>
             {
@@ -98,7 +98,9 @@ namespace Base.Services
                 Main.DisconnectButton.Visibility = Visibility.Hidden;
                 Main.MainFooter.DeviceName.Text = "Disconnected";
                 Main.MainFooter.DeviceVersion.Text = $"FW: ----";
-                Main.MainFooter.DeviceBattery.Text = "Battery: ----";
+                Main.MainFooter.DeviceVersion.Visibility = Visibility.Collapsed;
+                Main.MainFooter.BatteryIndicator.Visibility = Visibility.Collapsed;
+                Main.MainFooter.BatteryIndicator.Reset();
             };
             //Main.BlockEventToggle.OnValueChanged += (state) =>
             //{
@@ -110,21 +112,6 @@ namespace Base.Services
             {
                 OnSelectedDeviceChanged.Invoke();
             };
-
-            BatteryIndicator.OnBatteryLevelChanged += (levels) =>
-            {
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    string batteryText = "Battery:";
-                    foreach (var level in levels)
-                    {
-                        //- level byte is 0 ~ 100 (0x00 ~ 0x64), no need to convert
-                        batteryText += $" {level:F1}%";
-                    }
-                    //Main.FooterDeviceBattery.Text = batteryText;
-                });
-            };
-            //OnActiveInterfaceConnected += BatteryIndicator.GetBatteryLevel;
 
             _ = Refresh();
         }

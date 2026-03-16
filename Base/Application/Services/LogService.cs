@@ -16,14 +16,14 @@ namespace Base.Services
 				sb.Append(' ');
 			}
 
-			bool isOnUiThread = Application.Current.Dispatcher.CheckAccess();
+			bool isOnUiThread = Application.Current?.Dispatcher?.CheckAccess() ?? false;
 			if(isOnUiThread)
 			{
 				OnLog?.Invoke(sb.ToString());
 			}
 			else
 			{
-				Application.Current.Dispatcher.Invoke(() => OnLog?.Invoke(sb.ToString()));
+				Application.Current?.Dispatcher?.Invoke(() => OnLog?.Invoke(sb.ToString()));
 			}
 		}
 	}

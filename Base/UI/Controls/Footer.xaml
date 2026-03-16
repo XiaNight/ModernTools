@@ -6,12 +6,13 @@
              xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:core="clr-namespace:Base.Core"
              xmlns:local="clr-namespace:Base.Components"
+             xmlns:controls="clr-namespace:Base.UI.Controls"
              mc:Ignorable="d"
              d:DesignHeight="24" d:DesignWidth="800" d:Background="White">
     <Grid Height="26" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
         <DockPanel LastChildFill="False" x:Name="ContentPanel" Margin="0">
             <TextBlock x:Name="DeviceName"
-		               Text="Connected: ----"
+		               Text="Disconnected"
 		               FontSize="14"
                        Margin="10,0"
 		               VerticalAlignment="Center"
@@ -22,15 +23,12 @@
 		               FontSize="14"
                        Margin="10,0"
 		               VerticalAlignment="Center"
-		               DockPanel.Dock="Left"/>
-
-            <TextBlock x:Name="DeviceBattery"
-		               Text="Battery: ----"
-		               FontSize="14"
-                       Margin="10,0"
-		               VerticalAlignment="Center"
-                       Visibility="Collapsed"
-		               DockPanel.Dock="Left"/>
+		               DockPanel.Dock="Left"
+                       Visibility="Collapsed"/>
+            <controls:BatteryIndicator x:Name="BatteryIndicator"
+                                       Margin="10,0"
+                                       DockPanel.Dock="Left"
+                                       Visibility="Collapsed"/>
         </DockPanel>
     </Grid>
 </UserControl>

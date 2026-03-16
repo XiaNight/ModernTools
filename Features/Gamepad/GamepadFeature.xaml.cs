@@ -284,13 +284,11 @@ namespace Gamepad
         {
             base.OnEnable();
             Clear();
-            StartLoop();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
 
             if (isRecording) StopRecording();
         }

@@ -232,14 +232,12 @@ namespace Audio
         protected override void OnEnable()
         {
             base.OnEnable();
-            StartLoop(120);
             StartAudioStream();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
             StopAudioStream();
         }
 

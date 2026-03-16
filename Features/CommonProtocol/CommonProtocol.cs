@@ -1,6 +1,7 @@
 ﻿using Base.Core;
 using Base.Services;
 using Base.Services.Peripheral;
+using CommonProtocol.Protocols.GetInfo;
 
 namespace CommonProtocol;
 
@@ -25,6 +26,10 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
         Listener ttLog = parser.AddTrigger([0xFD, 0xA0], TTLog);
 
         Listener deviceInfo = parser.AddTrigger([0x12, 0x00], DeviceInfo);
+        deviceInfo.structures.Add(new BasicInfo());
+
+        Listener powerInfo = parser.AddTrigger([0x12, 0x01], PowerInfo);
+        powerInfo.structures.Add(new Power());
     }
 
     private void ConnectToInterface()
@@ -33,6 +38,8 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
         try
         {
             var usagePage = device.PID == 0x1ACE ? 0xFF02 : 0xFF00;
+            if(device.PID == 0x1C64) usagePage = 0xFF03;
+            if(device.PID == 0x1C65) usagePage = 0xFF03;
             if (device.interfaces.Count == 0) return;
 
             var deviceInterface = device.interfaces.FirstOrDefault(@interface =>
@@ -49,6 +56,9 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
             Debug.Log("[CommonProtocol] Failed to open HID device: " + ex.Message);
             return;
         }
+
+        ProtocolService.AppendCmd(activeInterface, [0x12, 0x00]);
+        ProtocolService.AppendCmd(activeInterface, [0x12, 0x01]);
     }
 
     private void DisconnectInterface()
@@ -60,9 +70,9 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
         activeInterface = null;
     }
 
-        private void TTLog(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
-        {
-            ReadOnlySpan<byte> data = bytes.Span.Slice(5);
+    private void TTLog(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
+    {
+        ReadOnlySpan<byte> data = bytes.Span.Slice(5);
 
         int length = data.IndexOf((byte)0);
         if (length < 0)
@@ -73,20 +83,25 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
 
         string message = System.Text.Encoding.ASCII.GetString(data.Slice(0, length));
         Debug.Log(message);
-    }
+    } 
 
     private void DeviceInfo(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
     {
-        ReadOnlySpan<byte> data = bytes.Span;
-        if (data.Length < 10) return;
-        string deviceName = System.Text.Encoding.ASCII.GetString(data.Slice(5, 10).TrimEnd((byte)0));
-        Debug.Log($"Device Name: {deviceName}");
+        if (!listener.TryGet(out BasicInfo getInfo)) return;
+
+        Main.SetFWVersion(getInfo.version1.Value[2], getInfo.version1.Value[1], getInfo.version1.Value[0]);
+    }
+
+    private void PowerInfo(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
+    {
+        if (!listener.TryGet(out Power power)) return;
+
+        Main.SetBatteryStatus(power.chargingStatus.Value, [power.currentPower.Value]);
     }
 
     private class CmdParser
     {
         public readonly List<Listener> triggers = new();
-        private readonly Dictionary<string, Listener.IData> structure = new();
         public void Parse(ReadOnlyMemory<byte> data, DateTime time)
         {
             foreach (var trigger in triggers)

@@ -270,10 +270,10 @@ namespace Base.Services.Peripheral
         {
             ThrowIfDisposed();
             if (data is null) throw new ArgumentNullException(nameof(data));
-            if (data.Length > _cap.OutputReportByteLength - 1)
+            if (data.Length > _cap.InputReportByteLength - 1)
                 throw new ArgumentException($"Data length {data.Length} > max {_cap.OutputReportByteLength - 1}");
 
-            await _writeSem.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await _writeSem.WaitAsync(cancellationToken).ConfigureAwait(false); 
             try
             {
                 var packet = new byte[_cap.OutputReportByteLength];

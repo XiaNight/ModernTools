@@ -1,6 +1,5 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 
 namespace Base.Components
 {
@@ -50,7 +49,7 @@ namespace Base.Components
         {
             get => (string)GetValue(SecondaryGlyphProperty);
             set
-            { 
+            {
                 SetValue(SecondaryGlyphProperty, value);
                 if (string.IsNullOrEmpty(value))
                 {
@@ -72,6 +71,7 @@ namespace Base.Components
         public int Size => 1;
 
         public event Action OnClick;
+        public void Click() => OnClick?.Invoke();
 
         public NavigationButton()
         {
