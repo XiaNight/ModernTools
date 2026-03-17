@@ -29,7 +29,7 @@ namespace Base.Services
 
 		private static async Task<int> SetBluetoothStateAsync(bool state)
 		{
-			string path = Main.GetToolFolder("Bluetooth");
+			string path = MainWindow.GetToolFolder("Bluetooth");
 			string file = state switch
 			{
 				true => "BluetoothOn.bat",

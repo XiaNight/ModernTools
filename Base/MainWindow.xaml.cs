@@ -2,7 +2,6 @@
 using Base.Pages;
 using Base.Services;
 using ModernWpf;
-using System.Collections;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -25,6 +24,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private bool isNavExpanded = true;
     private bool isLogVisible = false;
+    public event Action<PageBase, PageBase> OnPageChanged;
 
     private LayoutMode _currentLayoutMode = LayoutMode.Normal;
     public LayoutMode CurrentLayoutMode
@@ -49,6 +49,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Debug.OnLog += LogMessage;
     }
+
+    #region WPF public
 
     private void ToggleNav_Click(object sender, RoutedEventArgs e)
     {
@@ -95,15 +97,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Application.Current.Shutdown();
     }
 
-    private void LogMessage(string message)
-    {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        LogTextBox.AppendText($"[{timestamp}] {message}\n");
-        LogTextBox.ScrollToEnd();
-    }
-
-    #region WPF public
-
     private void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
     {
         UpdateLayoutMode(ActualWidth);
@@ -120,7 +113,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         SelectTabIndex(0);
         _ = DeviceSelection.Instance.Refresh();
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
-        
+
         LoadingCover.AutoFinish((t) =>
         {
             LoadingBlur.Radius = Math.Max(0, LoadingBlur.Radius - t * 20);
@@ -213,51 +206,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             UpdateLayoutMode(e.NewSize.Width);
     }
 
-    private void UpdateLayoutMode(double width)
-    {
-        CurrentLayoutMode =
-            width < 900 ? LayoutMode.Compact :
-            width < 1100 ? LayoutMode.Normal :
-            LayoutMode.Wide;
-    }
+    #endregion
 
-    private async Task PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
-    {
-        var openBase = typeof(WpfBehaviourSingleton<>);
-
-        Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
-            .Where(t => t != null)
-            .Where(t => t.IsClass && !t.IsAbstract)
-            .ToArray();
-
-        await Task.Delay(100);
-
-        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(allTypes.Length);
-        foreach (var t in allTypes)
-            jobs[t] = LoadingCover.RentJob(1f);
-
-        foreach (Type t in allTypes)
-        {
-            // Match: class T : WpfBehaviourSingleton<T>
-            if (!IsSelfReferencingSingleton(t, openBase))
-            {
-                jobs[t].Finish();
-                continue;
-            }
-
-            await Dispatcher.InvokeAsync(() =>
-            {
-                // Force creation: WpfBehaviourSingleton<T>.Instance
-                var closedBase = openBase.MakeGenericType(t);
-                var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                _ = prop?.GetValue(null);
-            }, DispatcherPriority.Background);
-
-            jobs[t].Finish();
-        }
-    }
+    #region Page
 
     private readonly Dictionary<IPageBase, INavigationItem> navPageMap = new();
+    private PageBase currentPage = null;
 
     private static bool IsSelfReferencingSingleton(Type t, Type openBase)
     {
@@ -324,7 +278,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         secondaryText: newPage.ShortName,
                         order: newPage.NavOrder);
 
-                    newTab.OnClick += () => SelectPage(t);
+                    newTab.OnClick += () => SelectPage(newPage);
                     navPageMap.Add(newPage, newTab);
                 }
 
@@ -336,18 +290,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
-    public PageBase SelectPage(Type pageType)
+    public void SelectPage<T>() where T : PageBase
     {
-        if (!typeof(PageBase).IsAssignableFrom(pageType) || pageType.IsAbstract)
-            return null;
+        T page = FindObjectOfType<T>();
+    }
 
-        PageBase page = FindObjectOfType(pageType, true) as PageBase;
+    public void SelectPage(PageBase page)
+    {
+        if (page == null) return;
 
         if (currentPage != null) navPageMap[currentPage].SetHighlightedState(false);
         currentPage?.Disable();
 
+        PageBase lastPage = currentPage;
+
         currentPage = page;
         AssignToolsMenu(currentPage);
+
+        OnPageChanged?.Invoke(lastPage, page);
 
         currentPage?.Enable();
         navPageMap[currentPage].SetHighlightedState(true);
@@ -356,53 +316,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
-        return page;
     }
 
-    public void SetFWVersion(byte major, byte inter, byte minor)
+    public void ReloadPage()
     {
-        SetFWVersion($"V{major:D2}_{inter:D2}_{minor:D2}");
-    }
-
-    public void SetFWVersion(string version)
-    {
-        string text = string.IsNullOrEmpty(version) ? "FW: ----" : $"FW: {version}";
-        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
-        {
-            MainFooter.DeviceVersion.Text = text;
-        }
-        else
-        {
-            Application.Current?.Dispatcher?.Invoke(() => MainFooter.DeviceVersion.Text = text);
-        }
-    }
-
-    public void SetBatteryStatus(bool isCharging, byte[] level)
-    {
-        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
-        {
-            MainFooter.BatteryIndicator.SetBatteryLevel(level);
-            MainFooter.BatteryIndicator.SetBatteryStatus(isCharging);
-        }
-        else
-        {
-            Application.Current?.Dispatcher?.Invoke(() => { SetBatteryStatus(isCharging, level); });
-        }
-    }
-
-    private void ShowAbout(object sender, RoutedEventArgs e)
-    {
-        AboutWindow.Show(this);
-    }
-
-    private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
-    {
-        OpenUrl(bugReportUrl);
-    }
-
-    private void RedirectToFeatureRequestURL(object sender, RoutedEventArgs e)
-    {
-        OpenUrl(featureRequestUrl);
+        currentPage?.Disable();
+        currentPage?.Enable();
     }
 
     #endregion
@@ -454,6 +373,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return null;
     }
 
+    /// <summary>
+    /// Searches the registered WPF objects and returns the first instance of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of object to search for. Must derive from <see cref="WpfBehaviour"/>.</typeparam>
+    /// <param name="findInactive">
+    /// If true, includes disabled objects in the search; otherwise, only enabled objects are considered.
+    /// </param>
+    /// <returns>
+    /// The first matching object of type <typeparamref name="T"/> if found; otherwise, null.
+    /// </returns>
     public T FindObjectOfType<T>(bool findInactive = false) where T : WpfBehaviour
     {
         foreach (var wpfObject in registeredWpfObjects)
@@ -467,19 +396,59 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         return null;
     }
 
+    private async Task PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
+    {
+        var openBase = typeof(WpfBehaviourSingleton<>);
+
+        Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
+            .Where(t => t != null)
+            .Where(t => t.IsClass && !t.IsAbstract)
+            .ToArray();
+
+        await Task.Delay(100);
+
+        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(allTypes.Length);
+        foreach (var t in allTypes)
+            jobs[t] = LoadingCover.RentJob(1f);
+
+        foreach (Type t in allTypes)
+        {
+            // Match: class T : WpfBehaviourSingleton<T>
+            if (!IsSelfReferencingSingleton(t, openBase))
+            {
+                jobs[t].Finish();
+                continue;
+            }
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                // Force creation: WpfBehaviourSingleton<T>.Instance
+                var closedBase = openBase.MakeGenericType(t);
+                var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
+                _ = prop?.GetValue(null);
+            }, DispatcherPriority.Background);
+
+            jobs[t].Finish();
+        }
+    }
+
     #endregion
 
     #region Custom Functions
 
-    private IPageBase currentPage = null;
-    private List<IPageBase> pages;
+    public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
+    public static readonly string company = Util.GetAssemblyAttribute<AssemblyCompanyAttribute>(a => a.Company);
+    public static readonly string version = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Application.ResourceAssembly, a => a.InformationalVersion);
+    public static readonly string toolBaseVersion = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Assembly.GetExecutingAssembly(), a => a.InformationalVersion);
+    public static readonly string fileVersion = Util.GetAssemblyAttribute<AssemblyFileVersionAttribute>(a => a.Version);
+    public static readonly string assemblyVersion = Util.GetAssemblyAttribute<AssemblyVersionAttribute>(a => a.Version);
+    public static readonly string copyright = Util.GetAssemblyAttribute<AssemblyCopyrightAttribute>(a => a.Copyright);
+    public static readonly string description = Util.GetAssemblyAttribute<AssemblyDescriptionAttribute>(a => a.Description);
+    public static readonly string title = Util.GetAssemblyAttribute<AssemblyTitleAttribute>(a => a.Title);
+    public static readonly string trademark = Util.GetAssemblyAttribute<AssemblyTrademarkAttribute>(a => a.Trademark);
 
-    public void ReloadPage()
-    {
-        currentPage?.Disable();
-        //currentPage = pages[MainTabControl.SelectedIndex];
-        currentPage?.Enable();
-    }
+    private const string bugReportUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMlQ0RVcxWVo2Q1RTSFRIUzVOVlMzVVc2US4u";
+    private const string featureRequestUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMUhIWFJMOFdFWjRSWDNXT0RFRjNGOThXVi4u";
 
     public void SetDeviceSelectionVisibility(bool state)
     {
@@ -497,9 +466,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         while (walkCollection.Count > 0)
         {
-            foreach(INavigationItem item in walkCollection.Last())
+            foreach (INavigationItem item in walkCollection.Last())
             {
-                if(item is NavigationButton button)
+                if (item is NavigationButton button)
                 {
                     if (walk == index)
                     {
@@ -508,7 +477,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     }
                     walk++;
                 }
-                else if(item is NavigationExpander expander)
+                else if (item is NavigationExpander expander)
                 {
                     walkCollection.Add(expander.Items);
                 }
@@ -516,119 +485,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             walkCollection.RemoveAt(walkCollection.Count - 1);
         }
     }
-
-    public static string GetOutputFolder()
-    {
-        string exeDir = AppContext.BaseDirectory;
-        string outputDir = Path.Combine(exeDir, "Output");
-
-        Directory.CreateDirectory(outputDir); // Safe even if it exists
-
-        return outputDir;
-    }
-
-    public string GetToolFolder(params string[] subFolders)
-    {
-        string exeDir = AppContext.BaseDirectory;
-        return Path.Combine(exeDir, "Tools", Path.Combine(subFolders));
-    }
-
+    public static string GetOutputFolder(params string[] subFolders)
+        => GetOutputFolder(true, subFolders);
+    public static string GetOutputFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Output", create, subFolders);
+    public static string GetToolFolder(params string[] subFolders)
+        => GetToolFolder(true, subFolders);
+    public static string GetToolFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Tools", create, subFolders);
     public static string GetConfigFolder(params string[] subFolders)
+        => GetConfigFolder(true, subFolders);
+    public static string GetConfigFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Config", create, subFolders);
+
+    public static string GetFolder(string folderName, bool create = true, params string[] subFolders)
     {
         string exeDir = AppContext.BaseDirectory;
-        return Path.Combine(exeDir, "Config", Path.Combine(subFolders));
+        string dir = Path.Combine(exeDir, folderName, Path.Combine(subFolders));
+        if (create) Directory.CreateDirectory(dir); // Safe even if it exists
+        return dir;
     }
 
     public static string GetExePath()
     {
         return Environment.ProcessPath!;
-    }
-
-    public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
-    public static readonly string company = Util.GetAssemblyAttribute<AssemblyCompanyAttribute>(a => a.Company);
-    public static readonly string version = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Application.ResourceAssembly, a => a.InformationalVersion);
-    public static readonly string toolBaseVersion = Util.GetAssemblyAttribute<AssemblyInformationalVersionAttribute>(Assembly.GetExecutingAssembly(), a => a.InformationalVersion);
-    public static readonly string fileVersion = Util.GetAssemblyAttribute<AssemblyFileVersionAttribute>(a => a.Version);
-    public static readonly string assemblyVersion = Util.GetAssemblyAttribute<AssemblyVersionAttribute>(a => a.Version);
-    public static readonly string copyright = Util.GetAssemblyAttribute<AssemblyCopyrightAttribute>(a => a.Copyright);
-    public static readonly string description = Util.GetAssemblyAttribute<AssemblyDescriptionAttribute>(a => a.Description);
-    public static readonly string title = Util.GetAssemblyAttribute<AssemblyTitleAttribute>(a => a.Title);
-    public static readonly string trademark = Util.GetAssemblyAttribute<AssemblyTrademarkAttribute>(a => a.Trademark);
-    public static readonly string applicationIcon = FindIconPath();
-
-    private const string bugReportUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMlQ0RVcxWVo2Q1RTSFRIUzVOVlMzVVc2US4u";
-    private const string featureRequestUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMUhIWFJMOFdFWjRSWDNXT0RFRjNGOThXVi4u";
-
-    private static string FindIconPath()
-    {
-        string exeDir = AppContext.BaseDirectory;
-
-        // Look for *.ico files in the executable directory
-        var icoFiles = Directory.GetFiles(exeDir, "*.ico", SearchOption.TopDirectoryOnly);
-
-        // Return the first one found, or null if none
-        return icoFiles.FirstOrDefault();
-    }
-
-    public void ApplyTheme(bool dark)
-    {
-        var palette = new ResourceDictionary
-        {
-            Source = new Uri(dark
-                ? "base;component/Themes/Palette.Dark.xaml"
-                : "base;component/Themes/Palette.Light.xaml", UriKind.Relative)
-        };
-
-        if (palette != null)
-        {
-            foreach (DictionaryEntry e in palette)
-            {
-                Resources[e.Key] = e.Value; // overwrite keyed entries
-                Application.Current.Resources[e.Key] = e.Value;
-            }
-        }
-    }
-
-    public static void InstantiateWpfBehaviourSingletons()
-    {
-        TouchAllWpfBehaviourSingletons([Application.ResourceAssembly, Assembly.GetExecutingAssembly()]);
-    }
-
-    private static void TouchAllWpfBehaviourSingletons(params Assembly[] assemblies)
-    {
-        assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
-
-        // Deduplicate assemblies
-        assemblies = assemblies
-            .Where(a => a != null)
-            .GroupBy(a => a.FullName)
-            .Select(g => g.First())
-            .ToArray();
-
-        foreach (var asm in assemblies)
-        {
-            Type[] types;
-            try
-            {
-                types = asm.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(t => t != null).ToArray()!;
-            }
-
-            foreach (var t in types)
-            {
-                if (t == null || t.IsAbstract || t.IsGenericTypeDefinition)
-                    continue;
-
-                if (!typeof(PageBase).IsAssignableFrom(t))
-                    continue;
-
-                var instance = Activator.CreateInstance(t) as PageBase;
-                instance?.Awake();
-            }
-        }
     }
 
     public void RequestWindowFocus()
@@ -664,12 +544,72 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 MessageBoxImage.Error);
         }
     }
+    public void SetFWVersion(byte major, byte inter, byte minor)
+    {
+        SetFWVersion($"V{major:D2}_{inter:D2}_{minor:D2}");
+    }
+
+    public void SetFWVersion(string version)
+    {
+        string text = string.IsNullOrEmpty(version) ? "FW: ----" : $"FW: {version}";
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
+        {
+            MainFooter.DeviceVersion.Text = text;
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => MainFooter.DeviceVersion.Text = text);
+        }
+    }
+
+    public void SetBatteryStatus(bool isCharging, byte[] level)
+    {
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
+        {
+            MainFooter.BatteryIndicator.SetBatteryLevel(level);
+            MainFooter.BatteryIndicator.SetBatteryStatus(isCharging);
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => { SetBatteryStatus(isCharging, level); });
+        }
+    }
+
+    private void ShowAbout(object sender, RoutedEventArgs e)
+    {
+        AboutWindow.Show(this);
+    }
+
+    private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(bugReportUrl);
+    }
+
+    private void RedirectToFeatureRequestURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(featureRequestUrl);
+    }
+
+    private void UpdateLayoutMode(double width)
+    {
+        CurrentLayoutMode =
+            width < 900 ? LayoutMode.Compact :
+            width < 1100 ? LayoutMode.Normal :
+            LayoutMode.Wide;
+    }
+
+    private void LogMessage(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        LogTextBox.AppendText($"[{timestamp}] {message}\n");
+        LogTextBox.ScrollToEnd();
+    }
 
     #endregion
 
     #region Menu Item
 
-    private List<CommandBinding> bindedMenuItemCommands = new();
+    private readonly List<CommandBinding> bindedMenuItemCommands = new();
 
     public void AssignToolsMenu(object page)
     {
@@ -831,7 +771,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     #endregion
-
 
     public event PropertyChangedEventHandler PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string name = null)

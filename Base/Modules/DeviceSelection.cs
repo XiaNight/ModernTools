@@ -273,6 +273,7 @@ namespace Base.Services
         {
             if (ActiveDevice == null) return;
             OnActiveDeviceDisconnected?.Invoke();
+            ActiveDevice = null;
         }
 
         public class Device(ushort vid, ushort pid, string name)

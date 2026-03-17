@@ -1,13 +1,30 @@
 <Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
   <Folder Name="/Feature/">
-    <Project Path="Features/Audio/Audio.csproj" />
-    <Project Path="Features/CommonProtocol/CommonProtocol.csproj" Id="174beb6f-f5e8-43aa-821b-a2735486653a" />
-    <Project Path="Features/Gamepad/GamePad.csproj" />
-    <Project Path="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj" />
-    <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj" />
+    <Project Path="Features/Audio/Audio.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="Features/CommonProtocol/CommonProtocol.csproj" Id="174beb6f-f5e8-43aa-821b-a2735486653a">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="Features/Gamepad/GamePad.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
-  <Project Path="Base/Base.csproj" />
+  <Project Path="Base/Base.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
   <Project Path="ModernTools/ModernTools.csproj">
     <BuildDependency Project="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj" />
+    <Platform Solution="*|x64" Project="x64" />
   </Project>
 </Solution>

@@ -628,7 +628,7 @@ namespace Audio
 
         private static void AppendLog(long timeTick)
         {
-            string path = Path.Combine(Main.GetToolFolder(), "log");
+            string path = Path.Combine(MainWindow.GetToolFolder(), "log");
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, "");
@@ -641,7 +641,7 @@ namespace Audio
 
         private static void TriggerBatchFile(long timestampUnix)
         {
-            string path = Path.Combine(Main.GetToolFolder(), "AudioTrigger.bat");
+            string path = Path.Combine(MainWindow.GetToolFolder(), "AudioTrigger.bat");
             if (!File.Exists(path)) return;
 
             System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo

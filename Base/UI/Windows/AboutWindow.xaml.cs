@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
 namespace Base.Components

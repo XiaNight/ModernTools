@@ -119,9 +119,8 @@ namespace Gamepad
 
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
 
-            page.StripChart.Start();
+            page.StripChart.Start(); 
             page.StripChart.MaxY = 1200;
-            page.StripChart.Capacity = 10000;
 
             DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
 
@@ -228,14 +227,14 @@ namespace Gamepad
 
             page.ReportRateSettingBtn.Click += (_, _) =>
             {
-                StackPanel stackPanel = new StackPanel() { Orientation = Orientation.Vertical };
+                StackPanel stackPanel = new() { Orientation = Orientation.Vertical };
 
                 // Rate Input
-                TextBox rateInput = new TextBox() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
+                TextBox rateInput = new() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
                 stackPanel.Children.Add(rateInput);
 
                 // Enable Checkbox
-                CheckBox enableCheckbox = new CheckBox() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
+                CheckBox enableCheckbox = new() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
                 stackPanel.Children.Add(enableCheckbox);
 
                 // Dialog
@@ -452,7 +451,7 @@ namespace Gamepad
 
                     // Get Standalone LT RT from XInput
                     byte left = newData.xinput_state.Gamepad.bLeftTrigger;
-                    if (left != LT) zCounter++;
+                    if (left != LT)  zCounter++;
                     LT = left;
                     byte right = newData.xinput_state.Gamepad.bRightTrigger;
                     if (right != RT) rZCounter++;
@@ -465,7 +464,6 @@ namespace Gamepad
                     if (isRecording) WriteRecord(newData.time);
                 }
             }
-            
 
             // Report-rate window
             float windowSeconds = 1f;
@@ -708,8 +706,8 @@ namespace Gamepad
                 (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
                 (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
                 (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                (0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
-                (0x01, 0x35, v => RT = (byte)v), // 53 RZ
+                //(0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
+                //(0x01, 0x35, v => RT = (byte)v), // 53 RZ
                 (0x01, 0x36, v => { /* Slider */ }), // 54
                 (0x01, 0x37, v => { /* Dial */ }), // 55
             };

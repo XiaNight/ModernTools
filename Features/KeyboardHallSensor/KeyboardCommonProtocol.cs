@@ -1,4 +1,5 @@
 ﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
 
@@ -14,8 +15,38 @@ namespace KeyboardHallSensor
         {
             base.Awake();
 
-            DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
-            DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+            Main.OnPageChanged += OnPageChanged;
+        }
+
+        private void OnPageChanged(PageBase previousPage, PageBase currentPage)
+        {
+            bool isPreviousKeyboardPage = previousPage != null && typeof(KeyboardPageBase).IsAssignableFrom(previousPage.GetType());
+            bool isCurrentKeyboardPage = currentPage != null && typeof(KeyboardPageBase).IsAssignableFrom(currentPage.GetType());
+
+            if (isPreviousKeyboardPage)
+            {
+                if (isCurrentKeyboardPage)
+                {
+                    //- Do nothing, still on keyboard page
+                }
+                else
+                {
+                    //- Left keyboard page, disconnect interface
+                    DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectToInterface;
+                    DeviceSelection.Instance.OnActiveDeviceDisconnected -= DisconnectInterface;
+                    DisconnectInterface();
+                }
+            }
+            else if (isCurrentKeyboardPage)
+            {
+                //- Entered keyboard page, connect to interface
+                if (DeviceSelection.Instance.ActiveDevice != null)
+                {
+                    ConnectToInterface();
+                }
+                DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
+                DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+            }
         }
 
         private void ConnectToInterface()

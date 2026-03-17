@@ -15,7 +15,7 @@ namespace Base.Components.Chart
     /// </summary>
     public sealed partial class FastStripChartControl : UserControl, IDisposable
     {
-        private readonly GpuChartRenderer _gpuRenderer;
+        private readonly GpuChartRenderer gpuRenderer;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FastStripChartControl"/> class.
@@ -27,41 +27,26 @@ namespace Base.Components.Chart
 
             // Ensure GPU is available - throws GpuNotAvailableException if not
             GpuChartRenderer.EnsureGpuAvailable();
-            _gpuRenderer = GpuChartRenderer.Instance;
+            gpuRenderer = GpuChartRenderer.Instance;
 
             UseLayoutRounding = false;
             SnapsToDevicePixels = false;
 
-            _linePen = new Pen(LineBrush, 2.0)
+            linePen = new Pen(LineBrush, 2.0)
             {
                 LineJoin = PenLineJoin.Round,
                 StartLineCap = PenLineCap.Round,
                 EndLineCap = PenLineCap.Round,
                 MiterLimit = 1.0
             };
-            _linePen.Freeze();
+            linePen.Freeze();
 
-            _capacity = 1024;
-            _buffer = new Sample[_capacity];
-            _working = new Sample[_capacity];
+            buffer = new Sample[Capacity];
+            working = new Sample[Capacity];
 
             SetCurrentValue(MinYProperty, 0.0);
             SetCurrentValue(MaxYProperty, 1.0);
-            SetCurrentValue(UpdateFpsProperty, 60);
             SetCurrentValue(TimeWindowProperty, 3000);
-
-            _renderTimer = new DispatcherTimer(DispatcherPriority.Render, Dispatcher)
-            {
-                Interval = TimeSpan.FromMilliseconds(1000.0 / UpdateFps)
-            };
-            _renderTimer.Tick += (_, __) =>
-            {
-                if (_dirty)
-                {
-                    _dirty = false;
-                    InvalidateVisual();
-                }
-            };
         }
 
         // ---- Sample ----
@@ -74,7 +59,7 @@ namespace Base.Components.Chart
         // ---- Dependency Properties ----
         public static readonly DependencyProperty CapacityProperty =
             DependencyProperty.Register(nameof(Capacity), typeof(int), typeof(FastStripChartControl),
-                new FrameworkPropertyMetadata(1024, FrameworkPropertyMetadataOptions.AffectsRender, OnCapacityChanged));
+                new FrameworkPropertyMetadata(1024, FrameworkPropertyMetadataOptions.AffectsMeasure, OnCapacityChanged));
 
         public static readonly DependencyProperty AxisYLabelCountProperty =
             DependencyProperty.Register(nameof(AxisYLabelCount), typeof(int), typeof(FastStripChartControl),
@@ -87,10 +72,6 @@ namespace Base.Components.Chart
         public static readonly DependencyProperty MaxYProperty =
             DependencyProperty.Register(nameof(MaxY), typeof(double), typeof(FastStripChartControl),
                 new FrameworkPropertyMetadata(1.0, FrameworkPropertyMetadataOptions.AffectsRender));
-
-        public static readonly DependencyProperty UpdateFpsProperty =
-            DependencyProperty.Register(nameof(UpdateFps), typeof(int), typeof(FastStripChartControl),
-                new FrameworkPropertyMetadata(60, OnUpdateFpsChanged));
 
         public static readonly DependencyProperty LineBrushProperty =
             DependencyProperty.Register(nameof(LineBrush), typeof(Brush), typeof(FastStripChartControl),
@@ -174,11 +155,6 @@ namespace Base.Components.Chart
             get => (int)GetValue(AxisYLabelCountProperty);
             set => SetValue(AxisYLabelCountProperty, value);
         }
-        public int UpdateFps
-        {
-            get => (int)GetValue(UpdateFpsProperty);
-            set => SetValue(UpdateFpsProperty, value);
-        }
         public Brush LineBrush
         {
             get => (Brush)GetValue(LineBrushProperty);
@@ -256,16 +232,16 @@ namespace Base.Components.Chart
             // set cap to nearest power of two for efficiency
             val = NextPowerOfTwo(val);
 
-            lock (c._lock)
+            lock (c.@lock)
             {
-                c._capacity = val;
-                c._buffer = new Sample[val];
-                c._working = new Sample[val];
-                c._count = 0;
-                c._head = -1;
-                c._lastTick = long.MinValue;
+                c.Capacity = val;
+                c.buffer = new Sample[val];
+                c.working = new Sample[val];
+                c.count = 0;
+                c.head = -1;
+                c.lastTick = long.MinValue;
             }
-            c._dirty = true;
+            c.dirty = true;
             c.InvalidateVisual();
         }
 
@@ -285,14 +261,6 @@ namespace Base.Components.Chart
             return value;
         }
 
-        private static void OnUpdateFpsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        {
-            var c = (FastStripChartControl)d;
-            var v = Math.Max(1, Math.Min(240, (int)e.NewValue));
-            c._updateFps = v;
-            if (c._isRunning) c.RestartTimer();
-        }
-
         private static void OnLineStyleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var c = (FastStripChartControl)d;
@@ -305,7 +273,7 @@ namespace Base.Components.Chart
                 MiterLimit = 1.0
             };
             pen.Freeze();
-            c._linePen = pen;
+            c.linePen = pen;
             c.InvalidateVisual();
         }
 
@@ -324,54 +292,52 @@ namespace Base.Components.Chart
         // ---- Public API ----
         public void Start()
         {
-            if (_isRunning) return;
-            _isRunning = true;
-            RestartTimer();
+            if (isRunning) return;
+            isRunning = true;
             CompositionTarget.Rendering += OnVSync;
         }
 
         public void Stop()
         {
-            if (!_isRunning) return;
-            _isRunning = false;
-            _renderTimer.Stop();
+            if (!isRunning) return;
+            isRunning = false;
             CompositionTarget.Rendering -= OnVSync;
         }
 
         public void Tick(long tick)
         {
-            lock (_lock)
+            lock (@lock)
             {
                 lastTick = tick;
-                _dirty = true;
+                dirty = true;
             }
         }
 
         public void AddMagnitudeMarker(Marker marker)
         {
-            lock (_lock)
+            lock (@lock)
             {
                 magnitudeMarkers.Add(marker);
-                _dirty = true;
+                dirty = true;
             }
         }
 
         public void AddMagnitudeMarker(float y, bool showLabel, Brush brush = null)
         {
             brush ??= Brushes.Black;
-            lock (_lock)
+            lock (@lock)
             {
                 magnitudeMarkers.Add(new Marker(y, brush, showLabel));
-                _dirty = true;
+                dirty = true;
             }
         }
 
         public void ClearMagnitudeMarkers()
         {
-            lock (_lock)
+            lock (@lock)
             {
                 magnitudeMarkers.Clear();
-                _dirty = true;
+                dirty = true;
             }
         }
 
@@ -381,19 +347,19 @@ namespace Base.Components.Chart
             if (float.IsNaN(y) || float.IsInfinity(y)) return;
 
             // enforce monotonic (non-decreasing) wall clock on UI stream
-            long prev = Interlocked.Read(ref _lastTick);
+            long prev = Interlocked.Read(ref lastTick);
             if (tick <= prev) return;
-            Interlocked.Exchange(ref _lastTick, tick);
+            Interlocked.Exchange(ref lastTick, tick);
 
-            lock (_lock)
+            lock (@lock)
             {
-                int cap = _buffer.Length;
-                _head = (_head + 1) & (cap - 1);
+                int cap = buffer.Length;
+                head = (head + 1) & (cap - 1);
                 lastTick = tick;
-                _buffer[_head].Tick = tick;
-                _buffer[_head].Value = y;
-                if (_count < cap) _count++;
-                _dirty = true;
+                buffer[head].Tick = tick;
+                buffer[head].Value = y;
+                if (count < cap) count++;
+                dirty = true;
             }
         }
 
@@ -402,11 +368,11 @@ namespace Base.Components.Chart
 
         public void Clear()
         {
-            lock (_lock)
+            lock (@lock)
             {
-                Array.Clear(_buffer, 0, _buffer.Length);
-                _count = 0; _head = -1; _lastTick = long.MinValue;
-                _dirty = true;
+                Array.Clear(buffer, 0, buffer.Length);
+                count = 0; head = -1; lastTick = long.MinValue;
+                dirty = true;
             }
         }
 
@@ -425,14 +391,14 @@ namespace Base.Components.Chart
 
             int count, head, cap;
             Sample[] snapshot;
-            lock (_lock)
+            lock (@lock)
             {
-                cap = _buffer.Length;
-                if (_working == null || _working.Length != cap) _working = new Sample[cap];
-                Array.Copy(_buffer, 0, _working, 0, cap);
-                count = Math.Min(_count, cap);
-                head = (_head < 0) ? -1 : Math.Min(_head, cap - 1);
-                snapshot = _working;
+                cap = buffer.Length;
+                if (working == null || working.Length != cap) working = new Sample[cap];
+                Array.Copy(buffer, 0, working, 0, cap);
+                count = Math.Min(this.count, cap);
+                head = (this.head < 0) ? -1 : Math.Min(this.head, cap - 1);
+                snapshot = working;
             }
 
             double usedMinY = MinY, usedMaxY = MaxY;
@@ -486,10 +452,10 @@ namespace Base.Components.Chart
                     bool renderDots = RenderMode == ChartRenderMode.Dot || RenderMode == ChartRenderMode.Combined;
 
                     // GPU-accelerated rendering with separate line and dot colors
-                    _gpuRenderer.RenderStripChart(
+                    gpuRenderer.RenderStripChart(
                         ticks.AsSpan(),
                         values.AsSpan(),
-                        _pixelBuffer.AsSpan(),
+                        pixelBuffer.AsSpan(),
                         wPx,
                         hPx,
                         startTick,
@@ -647,21 +613,21 @@ namespace Base.Components.Chart
         private void EnsurePixelBuffer(int width, int height)
         {
             int requiredSize = width * height * 4;
-            if (_pixelBuffer == null || _pixelBuffer.Length != requiredSize)
+            if (pixelBuffer == null || pixelBuffer.Length != requiredSize)
             {
-                _pixelBuffer = new byte[requiredSize];
+                pixelBuffer = new byte[requiredSize];
             }
             // Clear pixel buffer for each render
-            Array.Clear(_pixelBuffer, 0, _pixelBuffer.Length);
+            Array.Clear(pixelBuffer, 0, pixelBuffer.Length);
         }
 
         private WriteableBitmap CreateBitmapFromPixels(int width, int height)
         {
-            if (_pixelBuffer == null || width <= 0 || height <= 0)
+            if (pixelBuffer == null || width <= 0 || height <= 0)
                 return null;
 
             var bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
-            bitmap.WritePixels(new Int32Rect(0, 0, width, height), _pixelBuffer, width * 4, 0);
+            bitmap.WritePixels(new Int32Rect(0, 0, width, height), pixelBuffer, width * 4, 0);
             return bitmap;
         }
 
@@ -701,11 +667,11 @@ namespace Base.Components.Chart
                 localMin = localMin - 0.01;
             }
 
-            _autoMinY = localMin;
-            _autoMaxY = localMax;
+            autoMinY = localMin;
+            autoMaxY = localMax;
 
-            minY = _autoMinY;
-            maxY = _autoMaxY;
+            minY = autoMinY;
+            maxY = autoMaxY;
         }
 
         private StreamGeometry BuildGeometry(Sample[] buf, int head, int count, Rect plot, long startTick, long lastTick, double minY, double maxY)
@@ -768,48 +734,45 @@ namespace Base.Components.Chart
         }
 
         private static double Snap(double v) => Math.Round(v) + 0.5;
-        private void OnVSync(object sender, EventArgs e) => ApplyAA();
+        private void OnVSync(object sender, EventArgs e)
+        {
+            ApplyAA();
+            if (dirty)
+            {
+                dirty = false;
+                InvalidateVisual();
+            }
+        }
 
         private void ApplyAA()
         {
-            if (_useAAApplied == UseAntialias) return;
+            if (useAAApplied == UseAntialias) return;
             RenderOptions.SetEdgeMode(this, UseAntialias ? EdgeMode.Unspecified : EdgeMode.Aliased);
             RenderOptions.SetBitmapScalingMode(this, UseAntialias ? BitmapScalingMode.Linear : BitmapScalingMode.NearestNeighbor);
-            _useAAApplied = UseAntialias;
-        }
-
-        private void RestartTimer()
-        {
-            _renderTimer.Stop();
-            _renderTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, _updateFps));
-            if (_isRunning) _renderTimer.Start();
+            useAAApplied = UseAntialias;
         }
 
         // ---- IDisposable ----
         public void Dispose() => Stop();
 
         // ---- Fields ----
-        private int _capacity;
-        private Sample[] _buffer = Array.Empty<Sample>();
-        private Sample[] _working = Array.Empty<Sample>();
-        private long lastTick = 0;
-        private int _count;
-        private int _head = -1;
-        private long _lastTick = long.MinValue;
-        private readonly object _lock = new();
+        private Sample[] buffer = Array.Empty<Sample>();
+        private Sample[] working = Array.Empty<Sample>();
+        private int count;
+        private int head = -1;
+        private long lastTick = long.MinValue;
+        private readonly object @lock = new();
         private readonly List<Marker> magnitudeMarkers = new();
-        private byte[] _pixelBuffer;
+        private byte[] pixelBuffer;
 
-        private DispatcherTimer _renderTimer = null!;
-        private bool _dirty;
-        private bool _isRunning;
-        private int _updateFps = 60;
+        private bool dirty;
+        private bool isRunning;
 
-        private Pen _linePen = null!;
-        private bool _useAAApplied = false;
+        private Pen linePen = null!;
+        private bool useAAApplied = false;
 
-        private double _autoMinY;
-        private double _autoMaxY;
+        private double autoMinY;
+        private double autoMaxY;
 
         public class Marker(float value, Brush brush, bool showLabel)
         {

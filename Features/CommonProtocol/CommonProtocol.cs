@@ -57,8 +57,8 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
             return;
         }
 
-        ProtocolService.AppendCmd(activeInterface, [0x12, 0x00]);
-        ProtocolService.AppendCmd(activeInterface, [0x12, 0x01]);
+        ProtocolService.AppendCmd(activeInterface, [0x12, 0x00], wait: true);
+        ProtocolService.AppendCmd(activeInterface, [0x12, 0x01], wait: true);
     }
 
     private void DisconnectInterface()

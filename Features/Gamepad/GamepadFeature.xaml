@@ -9,7 +9,7 @@
              mc:Ignorable="d"
              FontFamily="Consolas"
              Padding="10"
-             d:DesignHeight="600" d:DesignWidth="1400"
+             d:DesignHeight="600" d:DesignWidth="1170"
              d:Background="White">
     <Grid>
         <Canvas>
@@ -19,14 +19,14 @@
             <local:JoyStick x:Name="LeftJoyStick" TitleText="L" Canvas.Left="236" Canvas.Top="0"/>
             <local:JoyStick x:Name="RightJoyStick" TitleText="R" Canvas.Left="520" Canvas.Top="0"/>
 
-            <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="320" Width="420">
+            <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="320" Width="380">
                 <local:TriggerCounter x:Name="LeftTrigger" TitleText="LT"/>
                 <local:TriggerCounter x:Name="RightTrigger" TitleText="RT"/>
             </StackPanel>
 
             <Canvas Canvas.Left="820" Canvas.Top="0">
                 <Canvas.RenderTransform>
-                    <ScaleTransform ScaleX="0.7" ScaleY="0.7" />
+                    <ScaleTransform ScaleX="0.65" ScaleY="0.65" />
                 </Canvas.RenderTransform>
                 <local:Controller
                     x:Name="GamepadController"
@@ -105,27 +105,27 @@
 
             <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="412">
                 <StackPanel Orientation="Horizontal" Margin="0 0 0 8">
-                    <local:GamepadButton TitleText="B0" x:Name="B0" Width="92"/>
-                    <local:GamepadButton TitleText="B1" x:Name="B1" Width="92"/>
-                    <local:GamepadButton TitleText="B2" x:Name="B2" Width="92"/>
-                    <local:GamepadButton TitleText="B3" x:Name="B3" Width="92"/>
-                    <local:GamepadButton TitleText="B4" x:Name="B4" Width="92"/>
+                    <local:GamepadButton TitleText="B0" x:Name="B0" Width="80"/>
+                    <local:GamepadButton TitleText="B1" x:Name="B1" Width="80"/>
+                    <local:GamepadButton TitleText="B2" x:Name="B2" Width="80"/>
+                    <local:GamepadButton TitleText="B3" x:Name="B3" Width="80"/>
+                    <local:GamepadButton TitleText="B4" x:Name="B4" Width="80"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0 0 0 8">
-                    <local:GamepadButton TitleText="B5" x:Name="B5" Width="92"/>
-                    <local:GamepadButton TitleText="B6" x:Name="B6" Width="92"/>
-                    <local:GamepadButton TitleText="B9" x:Name="B9" Width="92"/>
-                    <local:GamepadButton TitleText="B10" x:Name="B10" Width="92"/>
-                    <local:GamepadButton TitleText="B11" x:Name="B11" Width="92"/>
+                    <local:GamepadButton TitleText="B5" x:Name="B5" Width="80"/> 
+                    <local:GamepadButton TitleText="B6" x:Name="B6" Width="80"/>
+                    <local:GamepadButton TitleText="B9" x:Name="B9" Width="80"/>
+                    <local:GamepadButton TitleText="B10" x:Name="B10" Width="80"/>
+                    <local:GamepadButton TitleText="B11" x:Name="B11" Width="80"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal">
-                    <local:GamepadButton TitleText="B12" x:Name="B12" Width="92"/>
-                    <local:GamepadButton TitleText="B13" x:Name="B13" Width="92"/>
-                    <local:GamepadButton TitleText="B14" x:Name="B14" Width="92"/>
-                    <local:GamepadButton TitleText="B15" x:Name="B15" Width="92"/>
-                    <local:GamepadButton TitleText="B16" x:Name="B16" Width="92"/>
+                    <local:GamepadButton TitleText="B12" x:Name="B12" Width="80"/>
+                    <local:GamepadButton TitleText="B13" x:Name="B13" Width="80"/>
+                    <local:GamepadButton TitleText="B14" x:Name="B14" Width="80"/>
+                    <local:GamepadButton TitleText="B15" x:Name="B15" Width="80"/>
+                    <local:GamepadButton TitleText="B16" x:Name="B16" Width="80"/>
                 </StackPanel>
 
             </StackPanel>
@@ -168,6 +168,7 @@
                                 DotBrush="{DynamicResource SystemControlHighlightAccentBrush}"
                                 LabelBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                Capacity="32768"
                                 LineThickness="3"
                                 DotThickness="4"
                                 MinY="-10"

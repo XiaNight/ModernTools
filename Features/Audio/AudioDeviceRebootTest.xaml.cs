@@ -67,7 +67,7 @@ namespace Audio
                     RetryTextBlock.Visibility = Visibility.Visible;
                     RetryTextBlock.Text = "";
 
-                    Main.SelectPage(typeof(AudioDeviceRebootTest));
+                    Main.SelectPage<AudioDeviceRebootTest>();
 
                     PerformTest(info, info.retryCount);
                 }
