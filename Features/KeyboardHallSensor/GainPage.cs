@@ -24,7 +24,7 @@ namespace KeyboardHallSensor
             if (value > 7) keyDisplay.SetFillColor("Accent4Brush");
             else keyDisplay.SetFillColor("Accent2Brush");
 
-            sample.isFresh = false;
+            sample.dirtyCounter = 0;
         }
 
         protected override int ParseValue(ReadOnlyMemory<byte> values)

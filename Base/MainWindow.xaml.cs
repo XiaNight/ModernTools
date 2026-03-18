@@ -105,7 +105,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void MainWindowLoading()
     {
-        EnsureAllAssembliesLoaded();
+        LoadPluginDLLs(GetPluginsFolder());
+
+#if DEBUG
+        LoadDLLsInFolder(GetPluginsFolder());
+#endif
 
         await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
         await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
@@ -120,63 +124,50 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         });
     }
 
-    private void EnsureAllAssembliesLoaded()
+    /// <summary>
+    /// Load plugins from the "Plugins" subfolder. This allows users to add new features without modifying the main executable.
+    /// DLLs is placed under their own subfolder in "Plugins" to avoid name conflicts and allow multiple versions.
+    /// </summary>
+    /// <param name="pluginsFolder"></param>
+    private void LoadPluginDLLs(string pluginsFolder)
     {
-        var processed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(pluginsFolder))
+        {
+            LogMessage($"[PluginLoad] Plugins folder not found: {pluginsFolder}");
+            return;
+        }
+        foreach (string subDir in Directory.GetDirectories(pluginsFolder))
+        {
+            LoadDLLsInFolder(subDir);
+        }
+    }
 
+    private void LoadDLLsInFolder(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            LogMessage($"[PluginLoad] Folder not found: {folder}");
+            return;
+        }
+        foreach (string dllPath in Directory.GetFiles(folder, "*.dll"))
+        {
+            LoadPluginDLL(dllPath);
+        }
+    }
+
+    private void LoadPluginDLL(string dllPath)
+    {
         try
         {
-            var assembly = Assembly.GetEntryAssembly();
-            if (assembly != null)
-            {
-                using var stream = assembly.GetManifestResourceStream("submodules.txt");
-                if (stream != null)
-                {
-                    using var reader = new StreamReader(stream);
-                    while (!reader.EndOfStream)
-                    {
-                        string subName = reader.ReadLine()?.Trim();
-                        if (string.IsNullOrEmpty(subName) || processed.Contains(subName)) continue;
-
-                        try
-                        {
-                            var loadedAsm = Assembly.Load(subName);
-                            processed.Add(loadedAsm.FullName);
-                            LogMessage($"[AutoLoad] Loaded from Manifest: {subName}");
-                        }
-                        catch { }
-                    }
-                }
-            }
+            var asmName = AssemblyName.GetAssemblyName(dllPath);
+            if (asmName == null) return;
+            var loadedAsm = Assembly.LoadFrom(dllPath);
+            LogMessage($"[PluginLoad] Loaded plugin: {asmName.FullName}");
         }
         catch (Exception ex)
         {
-            LogMessage($"[AutoLoad] Manifest read error: {ex.Message}");
+            LogMessage($"[PluginLoad] Failed to load plugin from {dllPath}: {ex.Message}");
         }
-
-        try
-        {
-            string exeDir = AppContext.BaseDirectory;
-            if (Directory.Exists(exeDir))
-            {
-                foreach (string dllPath in Directory.GetFiles(exeDir, "*.dll"))
-                {
-                    try
-                    {
-                        var asmName = AssemblyName.GetAssemblyName(dllPath);
-                        if (processed.Contains(asmName.FullName)) continue;
-
-                        if (asmName.Name.StartsWith("System") || asmName.Name.StartsWith("Microsoft")) continue;
-
-                        var loadedAsm = Assembly.LoadFrom(dllPath);
-                        processed.Add(loadedAsm.FullName);
-                        LogMessage($"[AutoLoad] Loaded from File: {asmName.Name}");
-                    }
-                    catch { }
-                }
-            }
-        }
-        catch { }
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -255,7 +246,26 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                PageBase newPage = (PageBase)Activator.CreateInstance(t);
+                PageBase newPage = null;
+                try
+                {
+                    newPage = (PageBase)Activator.CreateInstance(t);
+                }
+                catch (FileNotFoundException fileEx)
+                {
+                    LogMessage($"[NavInit] Failed to load {t.FullName}: {fileEx.Message}");
+                    jobs[t].Finish();
+                }
+                catch (Exception ex)
+                {
+                    LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
+                }
+                if(newPage == null)
+                {
+                    jobs[t].Finish();
+                    return;
+                }
+                
                 RegisterWpfObject(newPage);
 
                 if (newPage.NavOrder >= 0)
@@ -457,16 +467,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public void SelectTabIndex(int index)
     {
-        List<IEnumerable<INavigationItem>> walkCollection = new()
-        {
-            NavTabsManager.BottomButtons,
-            NavTabsManager.TopButtons,
-        };
+        Stack<IEnumerable<INavigationItem>> stack = new();
+        stack.Push(NavTabsManager.TopButtons);
+        stack.Push(NavTabsManager.BottomButtons);
         int walk = 0;
 
-        while (walkCollection.Count > 0)
+        while (stack.Count > 0)
         {
-            foreach (INavigationItem item in walkCollection.Last())
+            foreach (INavigationItem item in stack.Pop())
             {
                 if (item is NavigationButton button)
                 {
@@ -479,10 +487,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 }
                 else if (item is NavigationExpander expander)
                 {
-                    walkCollection.Add(expander.Items);
+                    stack.Push(expander.Items);
                 }
             }
-            walkCollection.RemoveAt(walkCollection.Count - 1);
         }
     }
     public static string GetOutputFolder(params string[] subFolders)
@@ -497,6 +504,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         => GetConfigFolder(true, subFolders);
     public static string GetConfigFolder(bool create = true, params string[] subFolders)
         => GetFolder("Config", create, subFolders);
+    public static string GetPluginsFolder(params string[] subFolders)
+        => GetPluginsFolder(true, subFolders);
+    public static string GetPluginsFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Plugins", create, subFolders);
 
     public static string GetFolder(string folderName, bool create = true, params string[] subFolders)
     {

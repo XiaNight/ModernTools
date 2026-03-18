@@ -4,20 +4,38 @@
 		<OutputType>Library</OutputType>
 		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
 		<Nullable>disable</Nullable>
-		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
-		<Platforms>AnyCPU;x64</Platforms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Platforms>x64</Platforms>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<UICulture>en-US</UICulture>
+		<SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
+		<EnableDynamicLoading>true</EnableDynamicLoading>
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="ModernWpfUI" Version="0.9.6" />
-	  <PackageReference Include="CSCore" Version="1.2.1.2" />
-	  <PackageReference Include="NAudio" Version="2.2.1" />
-	</ItemGroup>
-	
-	<ItemGroup>
-		<ProjectReference Include="..\..\Base\Base.csproj" />
+		<PackageReference Include="CSCore" Version="1.2.1.2" />
+		<PackageReference Include="NAudio" Version="2.2.1" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\..\Base\Base.csproj" >
+			<ExcludeAssets>runtime</ExcludeAssets>
+			<private>false</private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<Target Name="ShowPaths" BeforeTargets="BeforeBuild">
+		<Message Text="OutputPath=$(OutputPath)" Importance="High" />
+		<Message Text="OutDir=$(OutDir)" Importance="High" />
+		<Message Text="TargetDir=$(TargetDir)" Importance="High" />
+	</Target>
+
+	<Target Name="RemoveCommonDll" AfterTargets="Publish">
+		<ItemGroup>
+			<_FilesToDelete Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" />
+		</ItemGroup>
+		<Delete Files="@(_FilesToDelete)" />
+	</Target>
 </Project>

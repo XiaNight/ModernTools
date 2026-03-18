@@ -218,12 +218,12 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
 
             if (!data.TryGetValue(keyHash, out Sample sample))
             {
-                data[keyHash] = new() { keyCode = keyCode, values = values.ToArray(), isFresh = true };
+                data[keyHash] = new() { keyCode = keyCode, values = values.ToArray(), dirtyCounter = 1 };
             }
             else
             {
                 sample.values = values.ToArray();
-                sample.isFresh = true;
+                sample.dirtyCounter++;
             }
 
             if (keyCode == targetKey)

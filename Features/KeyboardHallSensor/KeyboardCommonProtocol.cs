@@ -20,8 +20,8 @@ namespace KeyboardHallSensor
 
         private void OnPageChanged(PageBase previousPage, PageBase currentPage)
         {
-            bool isPreviousKeyboardPage = previousPage != null && typeof(KeyboardPageBase).IsAssignableFrom(previousPage.GetType());
-            bool isCurrentKeyboardPage = currentPage != null && typeof(KeyboardPageBase).IsAssignableFrom(currentPage.GetType());
+            bool isPreviousKeyboardPage = previousPage != null && typeof(IKeyboardPage).IsAssignableFrom(previousPage.GetType());
+            bool isCurrentKeyboardPage = currentPage != null && typeof(IKeyboardPage).IsAssignableFrom(currentPage.GetType());
 
             if (isPreviousKeyboardPage)
             {

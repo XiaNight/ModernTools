@@ -6,7 +6,7 @@ using System.Windows.Controls;
 
 namespace KeyboardHallSensor
 {
-    public partial class MultiCalibrationAnalogPage : PageBase
+    public partial class MultiCalibrationAnalogPage : PageBase, IKeyboardPage
     {
         [Path("Keyboard")]
         public override string PageName => "Multi Calibration Analog";
