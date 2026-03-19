@@ -154,9 +154,9 @@ namespace Base.Services
 					{
 						await WriteCmdAsync(cmd.Device, cmd.Cmd, cmd.Wait, cmd.Parameter, ct).ConfigureAwait(false);
 					}
-					catch (OperationCanceledException)
+					catch (OperationCanceledException oce)
 					{
-                        continue;
+				        Log($"[HID] Failed to send data: {oce.Message}");
 					}
 					catch (Exception ex)
 					{

@@ -1,4 +1,5 @@
 ﻿using Base.Components.Chart;
+using Base.Services.APIService;
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.Globalization;
@@ -36,6 +37,7 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     protected Stopwatch recordingStopwatch;
     private long startTick = 0;
     protected StreamWriter recordStream;
+    protected string recordOutputPath;
     protected record RecordEntry(long microseconds, string value);
 
     #endregion
@@ -73,9 +75,9 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         if (CanRecord)
         {
             Header("Record");
-            targetKeyInputField = AddTextBox("Key", handler: SetRecordKey);
-            recordTimeLimitInputField = AddTextBox("Time Limit(ms)", handler: SetRecordDuration);
-            recordCountLimitInputField = AddTextBox("Count Limit", handler: SetRecordCount);
+            targetKeyInputField = AddTextBox("Key", handler: ParseRecordKey);
+            recordTimeLimitInputField = AddTextBox("Time Limit(ms)", handler: ParseRecordDuration);
+            recordCountLimitInputField = AddTextBox("Count Limit", handler: ParseRecordCount);
             startButton = AddButton("Start", StartRecording);
 
             stopButton = AddButton("Stop", () =>
@@ -102,16 +104,36 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     }
 
     #region Recording
-    private bool SetRecordKey(string key)
+
+    [POST("SetRecordKey", true)]
+    protected void SetRecordKey(byte key)
     {
+        targetKey = key;
+        targetKeyInputField.Text = key.ToString("X2");
+    }
+
+    protected bool ParseRecordKey(string key)
+    {
+        if(string.IsNullOrEmpty(key))
+        {
+            return true;
+        }
         if (byte.TryParse(key, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte result))
         {
-            SetTargetKey(result);
+            targetKey = result;
             return true;
         }
         return false;
     }
-    private bool SetRecordDuration(string duration)
+
+    [POST("SetRecordDuration", true)]
+    protected void SetRecordDuration(int duration)
+    {
+        recordDurationLimitMs = duration;
+        recordTimeLimitInputField.Text = duration.ToString();
+    }
+
+    protected bool ParseRecordDuration(string duration)
     {
         if(string.IsNullOrEmpty(duration))
         {
@@ -125,7 +147,15 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         }
         return false;
     }
-    private bool SetRecordCount(string count)
+
+    [POST("SetRecordCount")]
+    protected void SetRecordCount(int count)
+    {
+        recordCountLimit = count;
+        recordCountLimitInputField.Text = count.ToString();
+    }
+
+    protected bool ParseRecordCount(string count)
     {
         if (string.IsNullOrEmpty(count))
         {
@@ -140,17 +170,28 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         return false;
     }
 
-    private void StartRecording()
+    [POST("SetRecordPath")]
+    protected void SetRecordPath(string path)
+    {
+        recordOutputPath = path;
+    }
+
+    [POST("StartRecording")]
+    protected void StartRecording()
     {
         if (isRecording) return;
         if (targetKey == 0) return;
         if (ActiveInterface == null) return;
 
-        if (!ShowSaveFileDialog(out string filepath)) return;
+        if(string.IsNullOrEmpty(recordOutputPath))
+        {
+            if (!ShowSaveFileDialog(out string filepath)) return;
+            recordOutputPath = filepath;
+        }
 
         recordingStopwatch = Stopwatch.StartNew();
 
-        recordStream = new StreamWriter(filepath);
+        recordStream = new StreamWriter(recordOutputPath);
         recordStream.WriteLine("Time,Value");
 
         startButton.Visibility = Visibility.Collapsed;
@@ -164,7 +205,8 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         recordCountLimitInputField.IsEnabled = false;
     }
 
-    private void StopRecording()
+    [POST("StopRecording")]
+    protected void StopRecording()
     {
         if (!isRecording) return;
         startButton.Visibility = Visibility.Visible;
@@ -257,11 +299,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     }
 
     protected override void OnKeyDisplayClicked(byte keycode)
-    {
-        SetTargetKey(keycode);
-    }
-
-    protected void SetTargetKey(byte keycode)
     {
         Chart.Clear();
         targetKey = keycode;

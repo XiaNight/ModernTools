@@ -18,6 +18,7 @@
     </Project>
     <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj">
       <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="Debug|Any CPU" Project="x64" />
     </Project>
   </Folder>
   <Project Path="Base/Base.csproj">

@@ -254,8 +254,9 @@ namespace Base.Services.Peripheral
                     InvokeDataReceived(buffer.AsMemory(0, n));
                 }
                 catch (OperationCanceledException) { break; }
-                catch
+                catch (Exception ex)
                 {
+                    Debug.Log(ex.Message);
                     if (IsDeviceConnected)
                     {
                         IsDeviceConnected = false;

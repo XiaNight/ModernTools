@@ -3,6 +3,7 @@ using Base.Helpers;
 using ModernWpf;
 using System.Reflection;
 using System.Windows;
+using KeyboardHallSensor;
 
 namespace ModernTools;
 
@@ -17,6 +18,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         string app_name = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
+
+        typeof(RawPage).ToString();
 
         LocalAppDataStore.Init("ASUS", app_name);
         ApplicationTheme theme = LocalAppDataStore.Instance.Get("Theme", ApplicationTheme.Light);

@@ -260,12 +260,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 {
                     LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
                 }
-                if(newPage == null)
+                if (newPage == null)
                 {
                     jobs[t].Finish();
                     return;
                 }
-                
+
                 RegisterWpfObject(newPage);
 
                 if (newPage.NavOrder >= 0)
@@ -308,6 +308,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public void SelectPage(PageBase page)
     {
         if (page == null) return;
+        if (page == currentPage) return;
 
         if (currentPage != null) navPageMap[currentPage].SetHighlightedState(false);
         currentPage?.Disable();

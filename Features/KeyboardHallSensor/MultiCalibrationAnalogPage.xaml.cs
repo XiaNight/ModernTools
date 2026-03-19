@@ -91,7 +91,7 @@ namespace KeyboardHallSensor
             while (dataStart + index * 2 < span.Length)
             {
                 rowKeyDataMap[row][index] ??= new KeyData();
-                if(depth >= rowKeyDataMap[row][index].segmentValues.Count)
+                while(depth >= rowKeyDataMap[row][index].segmentValues.Count)
                 {
                     rowKeyDataMap[row][index].segmentValues.Add(0);
                 }

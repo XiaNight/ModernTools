@@ -85,7 +85,7 @@ namespace Base.Services.APIService
 
             _ = V1.Instance;
 
-            Start(8080);
+            Start(2345);
         }
 
         public override void OnDestroy()
@@ -348,14 +348,7 @@ namespace Base.Services.APIService
 
         private object? ResolveInstance(Type type)
         {
-            var finder = Main;
-            if (finder is null) return null;
-
-            var mi = finder.GetType().GetMethod("FindObjectOfType", BindingFlags.Public | BindingFlags.Instance);
-            if (mi is null) return null;
-
-            var g = mi.MakeGenericMethod(type);
-            return g.Invoke(finder, [true]);
+            return Main.FindObjectOfType(type, true);
         }
 
         // -------------------------------------------------------
