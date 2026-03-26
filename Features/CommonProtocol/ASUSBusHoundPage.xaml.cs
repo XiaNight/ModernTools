@@ -880,7 +880,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             int pos = 0;
 
             for (int i = 0; i < src.Length; i++)
-            {
+            { 
                 if (i != 0)
                 {
                     if ((i & 15) == 0)
