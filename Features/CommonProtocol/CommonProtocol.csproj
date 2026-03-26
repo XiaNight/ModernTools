@@ -18,6 +18,12 @@
 			<ExcludeAssets>runtime</ExcludeAssets>
 		</ProjectReference>
 	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Update="ASUSBusHoundPage.xaml.cs">
+	    <SubType>Code</SubType>
+	  </Compile>
+	</ItemGroup>
 	
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">
 		<ItemGroup>

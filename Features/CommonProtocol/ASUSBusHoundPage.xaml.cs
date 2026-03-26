@@ -4,14 +4,18 @@ using Base.Core;
 using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
+using Microsoft.Win32;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -54,6 +58,11 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     private readonly Dictionary<PeripheralInterface, Action<ReadOnlyMemory<byte>, DateTime>> dataReceivedHandlers = new();
     private readonly Dictionary<PeripheralInterface, Action<ReadOnlyMemory<byte>, DateTime>> dataSentHandlers = new();
 
+    // ── Quick Action ──
+    private const string QuickActionStoreKey = "BusHound_QuickActions";
+    private List<QuickActionEntryData> quickActionEntries = new();
+    private bool isQuickActionPanelOpen = false;
+
     public ASUSBusHoundPage()
     {
         InitializeComponent();
@@ -72,6 +81,278 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         Inputbox.PreviewKeyDown += Inputbox_KeyDown;
         Inputbox.TextChanged += Inputbox_Validation;
         Inputbox.PreviewTextInput += Inputbox_ValidateInputCharacter;
+        LogGrid.CopyingRowClipboardContent += CopyingRowClipboardContent;
+
+        // Quick Action buttons
+        QuickActionBtn.Click += (_, _) => ToggleQuickActionPanel();
+        QuickActionCloseBtn.Click += (_, _) => SetQuickActionPanelOpen(false);
+        QuickActionAddBtn.Click += (_, _) => AddNewQuickActionEntry();
+        QuickActionImportBtn.Click += (_, _) => ImportQuickActionFile();
+    }
+
+    // ----------------------------
+    // Quick Action Panel
+    // ----------------------------
+
+    private void ToggleQuickActionPanel()
+    {
+        SetQuickActionPanelOpen(!isQuickActionPanelOpen);
+    }
+
+    private void SetQuickActionPanelOpen(bool open)
+    {
+        isQuickActionPanelOpen = open;
+        if (open)
+        {
+            QuickActionPanel.Visibility = Visibility.Visible;
+            QuickActionColumnDef.Width = new GridLength(380);
+        }
+        else
+        {
+            QuickActionPanel.Visibility = Visibility.Collapsed;
+            QuickActionColumnDef.Width = new GridLength(0);
+        }
+    }
+
+    private void LoadQuickActionEntries()
+    {
+        try
+        {
+            var stored = LocalAppDataStore.Instance.Get<List<QuickActionEntryData>>(QuickActionStoreKey);
+            quickActionEntries = stored ?? new List<QuickActionEntryData>();
+        }
+        catch
+        {
+            quickActionEntries = new List<QuickActionEntryData>();
+        }
+
+        RebuildQuickActionUI();
+    }
+
+    private void SaveQuickActionEntries()
+    {
+        try
+        {
+            LocalAppDataStore.Instance.Set(QuickActionStoreKey, quickActionEntries);
+        }
+        catch
+        {
+            // Best-effort persist
+        }
+    }
+
+    private void RebuildQuickActionUI()
+    {
+        QuickActionEntriesPanel.Children.Clear();
+
+        foreach (var entryData in quickActionEntries)
+        {
+            var control = CreateEntryControl(entryData);
+            QuickActionEntriesPanel.Children.Add(control);
+        }
+    }
+
+    private QuickActionEntryControl CreateEntryControl(QuickActionEntryData entryData)
+    {
+        var control = new QuickActionEntryControl(entryData);
+        control.DataChanged += SaveQuickActionEntries;
+        control.SendRequested += OnQuickActionSendRequested;
+        control.DeleteRequested += OnQuickActionDeleteRequested;
+        return control;
+    }
+
+    private void AddNewQuickActionEntry()
+    {
+        var newEntry = new QuickActionEntryData();
+        quickActionEntries.Add(newEntry);
+        var control = CreateEntryControl(newEntry);
+        QuickActionEntriesPanel.Children.Add(control);
+        SaveQuickActionEntries();
+    }
+
+    private void OnQuickActionDeleteRequested(QuickActionEntryControl control)
+    {
+        var result = MessageBox.Show(
+            $"Delete quick action \"{control.EntryData.Name}\"?",
+            "Confirm Delete",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        quickActionEntries.Remove(control.EntryData);
+        QuickActionEntriesPanel.Children.Remove(control);
+        SaveQuickActionEntries();
+    }
+
+    private async void OnQuickActionSendRequested(QuickActionEntryData entry)
+    {
+        if (connectedInterfaces is null || connectedInterfaces.Count == 0)
+        {
+            MessageBox.Show("No device connected. Start a connection first.", "Not Connected",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // Determine the target interface from the combo box selection
+        PeripheralInterface targetInterface = null;
+        if (UsageSelectionBox.SelectedItem is AvailableDeviceItem t)
+        {
+            targetInterface = connectedInterfaces.Find(
+                i => i.ProductInfo.Usage == t.usage && i.ProductInfo.UsagePage == t.usagePage);
+        }
+        targetInterface ??= connectedInterfaces.FirstOrDefault();
+        if (targetInterface is null) return;
+
+        var commands = entry.Commands;
+        if (commands.Count == 0) return;
+
+        for (int i = 0; i < commands.Count; i++)
+        {
+            byte[] bytes = QuickActionEntryData.HexToBytes(commands[i]);
+            if (bytes is null || bytes.Length == 0) continue;
+
+            ProtocolService.AppendCmd(targetInterface, bytes);
+
+            // Wait interval between commands (except after the last one)
+            if (i < commands.Count - 1 && entry.IntervalMs > 0)
+            {
+                await Task.Delay(entry.IntervalMs);
+            }
+        }
+    }
+
+    #region Import Quick Action
+
+    private void ImportQuickActionFile()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Import Quick Action Commands",
+            Filter = "All supported|*.bin;*.txt|Binary files (*.bin)|*.bin|Text files (*.txt)|*.txt",
+            Multiselect = false
+        };
+
+        if (dlg.ShowDialog() != true) return;
+
+        string path = dlg.FileName;
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+
+        try
+        {
+            QuickActionEntryData imported = ext switch
+            {
+                ".bin" => ImportBinFile(path),
+                ".txt" => ImportTxtFile(path),
+                _ => throw new NotSupportedException($"Unsupported file type: {ext}")
+            };
+
+            if (imported.Commands.Count == 0)
+            {
+                MessageBox.Show("No valid commands found in the file.", "Import Result",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            quickActionEntries.Add(imported);
+            var control = CreateEntryControl(imported);
+            QuickActionEntriesPanel.Children.Add(control);
+            SaveQuickActionEntries();
+
+            // Auto-open the panel if it's hidden
+            if (!isQuickActionPanelOpen)
+                SetQuickActionPanelOpen(true);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to import file:\n{ex.Message}", "Import Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>
+    /// Import a .bin file: reads raw bytes and chunks them into 64-byte commands.
+    /// </summary>
+    private static QuickActionEntryData ImportBinFile(string path)
+    {
+        byte[] rawBytes = File.ReadAllBytes(path);
+        var entry = new QuickActionEntryData
+        {
+            Name = Path.GetFileNameWithoutExtension(path)
+        };
+
+        // Chunk the raw bytes into commands of up to 64 bytes each
+        int offset = 0;
+        while (offset < rawBytes.Length)
+        {
+            int chunkSize = Math.Min(QuickActionEntryData.MaxCommandBytes, rawBytes.Length - offset);
+            byte[] chunk = new byte[chunkSize];
+            Array.Copy(rawBytes, offset, chunk, 0, chunkSize);
+            entry.Commands.Add(QuickActionEntryData.BytesToHex(chunk));
+            offset += chunkSize;
+        }
+
+        return entry;
+    }
+
+    /// <summary>
+    /// Import a .txt file: each line is parsed as one hex command.
+    /// Lines starting with non-alphanumeric characters (#, %, @, etc.) are treated as comments and skipped.
+    /// </summary>
+    private static QuickActionEntryData ImportTxtFile(string path)
+    {
+        string[] lines = File.ReadAllLines(path, Encoding.UTF8);
+        var entry = new QuickActionEntryData
+        {
+            Name = Path.GetFileNameWithoutExtension(path)
+        };
+
+        foreach (string rawLine in lines)
+        {
+            string line = rawLine.Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+
+            // Lines starting with non-alphanumeric characters are comments
+            char first = line[0];
+            if (!char.IsLetterOrDigit(first))
+                continue;
+
+            byte[] bytes = QuickActionEntryData.HexToBytes(line);
+            if (bytes is not null && bytes.Length > 0)
+                entry.Commands.Add(QuickActionEntryData.BytesToHex(bytes));
+        }
+
+        return entry;
+    }
+    #endregion
+
+    private void CopyingRowClipboardContent(object sender, DataGridRowClipboardEventArgs e)
+    {
+        e.ClipboardRowContent.Clear();
+
+        var item = (LogRow)e.Item;
+
+        e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
+            e.Item,
+            LogGrid.Columns[1],
+            $"{item.Phase}\t"
+        ));
+
+        e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
+            e.Item,
+            LogGrid.Columns[2],
+            $"{ByteToString(item.Data, false)}\t"
+        ));
+        e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
+            e.Item,
+            LogGrid.Columns[3],
+            $"{item.Description}"
+        ));
+        e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
+            e.Item,
+            LogGrid.Columns[4],
+            $"{item.Delta}"
+        ));
     }
 
     private void Inputbox_ValidateInputCharacter(object sender, System.Windows.Input.TextCompositionEventArgs e)
@@ -171,12 +452,15 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         scrollViewer = FindVisualChild<ScrollViewer>(LogGrid);
         historyCommands = [];
         currentSelectedHistoryIndex = -1;
-        
+
         if (scrollViewer is not null)
         {
             scrollViewer.ScrollChanged += OnScrollChanged;
             UpdateStickToBottom(scrollViewer);
         }
+
+        // Load quick action entries from persistent storage
+        LoadQuickActionEntries();
     }
 
     protected override void OnEnable()
@@ -185,7 +469,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         DeviceSelection.Instance.OnActiveDeviceConnected += ConnectAndStart;
         DeviceSelection.Instance.OnActiveDeviceDisconnected += Stop;
 
-        if(ActiveDevice != null && !flushTimer.IsEnabled)
+        if (ActiveDevice != null && !flushTimer.IsEnabled)
         {
             ConnectAndStart();
         }
@@ -201,6 +485,13 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         base.OnDisable();
         DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectAndStart;
         DeviceSelection.Instance.OnActiveDeviceDisconnected -= Stop;
+    }
+
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+        // Persist quick action entries on destroy
+        SaveQuickActionEntries();
     }
 
     private void StartBtn_Click(object sender, RoutedEventArgs e)
@@ -380,6 +671,16 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
         foreach (var item in items)
             UsageSelectionBox.Items.Add(item);
+
+        // Select first item that UsagePage is greater or equal to 0xFF00
+        for (int i = 0; i < UsageSelectionBox.Items.Count; i++)
+        {
+            if (UsageSelectionBox.Items[i] is AvailableDeviceItem adi && adi.usagePage >= 0xFF00)
+            {
+                UsageSelectionBox.SelectedIndex = i;
+                break;
+            }
+        }
     }
 
     private void ClearComboBox()
@@ -561,7 +862,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 : ((c | 32) - 'a' + 10);
     }
 
-    private static string ByteToString(byte[] bytes)
+    private static string ByteToString(byte[] bytes, bool newLine = true)
     {
         int n = bytes.Length;
         if (n == 0)
@@ -571,8 +872,10 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         int doubleSpaces = (m >> 2) - (m >> 4);
         int length = (n << 1) + m + doubleSpaces;
 
-        return string.Create(length, bytes, static (dst, src) =>
+        return string.Create(length, (bytes, newLine), static (dst, state) =>
         {
+            var (src, nl) = state;
+
             const string Hex = "0123456789ABCDEF";
             int pos = 0;
 
@@ -582,7 +885,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 {
                     if ((i & 15) == 0)
                     {
-                        dst[pos++] = '\n';
+                        dst[pos++] = nl ? '\n' : ' ';
                     }
                     else
                     {

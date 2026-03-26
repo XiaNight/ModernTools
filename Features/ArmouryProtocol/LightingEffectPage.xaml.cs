@@ -37,7 +37,7 @@ public partial class LightingEffectPage : PageBase
 
     private void SaveProfile(object sender, RoutedEventArgs e)
     {
-        int profileIndex = ReadInt(SaveTextBox.Text, 1, min: 1, max: 0xFF);
+        int profileIndex = ReadInt(SaveTextBox.Text, 1, min: 0, max: 0xFF);
 
         byte[] saveProtocol = [0xC0, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         ProtocolService.AppendCmd(_activeInterface, saveProtocol, true, (byte)profileIndex);
