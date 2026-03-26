@@ -12,6 +12,7 @@ namespace CommonProtocol
     public partial class DeviceLogPage : PageBase
     {
         public override string PageName => "Device Log";
+        public override string Glyph => "\uF714";
         public override string Description => "View the log of the active device.";
 
         private PeripheralInterface activeInterface;
@@ -58,6 +59,12 @@ namespace CommonProtocol
 
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
             DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+
+            if(activeInterface == null && ActiveDevice != null)
+            {
+                ConnectToInterface();
+            }
+
             timer.Start();
         }
 

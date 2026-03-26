@@ -209,7 +209,7 @@ namespace Base.Services.Peripheral
         public override async Task<bool> WriteAsync(byte[] data, CancellationToken cancellationToken = default)
         {
             ThrowIfDisposed();
-            if (data is null) throw new ArgumentNullException(nameof(data));
+            ArgumentNullException.ThrowIfNull(data);
             if (data.Length > _cap.OutputReportByteLength - 1)
                 throw new ArgumentException($"Data length {data.Length} > max {_cap.OutputReportByteLength - 1}");
 
@@ -222,6 +222,8 @@ namespace Base.Services.Peripheral
 
                 await _fsWrite.WriteAsync(packet, 0, packet.Length, cancellationToken).ConfigureAwait(false);
                 await _fsWrite.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+                InvokeDataSent(data);
                 return true;
             }
             catch
@@ -343,7 +345,6 @@ namespace Base.Services.Peripheral
             catch
             {
                 Cleanup();
-                throw;
             }
         }
 

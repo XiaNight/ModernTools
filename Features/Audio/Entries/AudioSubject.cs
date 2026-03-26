@@ -44,7 +44,6 @@ namespace Audio.Entries
         private float volumeOffsetRight = 1;
         private float[] volumeSpectrumOffsetLeft;
         private float[] volumeSpectrumOffsetRight;
-        private float manualVolumeOffset = 1;
         private Task comparingTask;
         private CancellationTokenSource comparingCancellationTokenSource;
         private bool showComparison = true;
@@ -85,7 +84,6 @@ namespace Audio.Entries
             };
 
             AudioDeviceEntry.OnOffsetChanged += (offset) => offsetTime = offset;
-            AudioDeviceEntry.OnVolumeOffsetChanged += (magnitude) => manualVolumeOffset = (float)magnitude;
         }
 
         public void SourceDeviceSelected(MMDevice device)
@@ -199,7 +197,7 @@ namespace Audio.Entries
             SetThresholdMinMax(minY, maxY);
 
             // Set spectrograms
-            minY = comparingSubject == null ? -60 : -30;
+            minY = comparingSubject == null ? -60 : 00;
             maxY = comparingSubject == null ? 0 : 30;
             AudioDeviceEntry.LeftSpectrogram.MinDb = minY;
             AudioDeviceEntry.LeftSpectrogram.MaxDb = maxY;
@@ -271,21 +269,21 @@ namespace Audio.Entries
 
                     for (int i = 0; i < handler.HalfBins; i++)
                     {
-                        value.leftSpectrum[i] = MinThresholdValue(LogorithmicCompare(
+                        value.leftSpectrum[i] = LogorithmicCompare(
                             currentSpectrum.leftSpectrum[i],
                             peek.leftSpectrum[i],
                             comparingSubject.volumeSpectrumOffsetLeft[i] / volumeSpectrumOffsetLeft[i],
                             noiseLeftSpectrum[i],
                             noiseCancelingEffect
-                        ), manualVolumeOffset);
+                        );
 
-                        value.rightSpectrum[i] = MinThresholdValue(LogorithmicCompare(
+                        value.rightSpectrum[i] = LogorithmicCompare(
                             currentSpectrum.rightSpectrum[i],
                             peek.rightSpectrum[i],
                             comparingSubject.volumeSpectrumOffsetRight[i] / volumeSpectrumOffsetRight[i],
                             noiseRightSpectrum[i],
                             noiseCancelingEffect
-                        ), manualVolumeOffset);
+                        );
                     }
                     value.timestampTick = currentSpectrum.timestampTick;
                 });
@@ -295,12 +293,6 @@ namespace Audio.Entries
             }
 
             return false;
-        }
-
-        private static float MinThresholdValue(float value, float threshold)
-        {
-            if (MathF.Abs(value) < threshold) return 0;
-            return value;
         }
 
         /// <summary>

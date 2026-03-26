@@ -98,7 +98,7 @@ namespace Audio.Receiver
 
             for (int i = 0; i < fftLength; i++)
             {
-                window[i] = (float)FastFourierTransform.HammingWindow(i, fftLength);
+                window[i] = (float)FastFourierTransform.BlackmannHarrisWindow(i, fftLength);
             }
 
             //- Recording

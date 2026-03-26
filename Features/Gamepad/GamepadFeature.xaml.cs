@@ -363,7 +363,7 @@ namespace Gamepad
             switch (chartType)
             {
                 case 0:
-                    StripChart.MaxY = 9000; StripChart.MinY = 0; break;
+                    StripChart.MaxY = 10000; StripChart.MinY = 0; break;
                 case 1:
                 case 2:
                 case 3:

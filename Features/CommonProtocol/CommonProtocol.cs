@@ -88,8 +88,8 @@ public class CommonProtocol : WpfBehaviourSingleton<CommonProtocol>
     private void DeviceInfo(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)
     {
         if (!listener.TryGet(out BasicInfo getInfo)) return;
-
-        Main.SetFWVersion(getInfo.version1.Value[2], getInfo.version1.Value[1], getInfo.version1.Value[0]);
+        string version = $"V{getInfo.version1.Value[2]:X2}_{getInfo.version1.Value[1]:X2}_{getInfo.version1.Value[0]:X2}";
+        Main.SetFWVersion(version);
     }
 
     private void PowerInfo(Listener listener, ReadOnlyMemory<byte> bytes, DateTime time)

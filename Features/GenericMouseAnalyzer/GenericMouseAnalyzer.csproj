@@ -6,11 +6,9 @@
 		<Nullable>disable</Nullable>
 		<UseWPF>true</UseWPF>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<Platforms>AnyCPU</Platforms>
+		<Platforms>AnyCPU;x64</Platforms>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
-		<UICulture>en-US</UICulture>
-		<SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 	</PropertyGroup>
 

@@ -49,6 +49,7 @@ namespace Base.Services.Peripheral
                     return existingConnection;
                 }
                 var newConnection = CreateConnection(useAsyncRead);
+                if (newConnection == null) return null;
                 connections[key] = newConnection;
                 newConnection.OnDisconnected += () =>
                 {
@@ -89,6 +90,13 @@ namespace Base.Services.Peripheral
         {
             add { lock (lockObject) onDataReceived += value; }
             remove { lock (lockObject) onDataReceived -= value; }
+        }
+
+        private Action<ReadOnlyMemory<byte>, DateTime> onDataSent;
+        public event Action<ReadOnlyMemory<byte>, DateTime> OnDataSent
+        {
+            add { lock (lockObject) onDataSent += value; }
+            remove { lock (lockObject) onDataSent -= value; }
         }
 
         private event Action onDisconnected;
@@ -245,6 +253,16 @@ namespace Base.Services.Peripheral
             handler?.Invoke(data, now);
         }
 
+        protected void InvokeDataSent(ReadOnlyMemory<byte> data)
+        {
+            DateTime now = DateTime.UtcNow;
+            if (data.IsEmpty) return;
+
+            Action<ReadOnlyMemory<byte>, DateTime> handler;
+            lock (lockObject) handler = onDataSent;
+            handler?.Invoke(data, now);
+        }
+
         protected void InvokeDeviceDisconnected()
         {
             Action handler;
@@ -264,6 +282,7 @@ namespace Base.Services.Peripheral
                 lock (lockObject)
                 {
                     onDataReceived = null;
+                    onDataSent = null;
                     onDisconnected = null;
                 }
                 IsDeviceConnected = false;

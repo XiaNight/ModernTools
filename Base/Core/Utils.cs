@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Base.Core
 {
@@ -57,6 +58,15 @@ namespace Base.Core
 
             var plusIndex = value.IndexOf('+');
             return plusIndex >= 0 ? value.Substring(0, plusIndex) : value;
+        }
+    }
+
+    public sealed class ResourceBrush
+    {
+
+        public static Brush Find(string key)
+        {
+            return (Brush)Application.Current.Resources[key];
         }
     }
 }

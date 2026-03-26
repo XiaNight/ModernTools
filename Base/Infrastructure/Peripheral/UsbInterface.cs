@@ -283,6 +283,8 @@ namespace Base.Services.Peripheral
 
                 await _fsWrite.WriteAsync(packet, 0, packet.Length, cancellationToken).ConfigureAwait(false);
                 await _fsWrite.FlushAsync(cancellationToken).ConfigureAwait(false);
+                
+                InvokeDataSent(data);
                 return true;
             }
             catch (OperationCanceledException)

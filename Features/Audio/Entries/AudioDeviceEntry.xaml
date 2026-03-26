@@ -37,7 +37,6 @@
             <Slider x:Name="OffsetTimer" Minimum="0" Maximum="0.3" MinWidth="100" IsMoveToPointEnabled="True"/>
             <TextBlock x:Name="TestText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
             <ToggleButton x:Name="ShowComparisonToggle" Content="Comp" Margin="5,0,0,0" VerticalAlignment="Center" IsChecked="True" Visibility="Collapsed"/>
-            <Slider x:Name="MagnitudeOffset" Minimum="0" Maximum="10" Value="0" MinWidth="100" IsMoveToPointEnabled="True" Visibility="Collapsed"/>
         </StackPanel>
 
         <audio:VolumeMeter

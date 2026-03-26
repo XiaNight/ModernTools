@@ -108,7 +108,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         LoadPluginDLLs(GetPluginsFolder());
 
 #if DEBUG
-        LoadDLLsInFolder(GetPluginsFolder());
+        LoadDLLsInFolder(AppContext.BaseDirectory);
 #endif
 
         await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
@@ -558,7 +558,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     public void SetFWVersion(byte major, byte inter, byte minor)
     {
-        SetFWVersion($"V{major:D2}_{inter:D2}_{minor:D2}");
+        SetFWVersion($"V{major:X2}_{inter:X2}_{minor:X2}");
     }
 
     public void SetFWVersion(string version)

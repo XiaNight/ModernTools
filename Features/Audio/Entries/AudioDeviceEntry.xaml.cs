@@ -20,7 +20,6 @@ namespace Audio.Entries
         public event Action<bool> OnShowComparisonToggled;
 
         public event Action<long> OnOffsetChanged;
-        public event Action<double> OnVolumeOffsetChanged;
         public void SetOffset(long offset)
         {
             OffsetTimer.Value = offset / 10_000_000d;
@@ -37,7 +36,6 @@ namespace Audio.Entries
             CompareDeviceDropdown.SelectionChanged += CompareDeviceSelected;
 
             OffsetTimer.ValueChanged += (s, e) => OnOffsetChanged?.Invoke((long)(OffsetTimer.Value * 10_000_000));
-            MagnitudeOffset.ValueChanged += (s, e) => OnVolumeOffsetChanged?.Invoke(MagnitudeOffset.Value);
 
             ShowComparisonToggle.Checked += (s, e) => OnShowComparisonToggled?.Invoke(true);
             ShowComparisonToggle.Unchecked += (s, e) => OnShowComparisonToggled?.Invoke(false);
