@@ -467,6 +467,7 @@ namespace Base.Components
 
         private void Prev_Click(object sender, RoutedEventArgs e) => Prev();
         private void Next_Click(object sender, RoutedEventArgs e) => Next();
+        private void Clear_Click(object sender, RoutedEventArgs e) => Clear();
 
         private void SearchBox_KeyDown(object sender, KeyEventArgs e)
         {

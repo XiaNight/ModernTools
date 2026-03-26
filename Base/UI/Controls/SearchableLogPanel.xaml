@@ -21,6 +21,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="SearchBox"
                          MinWidth="220"
@@ -44,6 +45,13 @@
                         Click="Next_Click"
                         ToolTip="Next (Enter)">
                     <ui:FontIcon FontSize="12" Glyph="&#xE76C;" /> <!-- ChevronRight -->
+                </Button>
+
+                <Button Grid.Column="4"
+                        Margin="16,0,0,0" Padding="8,8"
+                        Click="Clear_Click"
+                        ToolTip="Clear log">
+                    <ui:FontIcon FontSize="12" Glyph="&#xE74D;" /> <!-- Delete -->
                 </Button>
             </Grid>
         </Border>
