@@ -1,28 +1,48 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
-    <Nullable>disable</Nullable>
-    <UseWPF>true</UseWPF>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Platforms>AnyCPU;x64</Platforms>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+		<Nullable>disable</Nullable>
+		<UseWPF>true</UseWPF>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Platforms>AnyCPU;x64</Platforms>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<EnableDynamicLoading>true</EnableDynamicLoading>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\Base\Base.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\..\Base\Base.csproj" >
+			<Private>false</Private>
+			<ExcludeAssets>runtime</ExcludeAssets>
+		</ProjectReference>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Content Include="Config\keyboard_layout.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Config\keyboard_layout.txt">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 
-  <ItemGroup>
-    <Compile Update="MultiCalibrationAnalogPage.xaml.cs">
-      <SubType>Code</SubType>
-    </Compile>
-  </ItemGroup>
+	<Target Name="RemoveCommonDll" AfterTargets="Publish">
+		<ItemGroup>
+			<_FilesToDelete Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" />
+		</ItemGroup>
+		<Delete Files="@(_FilesToDelete)" />
+	</Target>
 
+	<Target Name="PostPublish_CopyConfig" AfterTargets="Publish">
+		<ItemGroup>
+			<PluginFiles Include="$(PublishDir)Config\**\*.*" />
+		</ItemGroup>
+
+		<MakeDir Directories="$(PublishDir)..\..\Config" Condition="!Exists('$(PublishDir)..\..\Config')" />
+
+		<Copy
+			SourceFiles="@(PluginFiles)"
+			DestinationFiles="@(PluginFiles->'$(PublishDir)..\..\Config\%(RecursiveDir)%(Filename)%(Extension)')" />
+
+		<RemoveDir Directories="$(PublishDir)Config" Condition="Exists('$(PublishDir)Config')" />
+	</Target>
 </Project>

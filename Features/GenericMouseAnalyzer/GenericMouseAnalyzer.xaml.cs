@@ -1,4 +1,5 @@
-﻿using Base.Services;
+﻿using Base.Core;
+using Base.Services;
 using Base.Services.Peripheral;
 using System.Collections.Concurrent;
 using System.Data;
@@ -21,6 +22,7 @@ namespace GenericMouseAnalyzer
 
     public class GenericMouseAnalyzerPage : Base.Pages.PageBase
     {
+        [Path("Mouse")]
         public override string PageName => "Genric Mouse Analyzer";
 
         protected GenericMouseAnalyzer page;
@@ -54,7 +56,6 @@ namespace GenericMouseAnalyzer
         {
             base.OnEnable();
 
-            StartLoop();
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
         }
 
@@ -62,7 +63,6 @@ namespace GenericMouseAnalyzer
         {
             base.OnDisable();
 
-            StopLoop();
             DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectToInterface;
         }
 
@@ -113,14 +113,13 @@ namespace GenericMouseAnalyzer
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
-            ActiveInterface.Close();
             ActiveInterface = null;
 
             stopwatch.Stop();
             timestamps.Clear();
         }
 
-        private void Parse(ReadOnlyMemory<byte> readOnlyByte)
+        private void Parse(ReadOnlyMemory<byte> readOnlyByte, DateTime time)
         {
             var data = readOnlyByte.Span;
 

@@ -6,10 +6,11 @@ using System.Windows.Controls;
 
 namespace KeyboardHallSensor
 {
-    public partial class MultiCalibrationRawPage : PageBase
+    public partial class MultiCalibrationRawPage : PageBase, IKeyboardPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Multi Calibration Raw";
-        public override string ShortName => "MCL";
+        public override string ShortName => "MCR";
         public override int NavOrder => 3;
         protected string MfgCmdName => "get_raw_multi_calibration";
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
@@ -54,7 +55,7 @@ namespace KeyboardHallSensor
         {
             KeyboardCommonProtocol.Instance.OnInterfaceDisconnected -= Exit;
             if (ActiveInterface == null) return;
-            ProtocalService.ExitHallProdTest(ActiveInterface);
+            ProtocolService.ExitHallProdTest(ActiveInterface);
         }
 
         [AppMenuItem("Send Command")]
@@ -65,12 +66,12 @@ namespace KeyboardHallSensor
             {
                 for(byte row = 0; row < 8; row++)
                 {
-                    ProtocalService.AppendCmd(ActiveInterface, MfgCmdName, true, depth, row);
+                    ProtocolService.AppendCmd(ActiveInterface, MfgCmdName, true, depth, row);
                 }
             }
         }
 
-        public void Parse(ReadOnlyMemory<byte> bytes)
+        public void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
             var span = bytes.Span;
 
@@ -90,7 +91,7 @@ namespace KeyboardHallSensor
             while (dataStart + index * 2 < span.Length)
             {
                 rowKeyDataMap[row][index] ??= new KeyData();
-                if(depth >= rowKeyDataMap[row][index].segmentValues.Count)
+                while(depth >= rowKeyDataMap[row][index].segmentValues.Count)
                 {
                     rowKeyDataMap[row][index].segmentValues.Add(0);
                 }

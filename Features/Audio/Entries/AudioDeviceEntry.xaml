@@ -10,7 +10,7 @@
              mc:Ignorable="d"
              MinHeight="250" MinWidth="300"
              d:DesignHeight="200" d:DesignWidth="1200" d:Background="White">
-    <Grid>
+    <Grid Margin="0 6 0 0">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto"/>
@@ -27,7 +27,6 @@
             <TextBlock Text="Device: " VerticalAlignment="Center" Margin="0,0,5,0"/>
             <ComboBox x:Name="SourceDeviceDropdown" MinWidth="100" MaxWidth="200"/>
             <TextBlock x:Name="SampleRateText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
-            <TextBlock x:Name="TestText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Grid.Column="3" Grid.Row="0">
@@ -35,9 +34,9 @@
             <ComboBox x:Name="CompareDeviceDropdown" MinWidth="100" MaxWidth="200"/>
             <TextBlock x:Name="DelayText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
             <TextBlock x:Name="ComparedTestText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
-            <Slider x:Name="OffsetTimer" Minimum="0" Maximum="0.1" MinWidth="100" IsMoveToPointEnabled="True"/>
-            <ToggleButton x:Name="ShowComparisonToggle" Content="Comp" Margin="5,0,0,0" VerticalAlignment="Center" IsChecked="True"/>
-            <Slider x:Name="MagnitudeOffset" Minimum="-2" Maximum="2" Value="1" MinWidth="100" IsMoveToPointEnabled="True"/>
+            <Slider x:Name="OffsetTimer" Minimum="0" Maximum="0.3" MinWidth="100" IsMoveToPointEnabled="True"/>
+            <TextBlock x:Name="TestText" VerticalAlignment="Center" Margin="10,0,5,0" Visibility="Collapsed"/>
+            <ToggleButton x:Name="ShowComparisonToggle" Content="Comp" Margin="5,0,0,0" VerticalAlignment="Center" IsChecked="True" Visibility="Collapsed"/>
         </StackPanel>
 
         <audio:VolumeMeter
@@ -68,46 +67,46 @@
             BorderThickness="3" CornerRadius="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2">
         </Border>
-        <chart:FastLineChartControl x:Name="LeftFFTChart"
+        <chart:FastLineChartControl x:Name="LeftFFTChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
             AxisPadding="0" ShowAxis="False"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent2Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2"/>
-        <chart:FastLineChartControl x:Name="RightFFTChart"
+        <chart:FastLineChartControl x:Name="RightFFTChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            AxisPadding="0" ShowAxis="False"
+            AxisPadding="0" ShowAxis="False" LabelBrush="White"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent1Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2"/>
 
-        <chart:FastLineChartControl x:Name="LeftFFTLowerChart"
+        <chart:FastLineChartControl x:Name="LeftFFTLowerChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            AxisPadding="0" ShowAxis="False"
+            AxisPadding="24" ShowAxis="False"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent4Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2"/>
-        <chart:FastLineChartControl x:Name="LeftFFTUpperChart"
+        <chart:FastLineChartControl x:Name="LeftFFTUpperChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            AxisPadding="0" ShowAxis="False"
+            AxisPadding="24" ShowAxis="False" LabelBrush="White"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent3Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2"/>
 
-        <chart:FastLineChartControl x:Name="RightFFTLowerChart"
+        <chart:FastLineChartControl x:Name="RightFFTLowerChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            AxisPadding="0" ShowAxis="False"
+            AxisPadding="24" ShowAxis="False"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent4Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2"/>
-        <chart:FastLineChartControl x:Name="RightFFTUpperChart"
+        <chart:FastLineChartControl x:Name="RightFFTUpperChart" Margin="3"
             HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
-            AxisPadding="0" ShowAxis="False" 
+            AxisPadding="24" ShowAxis="False" LabelBrush="White"
             ScaleMode="Log10" SpectralMode="True" SampleRate="48000" FftLength="4096"
             LineBrush="{StaticResource Accent3Brush}" LineThickness="2"
             MinHz="100" MaxHz="10000" MinY="-60" MaxY="0"
@@ -120,7 +119,7 @@
             BorderBrush="{DynamicResource Accent2Brush}"
             BorderThickness="3" CornerRadius="0"
             Grid.Column="4" Grid.Row="1">
-            <chart:Spectrogram x:Name="LeftSpectrogram" Grid.Column="2" Grid.Row="1" />
+            <chart:Spectrogram x:Name="LeftSpectrogram" Grid.Column="2" Grid.Row="1" MinHz="100" MaxHz="10000" MinDb="-80" MaxDb="0"/>
         </Border>
         <TextBlock Grid.Column="3" Grid.Row="1" Margin="6 0" Text="L" Foreground="{DynamicResource Accent2Brush}" FontSize="20" FontWeight="Bold"/>
         <Border
@@ -128,7 +127,7 @@
             BorderBrush="{DynamicResource Accent1Brush}"
             BorderThickness="3" CornerRadius="0"
             Grid.Column="4" Grid.Row="2">
-            <chart:Spectrogram x:Name="RightSpectrogram" Grid.Column="2" Grid.Row="2"/>
+            <chart:Spectrogram x:Name="RightSpectrogram" Grid.Column="2" Grid.Row="2" MinHz="100" MaxHz="10000" MinDb="-80" MaxDb="0"/>
         </Border>
         <TextBlock Grid.Column="3" Grid.Row="2" Margin="6 0" Text="R" Foreground="{DynamicResource Accent1Brush}" FontSize="20" FontWeight="Bold"/>
     </Grid>

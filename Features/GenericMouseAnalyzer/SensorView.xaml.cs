@@ -24,6 +24,7 @@ namespace GenericMouseAnalyzer
 
     public class SensorViewPage : PageBase
     {
+        [Path("Mouse")]
         public override string PageName => "Sensor View";
         private SensorView page;
         protected PeripheralInterface ActiveInterface { get; private set; }
@@ -89,8 +90,6 @@ namespace GenericMouseAnalyzer
             base.OnEnable();
             phase = Phase.Idle;
 
-            StartLoop(600);
-
             timer = new System.Timers.Timer(500);
             timer.AutoReset = true;
             timer.Elapsed += (_, _) => ReadOtherData();
@@ -108,7 +107,6 @@ namespace GenericMouseAnalyzer
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
         }
 
         protected override void Update()
@@ -237,18 +235,7 @@ namespace GenericMouseAnalyzer
             if (index < 0) return;
 
             ActiveInterface = ActiveDevice.interfaces[index].Connect(true);
-            ActiveInterface.OnDataReceived += (data) =>
-            {
-                TryParseData(data);
-                TryParseFactory(data);
-                TryParseStopMotion(data);
-                TryParseOutputRaw(data);
-                TryParseOtherData(data);
-                TryParseFail(data);
-
-                // Mark ready after processing a packet
-                isWriteReady = true;
-            };
+            ActiveInterface.OnDataReceived += Parse;
 
             isWriteReady = true;
         }
@@ -256,13 +243,26 @@ namespace GenericMouseAnalyzer
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
+            ActiveInterface.OnDataReceived -= Parse;
 
             StopWriteTask();
             ClearQueue();
             phase = Phase.Idle;
             dataCounter = 0;
-            ActiveInterface.Close();
             ActiveInterface = null;
+        }
+
+        private void Parse(ReadOnlyMemory<byte> data, DateTime time)
+        {
+            TryParseData(data);
+            TryParseFactory(data);
+            TryParseStopMotion(data);
+            TryParseOutputRaw(data);
+            TryParseOtherData(data);
+            TryParseFail(data);
+
+            // Mark ready after processing a packet
+            isWriteReady = true;
         }
 
         private void TryParseData(ReadOnlyMemory<byte> data)

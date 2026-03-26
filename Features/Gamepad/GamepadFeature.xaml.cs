@@ -4,6 +4,7 @@ using Base.Core;
 using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
+using ModernWpf.Controls;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -22,6 +23,7 @@ namespace Gamepad
 
     public class GamepadPage : PageBase
     {
+        [Path("Gamepad")]
         public override string PageName => "Gamepad";
         public override string Glyph => "\uE7FC";
         public override int NavOrder => 0;
@@ -54,7 +56,6 @@ namespace Gamepad
         private readonly ConcurrentQueue<Data> unprocessedDatas = new();
 
         // Report Rate
-        private readonly System.Diagnostics.Stopwatch stopwatch = new();
         private readonly ConcurrentQueue<long> timestamps = new();
         private float reportRateSmoothed = 0;
         private long startTime = DateTime.Now.Ticks;
@@ -64,11 +65,16 @@ namespace Gamepad
         private float momentum = 0;
         private int noDataCounter = 0;
 
+        // Report Rate Trigger
+        private float reportRateTriggerThreshold = 500;
+        private bool isReportRateTriggered = false;
+        private bool isReportRateTriggerEnabled = false;
+
         // Chart
         private Action<long> appendChartData = (_) => { }; // Add data point to chart
         private Action<long> tickChartData;
         private int chartType = 0;
-        private ChartRenderMode renderMode = ChartRenderMode.Combined;
+        private ChartRenderMode renderMode = ChartRenderMode.Line;
         private bool isChartPaused = false;
         private FullWindowChart fullWindowChart = null;
         private ScatterChartControl XYChart;
@@ -81,7 +87,7 @@ namespace Gamepad
 
         // Recording
         private bool isRecording = false;
-        private delegate string AddRecordDataDelegate(long tick);
+        private delegate string AddRecordDataDelegate(DateTime time);
         private AddRecordDataDelegate addRecordData;
         private StreamWriter recordFileStream;
 
@@ -113,9 +119,8 @@ namespace Gamepad
 
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
 
-            page.StripChart.Start();
+            page.StripChart.Start(); 
             page.StripChart.MaxY = 1200;
-            page.StripChart.Capacity = 10000;
 
             DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
 
@@ -166,6 +171,7 @@ namespace Gamepad
 
                 SetRenderMode(renderMode);
             };
+            SetRenderMode(renderMode);
 
             page.FullWindowChart.Click += (_, _) =>
             {
@@ -219,6 +225,46 @@ namespace Gamepad
                 };
             };
 
+            page.ReportRateSettingBtn.Click += (_, _) =>
+            {
+                StackPanel stackPanel = new() { Orientation = Orientation.Vertical };
+
+                // Rate Input
+                TextBox rateInput = new() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
+                stackPanel.Children.Add(rateInput);
+
+                // Enable Checkbox
+                CheckBox enableCheckbox = new() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
+                stackPanel.Children.Add(enableCheckbox);
+
+                // Dialog
+                ContentDialog dialog = new()
+                {
+                    Title = "Report Rate Trigger Threshold",
+                    Content = stackPanel,
+                    PrimaryButtonText = "Save",
+                    CloseButtonText = "Cancel"
+                };
+
+                dialog.PrimaryButtonClick += (_, _) =>
+                {
+                    if (dialog.Content is StackPanel sp)
+                    {
+                        if (sp.Children[0] is TextBox tb && float.TryParse(tb.Text, out float threshold))
+                        {
+                            reportRateTriggerThreshold = threshold;
+                        }
+
+                        if (sp.Children[1] is CheckBox cb)
+                        {
+                            isReportRateTriggerEnabled = cb.IsChecked == true;
+                        }
+                    }
+                };
+
+                _ = dialog.ShowAsync();
+            };
+
             page.ChartType.SelectionChanged += (_, _) => SetChartType(page.ChartType.SelectedIndex);
             SetChartType(page.ChartType.SelectedIndex);
             tickChartData = (t) => StripChart.Tick(t);
@@ -237,13 +283,11 @@ namespace Gamepad
         {
             base.OnEnable();
             Clear();
-            StartLoop();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
 
             if (isRecording) StopRecording();
         }
@@ -306,20 +350,20 @@ namespace Gamepad
 
             addRecordData = chartType switch
             {
-                0 => (long tick) => $"{tick},{reportRate}",
-                1 => (long tick) => $"{tick},{Xf}",
-                2 => (long tick) => $"{tick},{Yf}",
-                3 => (long tick) => $"{tick},{RXf}",
-                4 => (long tick) => $"{tick},{RYf}",
-                5 => (long tick) => $"{tick},{LTf}",
-                6 => (long tick) => $"{tick},{RTf}",
-                _ => (long tick) => ""
+                0 => (DateTime time) => $"{time:HH:mm:ss.fff},{reportRate}",
+                1 => (DateTime time) => $"{time:HH:mm:ss.fff},{Xf}",
+                2 => (DateTime time) => $"{time:HH:mm:ss.fff},{Yf}",
+                3 => (DateTime time) => $"{time:HH:mm:ss.fff},{RXf}",
+                4 => (DateTime time) => $"{time:HH:mm:ss.fff},{RYf}",
+                5 => (DateTime time) => $"{time:HH:mm:ss.fff},{LTf}",
+                6 => (DateTime time) => $"{time:HH:mm:ss.fff},{RTf}",
+                _ => (DateTime time) => ""
             };
 
             switch (chartType)
             {
                 case 0:
-                    StripChart.MaxY = 1200; StripChart.MinY = 0; break;
+                    StripChart.MaxY = 10000; StripChart.MinY = 0; break;
                 case 1:
                 case 2:
                 case 3:
@@ -343,27 +387,18 @@ namespace Gamepad
             Data rawData = default;
             bool hasData = false;
 
-            // Report-rate window
-            float windowSeconds = 1f;
-            long window = stopwatch.ElapsedTicks - TimeSpan.FromSeconds(windowSeconds).Ticks;
-            while (timestamps.TryPeek(out long ts) && ts < window)
-                timestamps.TryDequeue(out _);
-
             // Parse all queued reports
             while (unprocessedDatas.TryDequeue(out Data newData))
             {
                 rawData = newData;
                 hasData = true;
-                timestamps.Enqueue(rawData.tick);
+                timestamps.Enqueue(rawData.time.Ticks);
 
                 float atomicReportRate = 10_000_000f / newData.interval;
 
                 float sensitivity = 0.1f;
                 float delta = atomicReportRate - reportRate;
-                if (atomicReportRate > 2000)
-                {
-                    sensitivity = 0.1f;
-                }
+                sensitivity = 1f / (0.1f * Math.Abs(delta) + 1);
                 if (momentum == 0) momentum = delta * sensitivity;
                 else if (delta * momentum < 0) momentum = 0;
                 else
@@ -416,7 +451,7 @@ namespace Gamepad
 
                     // Get Standalone LT RT from XInput
                     byte left = newData.xinput_state.Gamepad.bLeftTrigger;
-                    if (left != LT) zCounter++;
+                    if (left != LT)  zCounter++;
                     LT = left;
                     byte right = newData.xinput_state.Gamepad.bRightTrigger;
                     if (right != RT) rZCounter++;
@@ -425,12 +460,47 @@ namespace Gamepad
 
                 if (!isChartPaused)
                 {
-                    appendChartData.Invoke(newData.tick);
-                    if (isRecording) WriteRecord(newData.tick);
+                    appendChartData.Invoke(newData.time.Ticks);
+                    if (isRecording) WriteRecord(newData.time);
                 }
             }
 
+            // Report-rate window
+            float windowSeconds = 1f;
+            long window = DateTime.UtcNow.Ticks - TimeSpan.FromSeconds(windowSeconds).Ticks;
+
+            while (timestamps.TryPeek(out long ts) && ts <= window)
+                timestamps.TryDequeue(out _);
             reportRateSmoothed = timestamps.Count / 1f;
+
+            if(isReportRateTriggerEnabled)
+            {
+                if (reportRateSmoothed < reportRateTriggerThreshold)
+                {
+                    if(!isReportRateTriggered)
+                    {
+                        isReportRateTriggered = true;
+                        isReportRateTriggerEnabled = false;
+                        ContentDialog dialog = new()
+                        {
+                            Title = "Report Rate Trigger Threshold",
+                            Content = new TextBlock() { Text = $"Report rate dropped below {reportRateTriggerThreshold} reports/sec. at date time {DateTime.Now}" },
+                            PrimaryButtonText = "Ok",
+                        };
+
+                        dialog.PrimaryButtonClick += (_, _) =>
+                        {
+                            isReportRateTriggerEnabled = true;
+                        };
+                        Main.RequestWindowFocus();
+                        _ = dialog.ShowAsync();
+                    }
+                }
+                else
+                {
+                    isReportRateTriggered = false;
+                }
+            }
 
             if (!hasData)
             {
@@ -443,10 +513,10 @@ namespace Gamepad
                     if (chartType == 0 && ++noDataCounter > 5)
                     {
                         reportRate = 0;
-                        appendChartData.Invoke(stopwatch.ElapsedTicks);
+                        appendChartData.Invoke(DateTime.UtcNow.Ticks);
                     }
-                    else tickChartData(stopwatch.ElapsedTicks);
-                    if (isRecording) WriteRecord(stopwatch.ElapsedTicks);
+                    else tickChartData(DateTime.UtcNow.Ticks);
+                    if (isRecording) WriteRecord(DateTime.UtcNow);
                 }
             }
             else
@@ -584,7 +654,7 @@ namespace Gamepad
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
-            ActiveInterface.Close();
+            ActiveInterface.OnDataReceived -= Parse;
             ActiveInterface = null;
 
             page.ConnectedText.Text = "No";
@@ -593,9 +663,9 @@ namespace Gamepad
             page.LightVibrationButton.IsEnabled = false;
         }
 
-        private void Parse(ReadOnlyMemory<byte> data)
+        private void Parse(ReadOnlyMemory<byte> data, DateTime time)
         {
-            long tick = stopwatch.ElapsedTicks;
+            long tick = time.Ticks;
             if (data.IsEmpty) return;
             if (unprocessedDatas.Count > 1000) return;
 
@@ -606,7 +676,7 @@ namespace Gamepad
 
             // Retain a stable copy for deferred processing
             byte[] owned = data.ToArray();
-            unprocessedDatas.Enqueue(new(owned, tick, interval, xinput_state));
+            unprocessedDatas.Enqueue(new(owned, time, interval, xinput_state));
         }
 
         private int FindGamepadIndex()
@@ -636,8 +706,8 @@ namespace Gamepad
                 (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
                 (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
                 (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                (0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
-                (0x01, 0x35, v => RT = (byte)v), // 53 RZ
+                //(0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
+                //(0x01, 0x35, v => RT = (byte)v), // 53 RZ
                 (0x01, 0x36, v => { /* Slider */ }), // 54
                 (0x01, 0x37, v => { /* Dial */ }), // 55
             };
@@ -661,10 +731,9 @@ namespace Gamepad
         [AppMenuItem("Clear")]
         private void Clear()
         {
-            stopwatch.Restart();
             timestamps.Clear();
-            lastTimestamp = stopwatch.ElapsedTicks;
-            startTime = stopwatch.ElapsedTicks;
+            lastTimestamp = DateTime.UtcNow.Ticks;
+            startTime = DateTime.UtcNow.Ticks;
 
             StripChart.Clear();
             XYChart.Clear();
@@ -733,9 +802,9 @@ namespace Gamepad
             page.PauseButton.IsEnabled = false;
         }
 
-        private void WriteRecord(long tick)
+        private void WriteRecord(DateTime time)
         {
-            string data = addRecordData?.Invoke(tick) ?? string.Empty;
+            string data = addRecordData?.Invoke(time) ?? string.Empty;
             if (string.IsNullOrEmpty(data)) return;
 
             try
@@ -778,14 +847,14 @@ namespace Gamepad
         public struct Data
         {
             public readonly byte[] data;
-            public readonly long tick;
+            public readonly DateTime time;
             public readonly long interval;
             public readonly XInput.XINPUT_STATE xinput_state;
 
-            public Data(byte[] data, long tick, long interval, XInput.XINPUT_STATE xinput_state)
+            public Data(byte[] data, DateTime time, long interval, XInput.XINPUT_STATE xinput_state)
             {
                 if (data == null) { this = default; return; }
-                this.tick = tick;
+                this.time = time;
                 this.interval = interval;
                 this.data = data;
                 this.xinput_state = xinput_state;

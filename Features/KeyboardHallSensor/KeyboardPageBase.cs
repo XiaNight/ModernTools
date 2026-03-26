@@ -10,6 +10,7 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
+    public interface IKeyboardPage { }
     /// <summary>
     /// This class provides a framework for creating a keyboard page in a WPF application.
     /// It handles the setup of the keyboard layout, the display of key states, and the management of UI elements.
@@ -17,7 +18,7 @@ namespace KeyboardHallSensor
     /// The class is generic and can be used with any type that inherits from KeyboardPageBase.
     /// </summary>
     /// <typeparam name="T">The type of the page that inherits from KeyboardPageBase for instance management.</typeparam>
-    public abstract class KeyboardPageBase : PageBase
+    public abstract class KeyboardPageBase : PageBase, IKeyboardPage
     {
         public override string Glyph => "\uE765";
         protected ConcurrentDictionary<byte, KeyDisplay> KeyDisplays { get; private set; } = new();
@@ -61,7 +62,7 @@ namespace KeyboardHallSensor
 
         protected abstract void Enter();
         protected abstract void Exit();
-        public abstract void Parse(ReadOnlyMemory<byte> bytes);
+        public abstract void Parse(ReadOnlyMemory<byte> bytes, DateTime time);
 
         private void FormPage()
         {

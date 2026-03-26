@@ -1,7 +1,10 @@
-﻿namespace KeyboardHallSensor
+﻿using Base.Core;
+
+namespace KeyboardHallSensor
 {
     public class AnalogPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Analog";
         public override string ShortName => "ANA";
         public override int NavOrder => 1;

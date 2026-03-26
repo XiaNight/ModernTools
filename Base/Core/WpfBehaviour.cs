@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace Base.Core
 {
@@ -7,6 +8,12 @@ namespace Base.Core
     {
         private static readonly Lazy<T> instance = new(() => new T());
         public static T Instance => instance.Value;
+
+        public override void Awake()
+        {
+            base.Awake();
+            Dispatcher.Invoke(Start, DispatcherPriority.Loaded);
+        }
 
         protected WpfBehaviourSingleton() : base()
         {
@@ -17,10 +24,12 @@ namespace Base.Core
 
     public abstract class WpfBehaviour : UserControl
     {
+        private bool isStarted = false;
         private bool isEnabled = false;
         public new bool IsEnabled => isEnabled;
         public virtual void OnApplicationQuit(System.ComponentModel.CancelEventArgs e) { }
-        public virtual void Awake() {}
+        public virtual void Awake() { }
+        public virtual void Start() { }
         protected virtual void OnEnable() { }
         protected virtual void OnDisable() { }
         public virtual void OnDestroy() { }
@@ -31,6 +40,11 @@ namespace Base.Core
 
         public void Enable()
         {
+            if (!isStarted)
+            {
+                Start();
+                isStarted = true;
+            }
             if (!isEnabled) OnEnable();
             isEnabled = true;
         }

@@ -10,7 +10,7 @@
                 <ui:XamlControlsResources />
                 <ui:ThemeResources RequestedTheme="Dark" />
                 <ui:ThemeResources RequestedTheme="Light" />
-                <ResourceDictionary Source="/Base;component/Themes/Generic.xaml"/>
+                <ResourceDictionary Source="/Base;component/UI/Themes/Generic.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

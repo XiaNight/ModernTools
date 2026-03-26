@@ -1,4 +1,5 @@
 ﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
 
@@ -10,31 +11,42 @@ namespace KeyboardHallSensor
         public event Action OnInterfaceConnected;
         public event Action OnInterfaceDisconnected;
 
-        private RawPage rawPage;
-        private AnalogPage analogPage;
-        private SegmentPage segmentPage;
-        private CustomizedSegmentPage customizedSegmentPage;
-        private GainPage gainPage;
-        private BottomAveragePage bottomAveragePage;
-        private BaseLineTopPage baseLineTopPage;
-        private BaseLineBottomPage baseLineBottomPage;
-
         public override void Awake()
         {
             base.Awake();
 
-            DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
+            Main.OnPageChanged += OnPageChanged;
+        }
 
-            rawPage = new RawPage();
-            analogPage = new AnalogPage();
-            segmentPage = new SegmentPage();
-            customizedSegmentPage = new CustomizedSegmentPage();
-            gainPage = new GainPage();
-            bottomAveragePage = new BottomAveragePage();
-            baseLineTopPage = new BaseLineTopPage();
-            baseLineBottomPage = new BaseLineBottomPage();
+        private void OnPageChanged(PageBase previousPage, PageBase currentPage)
+        {
+            bool isPreviousKeyboardPage = previousPage != null && typeof(IKeyboardPage).IsAssignableFrom(previousPage.GetType());
+            bool isCurrentKeyboardPage = currentPage != null && typeof(IKeyboardPage).IsAssignableFrom(currentPage.GetType());
 
-            DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+            if (isPreviousKeyboardPage)
+            {
+                if (isCurrentKeyboardPage)
+                {
+                    //- Do nothing, still on keyboard page
+                }
+                else
+                {
+                    //- Left keyboard page, disconnect interface
+                    DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectToInterface;
+                    DeviceSelection.Instance.OnActiveDeviceDisconnected -= DisconnectInterface;
+                    DisconnectInterface();
+                }
+            }
+            else if (isCurrentKeyboardPage)
+            {
+                //- Entered keyboard page, connect to interface
+                if (DeviceSelection.Instance.ActiveDevice != null)
+                {
+                    ConnectToInterface();
+                }
+                DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
+                DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+            }
         }
 
         private void ConnectToInterface()
@@ -53,9 +65,6 @@ namespace KeyboardHallSensor
 
                 ActiveInterface = deviceInterface.Connect(true);
                 OnSpecificDeviceConnectedAction(device.PID);
-
-                //- Connection closed / unplugged or died
-                ActiveInterface.OnDisconnected += DisconnectInterface;
             }
             catch (Exception ex)
             {
@@ -65,8 +74,8 @@ namespace KeyboardHallSensor
 
             Debug.Log($"[HID] Connected to {ActiveInterface.ProductInfo.Product}");
 
-            ProtocalService.EnterFactory(ActiveInterface);
-            ProtocalService.EnterHallSensor(ActiveInterface);
+            ProtocolService.EnterFactory(ActiveInterface);
+            ProtocolService.EnterHallSensor(ActiveInterface);
 
             OnInterfaceConnected?.Invoke();
         }
@@ -74,12 +83,12 @@ namespace KeyboardHallSensor
 
         private void OnSpecificDeviceConnectedAction(ushort pid)
         {
-            switch (pid)
-            {
-                case 0x1B7E: // M605
-                    segmentPage.SetMgfCmdPackageSize(2);
-                    break;
-            }
+            //switch (pid)
+            //{
+            //    case 0x1B7E: // M605
+            //        segmentPage.SetMgfCmdPackageSize(2);
+            //        break;
+            //}
         }
 
         private async void DisconnectInterface()
@@ -87,22 +96,18 @@ namespace KeyboardHallSensor
             if (ActiveInterface == null) return;
             if (!ActiveInterface.IsDeviceConnected) return;
             OnInterfaceDisconnected?.Invoke();
+            ProtocolService.ClearCmd();
 
             await Task.Run(() =>
             {
                 //- Pre closing sequence
-                ProtocalService.ExitHallSensor(ActiveInterface);
-                ProtocalService.ExitFactory(ActiveInterface);
-                ProtocalService.WaitForFinish();
+                ProtocolService.ExitHallSensor(ActiveInterface);
+                ProtocolService.ExitFactory(ActiveInterface);
 
-                //- Close the device
-                if (ActiveInterface == null) return;
-                ActiveInterface.Close();
                 ActiveInterface = null;
 
                 Debug.Log("[HID] Disconnected");
             });
-            ProtocalService.ClearCmd();
         }
     }
 }

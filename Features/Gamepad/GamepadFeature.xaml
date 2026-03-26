@@ -9,7 +9,7 @@
              mc:Ignorable="d"
              FontFamily="Consolas"
              Padding="10"
-             d:DesignHeight="600" d:DesignWidth="1400"
+             d:DesignHeight="600" d:DesignWidth="1170"
              d:Background="White">
     <Grid>
         <Canvas>
@@ -19,14 +19,14 @@
             <local:JoyStick x:Name="LeftJoyStick" TitleText="L" Canvas.Left="236" Canvas.Top="0"/>
             <local:JoyStick x:Name="RightJoyStick" TitleText="R" Canvas.Left="520" Canvas.Top="0"/>
 
-            <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="320" Width="420">
+            <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="320" Width="380">
                 <local:TriggerCounter x:Name="LeftTrigger" TitleText="LT"/>
                 <local:TriggerCounter x:Name="RightTrigger" TitleText="RT"/>
             </StackPanel>
 
             <Canvas Canvas.Left="820" Canvas.Top="0">
                 <Canvas.RenderTransform>
-                    <ScaleTransform ScaleX="0.7" ScaleY="0.7" />
+                    <ScaleTransform ScaleX="0.65" ScaleY="0.65" />
                 </Canvas.RenderTransform>
                 <local:Controller
                     x:Name="GamepadController"
@@ -48,15 +48,29 @@
                     <TextBlock Text="Timestamp: " FontSize="20" FontWeight="Bold"/>
                     <TextBlock Text="0" x:Name="TimestampText" FontSize="20"/>
                 </StackPanel>
+                    <Grid HorizontalAlignment="Stretch"  Margin="0 4">
+                        <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="1*"/>
+                            <ColumnDefinition Width="1*"/>
+                        </Grid.ColumnDefinitions>
+                    <TextBlock Text="Vibration: " Grid.Column="0" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <Button x:Name="LightVibrationButton" Grid.Column="1" FontSize="16" Content="Light" Padding="4 2" IsEnabled="False" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="HeavyVibrationButton" Grid.Column="2" FontSize="16" Margin="4 0 0 0" Content="Heavy" Padding="4 2" IsEnabled="False" VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                    </Grid>
+                    <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="ReportRate: " Grid.Column="0" FontSize="20" FontWeight="Bold"/>
+                    <TextBlock Text="0" x:Name="ReportRateText" Grid.Column="1" FontSize="20"/>
+                    <Button x:Name="ReportRateSettingBtn" Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <ui:FontIcon Glyph="&#xE713;" FontSize="12" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    </Button>
+                </Grid>
                 <StackPanel Orientation="Horizontal" Margin="0 4">
-                    <TextBlock Text="Vibration: " FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
-                    <TextBlock Text="0" x:Name="VibrationText" FontSize="20" Margin="4 0" Visibility="Collapsed" VerticalAlignment="Center"/>
-                    <Button x:Name="LightVibrationButton" FontSize="16" Content="Light" Padding="4 2" IsEnabled="False" VerticalAlignment="Center"/>
-                    <Button x:Name="HeavyVibrationButton" FontSize="16" Margin="4 0" Content="Heavy" Padding="4 2" IsEnabled="False" VerticalAlignment="Center"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0 4">
-                    <TextBlock Text="ReportRate: " FontSize="20" FontWeight="Bold"/>
-                    <TextBlock Text="0" x:Name="ReportRateText" FontSize="20"/>
                 </StackPanel>
                 <ComboBox x:Name="ChartType" HorizontalAlignment="Stretch" SelectedIndex="0" Padding="16,0,16,0">
                     <ComboBoxItem>Report Rate</ComboBoxItem>
@@ -91,27 +105,27 @@
 
             <StackPanel Orientation="Vertical" Canvas.Left="820" Canvas.Top="412">
                 <StackPanel Orientation="Horizontal" Margin="0 0 0 8">
-                    <local:GamepadButton TitleText="B0" x:Name="B0" Width="92"/>
-                    <local:GamepadButton TitleText="B1" x:Name="B1" Width="92"/>
-                    <local:GamepadButton TitleText="B2" x:Name="B2" Width="92"/>
-                    <local:GamepadButton TitleText="B3" x:Name="B3" Width="92"/>
-                    <local:GamepadButton TitleText="B4" x:Name="B4" Width="92"/>
+                    <local:GamepadButton TitleText="B0" x:Name="B0" Width="80"/>
+                    <local:GamepadButton TitleText="B1" x:Name="B1" Width="80"/>
+                    <local:GamepadButton TitleText="B2" x:Name="B2" Width="80"/>
+                    <local:GamepadButton TitleText="B3" x:Name="B3" Width="80"/>
+                    <local:GamepadButton TitleText="B4" x:Name="B4" Width="80"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0 0 0 8">
-                    <local:GamepadButton TitleText="B5" x:Name="B5" Width="92"/>
-                    <local:GamepadButton TitleText="B6" x:Name="B6" Width="92"/>
-                    <local:GamepadButton TitleText="B9" x:Name="B9" Width="92"/>
-                    <local:GamepadButton TitleText="B10" x:Name="B10" Width="92"/>
-                    <local:GamepadButton TitleText="B11" x:Name="B11" Width="92"/>
+                    <local:GamepadButton TitleText="B5" x:Name="B5" Width="80"/> 
+                    <local:GamepadButton TitleText="B6" x:Name="B6" Width="80"/>
+                    <local:GamepadButton TitleText="B9" x:Name="B9" Width="80"/>
+                    <local:GamepadButton TitleText="B10" x:Name="B10" Width="80"/>
+                    <local:GamepadButton TitleText="B11" x:Name="B11" Width="80"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal">
-                    <local:GamepadButton TitleText="B12" x:Name="B12" Width="92"/>
-                    <local:GamepadButton TitleText="B13" x:Name="B13" Width="92"/>
-                    <local:GamepadButton TitleText="B14" x:Name="B14" Width="92"/>
-                    <local:GamepadButton TitleText="B15" x:Name="B15" Width="92"/>
-                    <local:GamepadButton TitleText="B16" x:Name="B16" Width="92"/>
+                    <local:GamepadButton TitleText="B12" x:Name="B12" Width="80"/>
+                    <local:GamepadButton TitleText="B13" x:Name="B13" Width="80"/>
+                    <local:GamepadButton TitleText="B14" x:Name="B14" Width="80"/>
+                    <local:GamepadButton TitleText="B15" x:Name="B15" Width="80"/>
+                    <local:GamepadButton TitleText="B16" x:Name="B16" Width="80"/>
                 </StackPanel>
 
             </StackPanel>
@@ -154,6 +168,7 @@
                                 DotBrush="{DynamicResource SystemControlHighlightAccentBrush}"
                                 LabelBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                Capacity="32768"
                                 LineThickness="3"
                                 DotThickness="4"
                                 MinY="-10"

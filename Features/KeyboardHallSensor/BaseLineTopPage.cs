@@ -1,7 +1,10 @@
+using Base.Core;
+
 namespace KeyboardHallSensor
 {
     public class BaseLineTopPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Top Base Line";
         public override string ShortName => "TBL";
         public override int NavOrder => 6;

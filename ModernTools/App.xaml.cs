@@ -1,7 +1,7 @@
-﻿using Audio;
+﻿using Base.Core;
 using Base.Helpers;
-using Gamepad;
-using KeyboardHallSensor;
+using ModernWpf;
+using System.Reflection;
 using System.Windows;
 
 namespace ModernTools;
@@ -16,9 +16,11 @@ public partial class App : Application
         ComSecurityHelper.Initialize();
         base.OnStartup(e);
 
-        typeof(AudioPage).ToString();
-        typeof(GamepadPage).ToString();
-        typeof(RawPage).ToString();
+        string app_name = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
+
+        LocalAppDataStore.Init("ASUS", app_name);
+        ApplicationTheme theme = LocalAppDataStore.Instance.Get("Theme", ApplicationTheme.Light);
+        ThemeManager.Current.ApplicationTheme = theme;
 
         var window = new Base.MainWindow();
         window.Show();

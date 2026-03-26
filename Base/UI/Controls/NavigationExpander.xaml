@@ -1,0 +1,190 @@
+﻿<UserControl x:Class="Base.Components.NavigationExpander"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Base.Components"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d"
+             x:Name="Root"
+             d:DesignHeight="48" d:DesignWidth="200" d:Background="White">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="{Binding ItemHeight, ElementName=Root}"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+
+            <Grid x:Name="Highlight" Visibility="Collapsed" d:Visibility="Visible">
+                <Grid.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="#50787878" Offset="0.0" />
+                        <GradientStop Color="#00000000" Offset="1.0" />
+                    </LinearGradientBrush>
+                </Grid.Background>
+                <Rectangle
+                Width="4"
+                VerticalAlignment="Stretch"
+                Margin="0,4"
+                Fill="{DynamicResource SystemControlForegroundAccentBrush}"
+                d:Fill="White"
+                RadiusX="2"
+                RadiusY="2"
+                HorizontalAlignment="Left"/>
+            </Grid>
+
+            <ToggleButton x:Name="NavToggleButton" Style="{DynamicResource NavButtonStyle}"
+                      VerticalContentAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <ToggleButton.Triggers>
+                    <EventTrigger RoutedEvent="ToggleButton.Checked">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation
+                                        Storyboard.TargetName="ArrowScale"
+                                        Storyboard.TargetProperty="ScaleY"
+                                        To="-1"
+                                        Duration="0:0:0.2">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                    <EventTrigger RoutedEvent="ToggleButton.Unchecked">
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation
+                                        Storyboard.TargetName="ArrowScale"
+                                        Storyboard.TargetProperty="ScaleY"
+                                        To="1"
+                                        Duration="0:0:0.2">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </ToggleButton.Triggers>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="0"/>
+                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="32"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="1">
+                        <ui:FontIcon x:Name="NavIcon"
+                                 Grid.Column="2" FontSize="22"
+                                 Glyph="{Binding Glyph, ElementName=Root}" d:Glyph="&#xe765;"
+                                 Foreground="{DynamicResource TextControlForeground}" d:Foreground="Black">
+                        </ui:FontIcon>
+                        <Grid>
+                            <Grid.RenderTransform>
+                                <TranslateTransform X="4" Y="4" />
+                            </Grid.RenderTransform>
+                            <ui:FontIcon x:Name="SecondaryIcon"
+                                     Glyph="{Binding SecondaryGlyph, ElementName=Root}"
+                                     d:Glyph="&#xE70F;"
+                                     FontSize="14"
+                                     FontWeight="light"
+                                     Foreground="{DynamicResource TextControlForeground}"
+                                     d:Foreground="Black"/>
+                        </Grid>
+                        <Grid HorizontalAlignment="Center">
+                            <Grid.RenderTransform>
+                                <TranslateTransform X="0" Y="14" />
+                            </Grid.RenderTransform>
+
+                            <TextBlock x:Name="SecondaryLabel"
+                                       d:Text="RAW"
+                                       FontFamily="Cascadia Mono"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextControlForeground}"/>
+                        </Grid>
+                    </Grid>
+                    <TextBlock x:Name="Label"
+                               Grid.Column="2"
+                               Text="{Binding Text, ElementName=Root}"
+                               d:Text="Home"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextControlForeground}"/>
+                    <ui:FontIcon x:Name="ArrowIcon"
+                                 Glyph="&#xE70D;"
+                                 Grid.Column="3"
+                                 FontSize="14"
+                                 Foreground="{DynamicResource TextControlForeground}" d:Foreground="Black"
+                                 HorizontalAlignment="Center"
+                                 RenderTransformOrigin="0.5,0.45">
+                        <ui:FontIcon.RenderTransform>
+                            <ScaleTransform x:Name="ArrowScale" ScaleY="1"/>
+                        </ui:FontIcon.RenderTransform>
+                    </ui:FontIcon>
+                </Grid>
+            </ToggleButton>
+        </Grid>
+        <Border x:Name="ExpandContainer"
+                Grid.Row="1"
+                Height="0"
+                ClipToBounds="True"
+                Background="Transparent">
+            <ItemsControl x:Name="ExpandItemsControl"
+                          ItemsSource="{Binding Items, ElementName=Root}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Margin" Value="16,0,0,0"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsCompact, RelativeSource={RelativeSource AncestorType={x:Type local:NavigationExpander}}}"
+                                                     Value="True">
+                                            <DataTrigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ThicknessAnimation
+                                                                Storyboard.TargetProperty="Margin"
+                                                                To="0,0,0,0"
+                                                                Duration="0:0:0.22">
+                                                            <ThicknessAnimation.EasingFunction>
+                                                                <CubicEase EasingMode="EaseOut"/>
+                                                            </ThicknessAnimation.EasingFunction>
+                                                        </ThicknessAnimation>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.EnterActions>
+                                            <DataTrigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <ThicknessAnimation
+                                                                Storyboard.TargetProperty="Margin"
+                                                                To="16,0,0,0"
+                                                                Duration="0:0:0.22">
+                                                            <ThicknessAnimation.EasingFunction>
+                                                                <CubicEase EasingMode="EaseOut"/>
+                                                            </ThicknessAnimation.EasingFunction>
+                                                        </ThicknessAnimation>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </DataTrigger.ExitActions>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                        </StackPanel>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </Border>
+    </Grid>
+</UserControl>

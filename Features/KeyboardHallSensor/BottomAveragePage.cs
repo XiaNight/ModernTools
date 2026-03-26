@@ -1,7 +1,10 @@
+using Base.Core;
+
 namespace KeyboardHallSensor
 {
     public class BottomAveragePage : MFGKeyboardBasePage
     {
+        [Path("Keyboard")]
         public override string PageName => "Bottom Average";
         public override string ShortName => "BMA";
         public override int NavOrder => 4;
@@ -17,7 +20,7 @@ namespace KeyboardHallSensor
             keyDisplay.SetText($"{keyDisplay.Keycode:X2}\n{value}\n{sample.values[3]:X2}");
             keyDisplay.SetFill(value, 65535.0);
 
-            sample.isFresh = false;
+            sample.dirtyCounter = 0;
         }
 
         protected override int ParseValue(ReadOnlyMemory<byte> values)

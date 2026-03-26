@@ -51,7 +51,8 @@ namespace Base.Core
             jsonOptions = new JsonSerializerOptions
             {
                 WriteIndented = true,
-                PropertyNameCaseInsensitive = false
+                PropertyNameCaseInsensitive = false,
+                IncludeFields = true
             };
         }
 

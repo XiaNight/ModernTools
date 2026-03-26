@@ -2,7 +2,6 @@
 using Base.Pages;
 using Base.Services;
 using ModernWpf;
-using System.Collections;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -13,35 +12,52 @@ using System.Windows.Shell;
 namespace Base;
 
 using Components;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Windows.Threading;
+using static Base.Components.VerticalTabsManager;
 
 /// <summary>
 /// Interaction logic for MainWindow.xaml
 /// </summary>
-public partial class MainWindow : Window
+public partial class MainWindow : Window, INotifyPropertyChanged
 {
     private bool isNavExpanded = true;
     private bool isLogVisible = false;
+    public event Action<PageBase, PageBase> OnPageChanged;
+
+    private LayoutMode _currentLayoutMode = LayoutMode.Normal;
+    public LayoutMode CurrentLayoutMode
+    {
+        get => _currentLayoutMode;
+        private set
+        {
+            if (_currentLayoutMode == value) return;
+            _currentLayoutMode = value;
+            OnPropertyChanged();
+        }
+    }
 
     public MainWindow()
     {
         InitializeComponent();
         Loaded += MainWindowLoadingAsync;
+        SizeChanged += OnSizeChanged;
 
         WindowChrome.SetIsHitTestVisibleInChrome(MenuBar, true);
         WindowChrome.SetIsHitTestVisibleInChrome(TitleBarControls, true);
+
+        Debug.OnLog += LogMessage;
     }
+
+    #region WPF public
 
     private void ToggleNav_Click(object sender, RoutedEventArgs e)
     {
         isNavExpanded = !isNavExpanded;
 
-        if (isNavExpanded) NavTabsManager.Expand();
-        else NavTabsManager.Collapse();
-
-        // Toggle visibility of text labels
-
-        LogMessage($"Navigation panel {(isNavExpanded ? "expanded" : "contracted")}.");
+        if (isNavExpanded) NavTabsManager.ExitCompactMode();
+        else NavTabsManager.EnterCompactMode();
     }
 
     private void ToggleTheme_Click(object sender, RoutedEventArgs e)
@@ -55,10 +71,12 @@ public partial class MainWindow : Window
         {
             foreach (WpfBehaviour wpfObject in registeredWpfObjects)
             {
-                if(wpfObject.IsEnabled)
+                if (wpfObject.IsEnabled)
                     wpfObject?.ThemeChanged();
             }
         };
+
+        LocalAppDataStore.Instance.Set("Theme", ThemeManager.Current.ApplicationTheme);
 
         LogMessage($"Theme changed to {ThemeManager.Current.ApplicationTheme}.");
     }
@@ -67,17 +85,11 @@ public partial class MainWindow : Window
     {
         isLogVisible = !isLogVisible;
         LogPanel.Visibility = isLogVisible ? Visibility.Visible : Visibility.Collapsed;
-
-        if (isLogVisible)
-        {
-            LogMessage("Log window shown.");
-        }
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
     {
         LogTextBox.Clear();
-        LogMessage("Log cleared.");
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e)
@@ -85,35 +97,77 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
-    private void LogMessage(string message)
+    private void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
-        LogTextBox.AppendText($"[{timestamp}] {message}\n");
-        LogTextBox.ScrollToEnd();
+        UpdateLayoutMode(ActualWidth);
+        MainWindowLoading();
     }
 
-    #region WPF public
-
-    private async void MainWindowLoadingAsync(object sender, RoutedEventArgs e)
+    private async void MainWindowLoading()
     {
-        _ = Task.Run(MainWindowLoading);
-    }
+        LoadPluginDLLs(GetPluginsFolder());
 
-    private void MainWindowLoading()
-    {
+#if DEBUG
+        LoadDLLsInFolder(AppContext.BaseDirectory);
+#endif
+
+        await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
+        await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
+
+        SelectTabIndex(0);
+        _ = DeviceSelection.Instance.Refresh();
+        DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
+
         LoadingCover.AutoFinish((t) =>
         {
             LoadingBlur.Radius = Math.Max(0, LoadingBlur.Radius - t * 20);
         });
+    }
 
-        Task.Run(() => PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies()));
-        Task.Run(() => BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies()));
-
-        Dispatcher.InvokeAsync(() =>
+    /// <summary>
+    /// Load plugins from the "Plugins" subfolder. This allows users to add new features without modifying the main executable.
+    /// DLLs is placed under their own subfolder in "Plugins" to avoid name conflicts and allow multiple versions.
+    /// </summary>
+    /// <param name="pluginsFolder"></param>
+    private void LoadPluginDLLs(string pluginsFolder)
+    {
+        if (!Directory.Exists(pluginsFolder))
         {
-            _ = DeviceSelection.Instance.Refresh();
-            DeviceSelection.Instance.OnActiveInterfaceConnected += ReloadPage;
-        });
+            LogMessage($"[PluginLoad] Plugins folder not found: {pluginsFolder}");
+            return;
+        }
+        foreach (string subDir in Directory.GetDirectories(pluginsFolder))
+        {
+            LoadDLLsInFolder(subDir);
+        }
+    }
+
+    private void LoadDLLsInFolder(string folder)
+    {
+        if (!Directory.Exists(folder))
+        {
+            LogMessage($"[PluginLoad] Folder not found: {folder}");
+            return;
+        }
+        foreach (string dllPath in Directory.GetFiles(folder, "*.dll"))
+        {
+            LoadPluginDLL(dllPath);
+        }
+    }
+
+    private void LoadPluginDLL(string dllPath)
+    {
+        try
+        {
+            var asmName = AssemblyName.GetAssemblyName(dllPath);
+            if (asmName == null) return;
+            var loadedAsm = Assembly.LoadFrom(dllPath);
+            LogMessage($"[PluginLoad] Loaded plugin: {asmName.FullName}");
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"[PluginLoad] Failed to load plugin from {dllPath}: {ex.Message}");
+        }
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -137,43 +191,18 @@ public partial class MainWindow : Window
         Debug.Log("MainWindow has closed – app will now exit");
     }
 
-    private async void PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var openBase = typeof(WpfBehaviourSingleton<>);
-
-        Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
-            .Where(t => t != null)
-            .Where(t => t.IsClass && !t.IsAbstract)
-            .ToArray();
-
-        await Task.Delay(100);
-
-        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(allTypes.Length);
-        foreach (var t in allTypes)
-            jobs[t] = LoadingCover.RentJob(1f);
-
-        foreach (Type t in allTypes)
-        {
-            // Match: class T : WpfBehaviourSingleton<T>
-            if (!IsSelfReferencingSingleton(t, openBase))
-            {
-                jobs[t].Finish();
-                continue;
-            }
-            
-            await Dispatcher.InvokeAsync(() =>
-            {
-                // Force creation: WpfBehaviourSingleton<T>.Instance
-                var closedBase = openBase.MakeGenericType(t);
-                var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                _ = prop?.GetValue(null);
-            }, DispatcherPriority.Background);
-
-            jobs[t].Finish();
-        }
+        if (e.WidthChanged)
+            UpdateLayoutMode(e.NewSize.Width);
     }
 
-    private readonly Dictionary<IPageBase, NavigationButton> navPageMap = new();
+    #endregion
+
+    #region Page
+
+    private readonly Dictionary<IPageBase, INavigationItem> navPageMap = new();
+    private PageBase currentPage = null;
 
     private static bool IsSelfReferencingSingleton(Type t, Type openBase)
     {
@@ -199,7 +228,7 @@ public partial class MainWindow : Window
         return types;
     }
 
-    private void BuildNavigationTabs(IEnumerable<Assembly> assemblies)
+    private async Task BuildNavigationTabs(IEnumerable<Assembly> assemblies)
     {
         // find all PageBase and none abstract
         Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
@@ -213,28 +242,53 @@ public partial class MainWindow : Window
 
         foreach (Type t in allTypes)
         {
-            Dispatcher.InvokeAsync(() =>
+            await Dispatcher.InvokeAsync(() =>
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                PageBase newPage = (PageBase)Activator.CreateInstance(t);
+                PageBase newPage = null;
+                try
+                {
+                    newPage = (PageBase)Activator.CreateInstance(t);
+                }
+                catch (FileNotFoundException fileEx)
+                {
+                    LogMessage($"[NavInit] Failed to load {t.FullName}: {fileEx.Message}");
+                    jobs[t].Finish();
+                }
+                catch (Exception ex)
+                {
+                    LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
+                }
+                if (newPage == null)
+                {
+                    jobs[t].Finish();
+                    return;
+                }
+
                 RegisterWpfObject(newPage);
 
-                if(newPage.NavOrder >= 0)
+                if (newPage.NavOrder >= 0)
                 {
-                    NavigationButton newTab;
-                    if (newPage.NavAlignment == PageBase.NavigationAlignment.Front)
-                    {
-                        newTab = NavTabsManager.AddTop(newPage.PageName, newPage.Glyph, newPage.SecondaryGlyph, newPage.NavOrder);
-                        newTab.SecondaryLabel.Text = newPage.ShortName;
-                    }
-                    else
-                    {
-                        newTab = NavTabsManager.AddBottom(newPage.PageName, newPage.Glyph, newPage.SecondaryGlyph, newPage.NavOrder);
-                        newTab.SecondaryLabel.Text = newPage.ShortName;
-                    }
+                    string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
+                    INavigationItem newTab;
 
-                    newTab.OnClick += () => SelectPage(t);
+                    AddButtonDelegate add = newPage.NavAlignment switch
+                    {
+                        PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+                        PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+                        _ => NavTabsManager.AddTop
+                    };
+
+                    newTab = add(
+                        text: newPage.PageName,
+                        path: path,
+                        glyph: newPage.Glyph,
+                        secondaryGlyph: newPage.SecondaryGlyph,
+                        secondaryText: newPage.ShortName,
+                        order: newPage.NavOrder);
+
+                    newTab.OnClick += () => SelectPage(newPage);
                     navPageMap.Add(newPage, newTab);
                 }
 
@@ -242,33 +296,43 @@ public partial class MainWindow : Window
                 LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
                 sw = null;
                 jobs[t].Finish();
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Loaded);
         }
     }
 
-    public PageBase SelectPage(Type pageType)
+    public void SelectPage<T>() where T : PageBase
     {
-        if (!typeof(PageBase).IsAssignableFrom(pageType) || pageType.IsAbstract)
-            return null;
+        T page = FindObjectOfType<T>();
+    }
 
-        PageBase page = FindObjectOfType(pageType, true) as PageBase;
+    public void SelectPage(PageBase page)
+    {
+        if (page == null) return;
+        if (page == currentPage) return;
 
         if (currentPage != null) navPageMap[currentPage].SetHighlightedState(false);
         currentPage?.Disable();
 
+        PageBase lastPage = currentPage;
+
         currentPage = page;
         AssignToolsMenu(currentPage);
+
+        OnPageChanged?.Invoke(lastPage, page);
 
         currentPage?.Enable();
         navPageMap[currentPage].SetHighlightedState(true);
 
+        SetDeviceSelectionVisibility(currentPage.ShowDeviceSelection);
+
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
-        return page;
     }
-    private void ShowAbout(object sender, RoutedEventArgs e)
+
+    public void ReloadPage()
     {
-        AboutWindow.Show(this);
+        currentPage?.Disable();
+        currentPage?.Enable();
     }
 
     #endregion
@@ -320,6 +384,16 @@ public partial class MainWindow : Window
         return null;
     }
 
+    /// <summary>
+    /// Searches the registered WPF objects and returns the first instance of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of object to search for. Must derive from <see cref="WpfBehaviour"/>.</typeparam>
+    /// <param name="findInactive">
+    /// If true, includes disabled objects in the search; otherwise, only enabled objects are considered.
+    /// </param>
+    /// <returns>
+    /// The first matching object of type <typeparamref name="T"/> if found; otherwise, null.
+    /// </returns>
     public T FindObjectOfType<T>(bool findInactive = false) where T : WpfBehaviour
     {
         foreach (var wpfObject in registeredWpfObjects)
@@ -333,60 +407,45 @@ public partial class MainWindow : Window
         return null;
     }
 
+    private async Task PreloadWpfBehaviourSingletons(IEnumerable<Assembly> assemblies)
+    {
+        var openBase = typeof(WpfBehaviourSingleton<>);
+
+        Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
+            .Where(t => t != null)
+            .Where(t => t.IsClass && !t.IsAbstract)
+            .ToArray();
+
+        await Task.Delay(100);
+
+        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(allTypes.Length);
+        foreach (var t in allTypes)
+            jobs[t] = LoadingCover.RentJob(1f);
+
+        foreach (Type t in allTypes)
+        {
+            // Match: class T : WpfBehaviourSingleton<T>
+            if (!IsSelfReferencingSingleton(t, openBase))
+            {
+                jobs[t].Finish();
+                continue;
+            }
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                // Force creation: WpfBehaviourSingleton<T>.Instance
+                var closedBase = openBase.MakeGenericType(t);
+                var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
+                _ = prop?.GetValue(null);
+            }, DispatcherPriority.Background);
+
+            jobs[t].Finish();
+        }
+    }
+
     #endregion
 
     #region Custom Functions
-
-    private IPageBase currentPage = null;
-    private List<IPageBase> pages;
-
-    public void ReloadPage()
-    {
-        currentPage?.Disable();
-        //currentPage = pages[MainTabControl.SelectedIndex];
-        currentPage?.Enable();
-    }
-
-    public void SetTabsEnabled(bool enabled)
-    {
-        //foreach (TabItem item in MainTabControl.Items)
-        //{
-        //    if (item.Content is Grid grid)
-        //    {
-        //        grid.IsEnabled = enabled;
-        //    }
-        //}
-    }
-
-    public void SelectTabIndex(int index)
-    {
-        //if (index >= 0 && index < MainTabControl.Items.Count)
-        //{
-        //    MainTabControl.SelectedIndex = index;
-        //}
-    }
-
-    public static string GetOutputFolder()
-    {
-        string exeDir = AppContext.BaseDirectory;
-        string outputDir = Path.Combine(exeDir, "Output");
-
-        Directory.CreateDirectory(outputDir); // Safe even if it exists
-
-        return outputDir;
-    }
-
-    public string GetToolFolder(params string[] subFolders)
-    {
-        string exeDir = AppContext.BaseDirectory;
-        return Path.Combine(exeDir, "Tools", Path.Combine(subFolders));
-    }
-
-    public static string GetConfigFolder(params string[] subFolders)
-    {
-        string exeDir = AppContext.BaseDirectory;
-        return Path.Combine(exeDir, "Config", Path.Combine(subFolders));
-    }
 
     public static readonly string appName = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
     public static readonly string company = Util.GetAssemblyAttribute<AssemblyCompanyAttribute>(a => a.Company);
@@ -398,86 +457,171 @@ public partial class MainWindow : Window
     public static readonly string description = Util.GetAssemblyAttribute<AssemblyDescriptionAttribute>(a => a.Description);
     public static readonly string title = Util.GetAssemblyAttribute<AssemblyTitleAttribute>(a => a.Title);
     public static readonly string trademark = Util.GetAssemblyAttribute<AssemblyTrademarkAttribute>(a => a.Trademark);
-    public static readonly string applicationIcon = FindIconPath();
 
-    private static string FindIconPath()
+    private const string bugReportUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMlQ0RVcxWVo2Q1RTSFRIUzVOVlMzVVc2US4u";
+    private const string featureRequestUrl = "https://forms.office.com/Pages/ResponsePage.aspx?id=xFkfMGnCZkqKjPXaqyEfozJm8MaUvBNDsBYYmv4ZE1tUMUhIWFJMOFdFWjRSWDNXT0RFRjNGOThXVi4u";
+
+    public void SetDeviceSelectionVisibility(bool state)
+    {
+        TitleBarControls.Visibility = state ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void SelectTabIndex(int index)
+    {
+        Stack<IEnumerable<INavigationItem>> stack = new();
+        stack.Push(NavTabsManager.TopButtons);
+        stack.Push(NavTabsManager.BottomButtons);
+        int walk = 0;
+
+        while (stack.Count > 0)
+        {
+            foreach (INavigationItem item in stack.Pop())
+            {
+                if (item is NavigationButton button)
+                {
+                    if (walk == index)
+                    {
+                        button.Click();
+                        return;
+                    }
+                    walk++;
+                }
+                else if (item is NavigationExpander expander)
+                {
+                    stack.Push(expander.Items);
+                }
+            }
+        }
+    }
+    public static string GetOutputFolder(params string[] subFolders)
+        => GetOutputFolder(true, subFolders);
+    public static string GetOutputFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Output", create, subFolders);
+    public static string GetToolFolder(params string[] subFolders)
+        => GetToolFolder(true, subFolders);
+    public static string GetToolFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Tools", create, subFolders);
+    public static string GetConfigFolder(params string[] subFolders)
+        => GetConfigFolder(true, subFolders);
+    public static string GetConfigFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Config", create, subFolders);
+    public static string GetPluginsFolder(params string[] subFolders)
+        => GetPluginsFolder(true, subFolders);
+    public static string GetPluginsFolder(bool create = true, params string[] subFolders)
+        => GetFolder("Plugins", create, subFolders);
+
+    public static string GetFolder(string folderName, bool create = true, params string[] subFolders)
     {
         string exeDir = AppContext.BaseDirectory;
-
-        // Look for *.ico files in the executable directory
-        var icoFiles = Directory.GetFiles(exeDir, "*.ico", SearchOption.TopDirectoryOnly);
-
-        // Return the first one found, or null if none
-        return icoFiles.FirstOrDefault();
+        string dir = Path.Combine(exeDir, folderName, Path.Combine(subFolders));
+        if (create) Directory.CreateDirectory(dir); // Safe even if it exists
+        return dir;
     }
 
-    public void ApplyTheme(bool dark)
+    public static string GetExePath()
     {
-        var palette = new ResourceDictionary
-        {
-            Source = new Uri(dark
-                ? "base;component/Themes/Palette.Dark.xaml"
-                : "base;component/Themes/Palette.Light.xaml", UriKind.Relative)
-        };
+        return Environment.ProcessPath!;
+    }
 
-        if (palette != null)
+    public void RequestWindowFocus()
+    {
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+        Focus();
+    }
+
+    public static void OpenUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
         {
-            foreach (DictionaryEntry e in palette)
+            MessageBox.Show("The link is not configured.", "Oops", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
             {
-                Resources[e.Key] = e.Value; // overwrite keyed entries
-                Application.Current.Resources[e.Key] = e.Value;
-            }
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Failed to open the browser.\n\n{ex.Message}",
+                "Oops",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+    public void SetFWVersion(byte major, byte inter, byte minor)
+    {
+        SetFWVersion($"V{major:X2}_{inter:X2}_{minor:X2}");
+    }
+
+    public void SetFWVersion(string version)
+    {
+        string text = string.IsNullOrEmpty(version) ? "FW: ----" : $"FW: {version}";
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
+        {
+            MainFooter.DeviceVersion.Text = text;
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => MainFooter.DeviceVersion.Text = text);
         }
     }
 
-    public static void InstantiateWpfBehaviourSingletons()
+    public void SetBatteryStatus(bool isCharging, byte[] level)
     {
-        TouchAllWpfBehaviourSingletons([Application.ResourceAssembly, Assembly.GetExecutingAssembly()]);
-    }
-
-    private static void TouchAllWpfBehaviourSingletons(params Assembly[] assemblies)
-    {
-        assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
-
-        // Deduplicate assemblies
-        assemblies = assemblies
-            .Where(a => a != null)
-            .GroupBy(a => a.FullName)
-            .Select(g => g.First())
-            .ToArray();
-
-        foreach (var asm in assemblies)
+        if (Application.Current?.Dispatcher?.CheckAccess() ?? false)
         {
-            Type[] types;
-            try
-            {
-                types = asm.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(t => t != null).ToArray()!;
-            }
-
-            foreach (var t in types)
-            {
-                if (t == null || t.IsAbstract || t.IsGenericTypeDefinition)
-                    continue;
-
-                if (!typeof(PageBase).IsAssignableFrom(t))
-                    continue;
-
-                var instance = Activator.CreateInstance(t) as PageBase;
-                instance?.Awake();
-            }
+            MainFooter.BatteryIndicator.SetBatteryLevel(level);
+            MainFooter.BatteryIndicator.SetBatteryStatus(isCharging);
+        }
+        else
+        {
+            Application.Current?.Dispatcher?.Invoke(() => { SetBatteryStatus(isCharging, level); });
         }
     }
 
+    private void ShowAbout(object sender, RoutedEventArgs e)
+    {
+        AboutWindow.Show(this);
+    }
+
+    private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(bugReportUrl);
+    }
+
+    private void RedirectToFeatureRequestURL(object sender, RoutedEventArgs e)
+    {
+        OpenUrl(featureRequestUrl);
+    }
+
+    private void UpdateLayoutMode(double width)
+    {
+        CurrentLayoutMode =
+            width < 900 ? LayoutMode.Compact :
+            width < 1100 ? LayoutMode.Normal :
+            LayoutMode.Wide;
+    }
+
+    private void LogMessage(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        LogTextBox.AppendText($"[{timestamp}] {message}\n");
+        LogTextBox.ScrollToEnd();
+    }
 
     #endregion
 
     #region Menu Item
 
-    private List<CommandBinding> bindedMenuItemCommands = new();
+    private readonly List<CommandBinding> bindedMenuItemCommands = new();
 
     public void AssignToolsMenu(object page)
     {
@@ -493,8 +637,11 @@ public partial class MainWindow : Window
             AddTool(item.Path, item.StayOpen, item.Action, item.key, item.modifierKeys);
         }
         ToolsMenu.Items.Clear();
+
+        Style toolStyle = (Style)Application.Current.FindResource(typeof(MenuItem));
         foreach (var tool in rootTools.Values)
         {
+            tool.Style = toolStyle;
             ToolsMenu.Items.Add(tool);
         }
 
@@ -636,4 +783,8 @@ public partial class MainWindow : Window
     }
 
     #endregion
+
+    public event PropertyChangedEventHandler PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string name = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

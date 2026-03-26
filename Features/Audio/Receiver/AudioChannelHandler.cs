@@ -24,6 +24,10 @@ namespace Audio.Receiver
         private int ringIndex;
 
         private List<TimedValue<float>> framesBuffer;
+
+        /// <summary>
+        /// Volume buffer in dB
+        /// </summary>
         private List<TimedValue<float>> volumeBuffer;
 
         // Raw samples frame event (for graphing waveforms / spectra)
@@ -51,8 +55,14 @@ namespace Audio.Receiver
         private readonly Complex[] fftBufferL;
         private readonly Complex[] fftBufferR;
 
-        // ---- Output spectrum buffers (power)
+        /// <summary>
+        /// Spectrum for Left channel in squared magnitude
+        /// </summary>
         public readonly float[] spectrumL;
+
+        /// <summary>
+        /// Spectrum for Right channel in squared magnitude
+        /// </summary>
         public readonly float[] spectrumR;
 
         // ---- Window
@@ -61,6 +71,7 @@ namespace Audio.Receiver
         CpsDebugger debugger = new();
 
         public int SampleRate => capture.WaveFormat.SampleRate;
+        public bool IsInitialized { get; private set; } = false;
 
         public AudioChannelHandler(WasapiCapture capture, int fftLength = 2048, int frameSize = 512, string name = "AudioSource")
         {
@@ -81,13 +92,13 @@ namespace Audio.Receiver
             SetFrameSize(frameSize);
 
             if (capture.WaveFormat.Channels < 2)
-                throw new InvalidOperationException("device must be stereo (2 channels Left and Right).");
+                return;
 
             capture.DataAvailable += CaptureDataAvailable;
 
             for (int i = 0; i < fftLength; i++)
             {
-                window[i] = (float)FastFourierTransform.HammingWindow(i, fftLength);
+                window[i] = (float)FastFourierTransform.BlackmannHarrisWindow(i, fftLength);
             }
 
             //- Recording
@@ -100,6 +111,8 @@ namespace Audio.Receiver
                 baseDir: baseDir,
                 segment: TimeSpan.FromMinutes(10)
             );
+
+            IsInitialized = true;
         }
 
         public void SetFrameSize(int frameSize)
@@ -171,8 +184,8 @@ namespace Audio.Receiver
             WaveFormat format = capture.WaveFormat;
 
             int channels = format.Channels;
-            if (channels < 2)
-                throw new NotSupportedException("Need at least 2 channels for stereo.");
+            if (channels < 1)
+                throw new NotSupportedException("Need at least 1 channel.");
 
             if (format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32)
             {
@@ -186,7 +199,9 @@ namespace Audio.Receiver
                     int baseIndex = f * channels;
 
                     float sampleL = BitConverter.ToSingle(buffer, (baseIndex + 0) * 4);
-                    float sampleR = BitConverter.ToSingle(buffer, (baseIndex + 1) * 4);
+                    float sampleR = channels >= 2
+                        ? BitConverter.ToSingle(buffer, (baseIndex + 1) * 4)
+                        : sampleL;
 
                     long t = lastOutTicks + ((tick - lastOutTicks) * f) / frames;
 
@@ -208,7 +223,9 @@ namespace Audio.Receiver
                     int baseIndex = f * channels;
 
                     short sL = BitConverter.ToInt16(buffer, (baseIndex + 0) * 2);
-                    short sR = BitConverter.ToInt16(buffer, (baseIndex + 1) * 2);
+                    short sR = channels >= 2
+                        ? BitConverter.ToInt16(buffer, (baseIndex + 1) * 2)
+                        : sL;
 
                     long t = lastOutTicks + ((tick - lastOutTicks) * f) / frames;
 

@@ -7,6 +7,7 @@ using NAudio.CoreAudioApi;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using TimedFloat = Audio.Receiver.AudioChannelHandler.TimedValue<float>;
 
@@ -15,6 +16,7 @@ namespace Audio
     public partial class AudioPage : PageBase
     {
         public override string Glyph => "\uE189";
+        public override bool ShowDeviceSelection => false;
         public bool IsTesting { get; private set; } = false;
         public int Cycle
         {
@@ -40,70 +42,163 @@ namespace Audio
             }
         }
 
-        public float Threshold { get; private set; }
-
-        public event Action OnTestStart;
-        public event Action OnTestStop;
-        public event Action OnAdaptationStarted;
-        public event Action OnAdaptationStopped;
+        public float Tolerance { get; private set; }
+        public int LowCutOff { get; private set; }
+        public int HighCutOff { get; private set; }
+        public int TriggerSensitivity { get; private set; }
+        public float NoiseCancelingEffect { get; private set; }
 
         public AudioPage()
         {
             InitializeComponent();
+        }
 
+        public override void Start()
+        {
+            base.Start();
             StartButton.Click += (s, e) =>
             {
-                StartButton.Visibility = System.Windows.Visibility.Collapsed;
-                StopButton.Visibility = System.Windows.Visibility.Visible;
-                PrepareButton.Visibility = System.Windows.Visibility.Collapsed;
+                PrepareButton.Visibility = Visibility.Collapsed;
+                ThresholdAdaptButton.Visibility = Visibility.Collapsed;
+                StartButton.Visibility = Visibility.Collapsed;
+                StopButton.Visibility = Visibility.Visible;
                 IsTesting = true;
-                OnTestStart?.Invoke();
+                StartTest();
             };
             StopButton.Click += (s, e) =>
             {
-                StartButton.Visibility = System.Windows.Visibility.Visible;
-                StopButton.Visibility = System.Windows.Visibility.Collapsed;
-                PrepareButton.Visibility = System.Windows.Visibility.Visible;
+                PrepareButton.Visibility = Visibility.Visible;
+                ThresholdAdaptButton.Visibility = Visibility.Visible;
+                StartButton.Visibility = Visibility.Visible;
+                StopButton.Visibility = Visibility.Collapsed;
                 CycleTimeInputField.IsEnabled = true;
                 DurationInputField.IsEnabled = true;
                 IsTesting = false;
-                OnTestStop?.Invoke();
+                StopTest();
             };
 
             PrepareButton.Click += (s, e) =>
             {
-                OnAdaptationStarted?.Invoke();
-                PrepareButton.Visibility = System.Windows.Visibility.Collapsed;
-                StartButton.Visibility = System.Windows.Visibility.Collapsed;
-                StopPrepareButton.Visibility = System.Windows.Visibility.Visible;
+                StartAdapting(Adaptation);
+            };
+            ThresholdAdaptButton.Click += (s, e) =>
+            {
+                StartAdapting(ThresholdAdapt);
             };
             StopPrepareButton.Click += (s, e) =>
             {
-                OnAdaptationStopped?.Invoke();
+                StopAdapting();
             };
 
-            ThresholdInputField.TextChanged += (s, e) =>
+            ToleranceInputField.TextChanged += (s, e) =>
             {
-                ParseThresholdInput();
+                ParseToleranceInput();
             };
-            ParseThresholdInput();
+            ParseToleranceInput();
+
+            LowCutoffInputField.TextChanged += (s, e) =>
+            {
+                ParseLowCutOffInput();
+            };
+            ParseLowCutOffInput();
+
+            HighCutoffInputField.TextChanged += (s, e) =>
+            {
+                ParseHighCutOffInput();
+            };
+            ParseHighCutOffInput();
+
+            TriggerSensitivityInputField.TextChanged += (s, e) =>
+            {
+                ParseTriggerSensitivityInput();
+            };
+            ParseTriggerSensitivityInput();
+
+            NoiseCancelingEffectSlider.ValueChanged += (s, e) =>
+            {
+                ParseNoiseCancelingEffect();
+            };
+            ParseNoiseCancelingEffect();
 
             CycleTimeInputField.TextChanged += (s, e) => UpdateRemainingDurationText(Cycle);
             DurationInputField.TextChanged += (s, e) => UpdateRemainingDurationText(Cycle);
             UpdateRemainingDurationText(Cycle);
+
+            for (int i = 0; i < 10; i++)
+            {
+                AudioSubject newSubject = AddSubject();
+            }
         }
 
-        private void ParseThresholdInput()
+        private void ParseToleranceInput()
         {
-            string text = ThresholdInputField.Text;
+            string text = ToleranceInputField.Text;
             if (string.IsNullOrEmpty(text)) return;
             if (float.TryParse(text, out float value))
             {
-                Threshold = value;
+                if (Tolerance == value) return;
+
+                Tolerance = value;
             }
             else
             {
-                ThresholdInputField.Text = Threshold.ToString();
+                ToleranceInputField.Text = Tolerance.ToString();
+            }
+        }
+
+        private void ParseLowCutOffInput()
+        {
+            string text = LowCutoffInputField.Text.ToString();
+            if (string.IsNullOrEmpty(text)) return;
+            if (int.TryParse(text, out int value))
+            {
+                if (LowCutOff == value) return;
+                LowCutOff = value;
+            }
+            else
+            {
+                LowCutoffInputField.Text = LowCutOff.ToString();
+            }
+        }
+
+        private void ParseHighCutOffInput()
+        {
+            string text = HighCutoffInputField.Text.ToString();
+            if (string.IsNullOrEmpty(text)) return;
+            if(int.TryParse(text, out int value))
+            {
+                if (HighCutOff == value) return;
+                HighCutOff = value;
+            }
+            else
+            {
+                HighCutoffInputField.Text = HighCutOff.ToString();
+            }
+        }
+
+        private void ParseTriggerSensitivityInput()
+        {
+            string text = TriggerSensitivityInputField.Text;
+            if (string.IsNullOrEmpty(text)) return;
+            if (int.TryParse(text, out int value))
+            {
+                if (TriggerSensitivity == value) return;
+                TriggerSensitivity = value;
+            }
+            else
+            {
+                TriggerSensitivityInputField.Text = TriggerSensitivity.ToString();
+            }
+        }
+
+        private void ParseNoiseCancelingEffect()
+        {
+            NoiseCancelingEffect = (float)NoiseCancelingEffectSlider.Value;
+            NoiseCancelingEffectText.Text = NoiseCancelingEffect.ToString("F1");
+
+            foreach (AudioSubject entry in spawnedEntries)
+            {
+                entry.SetNoiseCancelingEffect(NoiseCancelingEffect);
             }
         }
 
@@ -113,6 +208,7 @@ namespace Audio
             RemainingDurationText.Text = $"Remaining Duration: {remaining} s";
         }
 
+        [Path("Audio")]
         public override string PageName => "Audio";
         public override string Description => "Place AudioTrigger.bat under ./Tools folder.";
 
@@ -131,30 +227,17 @@ namespace Audio
         public override void Awake()
         {
             base.Awake();
-
-            OnTestStart += StartTest;
-            OnTestStop += StopTest;
-
-            OnAdaptationStarted += StartAdapting;
-            OnAdaptationStopped += StopAdapting;
-
-            for (int i = 0; i < 10; i++)
-            {
-                AudioSubject newSubject = AddSubject();
-            }
         }
 
         protected override void OnEnable()
         {
             base.OnEnable();
-            StartLoop(120);
             StartAudioStream();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
-            StopLoop();
             StopAudioStream();
         }
 
@@ -173,11 +256,21 @@ namespace Audio
         {
             CycleTimeInputField.IsEnabled = false;
             DurationInputField.IsEnabled = false;
+            ToleranceInputField.IsEnabled = false;
+            TriggerSensitivityInputField.IsEnabled = false;
+            LowCutoffInputField.IsEnabled = false;
+            HighCutoffInputField.IsEnabled = false;
+            NoiseCancelingEffectSlider.IsEnabled = false;
 
             List<AudioSubject.AudioSubjectTestingState> testingStates = new();
 
-            foreach (var entry in spawnedEntries)
+            foreach (AudioSubject entry in spawnedEntries)
+            {
+                entry.SetNoiseCancelingEffect(NoiseCancelingEffect);
+                entry.SetTriggerCutOff(LowCutOff, HighCutOff);
+                entry.SetTriggerTolerance(Tolerance);
                 testingStates.Add(entry.SetState<AudioSubject.AudioSubjectTestingState>());
+            }
 
             int cycles = Cycle;
             int duration = DurationMs;
@@ -208,6 +301,11 @@ namespace Audio
         {
             CycleTimeInputField.IsEnabled = true;
             DurationInputField.IsEnabled = true;
+            ToleranceInputField.IsEnabled = true;
+            TriggerSensitivityInputField.IsEnabled = true;
+            LowCutoffInputField.IsEnabled = true;
+            HighCutoffInputField.IsEnabled = true;
+            NoiseCancelingEffectSlider.IsEnabled = true;
 
             foreach (var entry in spawnedEntries)
             {
@@ -233,17 +331,6 @@ namespace Audio
             {
                 entry.StopAudioStream();
             }
-        }
-
-        private void StartAdapting()
-        {
-            if (adaptingTask != null && !adaptingTask.IsCompleted)
-            {
-                return;
-            }
-            adaptCts = new CancellationTokenSource();
-            adaptingTask = Task.Run(Adaptation, adaptCts.Token);
-            isAdapting = true;
         }
 
         private async Task Adaptation()
@@ -288,13 +375,12 @@ namespace Audio
             // Volume trigger setup + check volume levels
             foreach (var generator in generators)
             {
-                generator?.SetWaveType(AudioGenerator.WaveType.Sine);
-                generator.SetAmplitude(3f);
+                generator.SetAmplitude(.5f);
                 generator.Start();
             }
 
             // Wait for volume equalize
-            await Task.Delay(2000, adaptCts.Token);
+            await Task.Delay(1500, adaptCts.Token);
 
             // Start volume mean calculation
             foreach (var entry in spawnedEntries)
@@ -305,7 +391,7 @@ namespace Audio
                 }
             }
 
-            // Wait for 5 seconds to collect volume data
+            // Wait to collect volume data
             await Task.Delay(3000, adaptCts.Token);
 
             // Stop volume mean calculation
@@ -316,7 +402,6 @@ namespace Audio
                     state.StopVolumeCalculation();
                 }
             }
-            await Task.Delay(250, adaptCts.Token);
 
             // Lower volume to trigger level
             foreach (var generator in generators)
@@ -331,7 +416,7 @@ namespace Audio
             {
                 if (entry.TryGetState<AudioSubject.AudioSubjectTimeAlignmentState>(out var state))
                 {
-                    state.SetupVolumeTrigger(1);
+                    state.SetupVolumeTrigger(2f);
                 }
             }
             await Task.Delay(1500, adaptCts.Token);
@@ -339,35 +424,42 @@ namespace Audio
             // Fire volume to trigger
             foreach (var generator in generators)
             {
-                generator?.SetAmplitude(1f);
-                generator?.SetWaveType(AudioGenerator.WaveType.Sine);
+                generator?.SetAmplitude(.5f);
             }
             await Task.Delay(200, adaptCts.Token);
-
-            
-
-            /*
-            // short rest after beep
-            await Task.Delay(1000, adaptCts.Token);
-
-            // Set state to adapting
-            foreach (var entry in spawnedEntries)
-                entry.SetState<AudioSubject.AudioSubjectAdaptingState>();
-
-            // Adapt for 3 seconds
-            await Task.Delay(3000, adaptCts.Token);
-            */
 
             // Stop all generators
             foreach (var generator in generators)
                 generator.Pause();
 
-            // Stop adapting
-            StopAdapting();
+            await SpectrumAnalisis();
+        }
+
+
+        [AppMenuItem("Threshold Adapt")]
+        private void ThresholdAdaptMenuItem_Click()
+        {
+            StartAdapting(ThresholdAdapt);
+        }
+
+        private async Task ThresholdAdapt()
+        {
+            adaptCts ??= new CancellationTokenSource();
+            // Set state to adapting
+            foreach (var entry in spawnedEntries)
+            {
+                var state = entry.SetState<AudioSubject.AudioSubjectAdaptingState>();
+                state.StartSpectrumResponseCalculation();
+            }
         }
 
         [AppMenuItem("Spectrum Analysis")]
-        private async void SpectrumAnalisis()
+        private void SpectrumAnalysisMenuItem_Click()
+        {
+            StartAdapting(SpectrumAnalisis);
+        }
+
+        private async Task SpectrumAnalisis()
         {
             List<AudioGenerator> generators = new();
             foreach (var entry in spawnedEntries)
@@ -376,6 +468,23 @@ namespace Audio
                 if (generator == null) continue;
                 generators.Add(generator);
             }
+
+            // Noise for preparation
+            foreach (var generator in generators)
+            {
+                generator?.SetAmplitude(.5f);
+                generator?.SetWaveType(AudioGenerator.WaveType.Noise);
+                generator?.Start();
+            }
+            await Task.Delay(1000);
+
+            // Set entries to spectrum response state
+            foreach (var entry in spawnedEntries)
+            {
+                var timeState = entry.SetState<AudioSubject.AudioSubjectSpectrumResponseState>();
+                timeState.StartSpectrumResponseCalculation();
+            }
+
             // Noise blast for spectrum analysis
             foreach (var generator in generators)
             {
@@ -383,12 +492,21 @@ namespace Audio
                 generator?.SetWaveType(AudioGenerator.WaveType.Noise);
                 generator?.Start();
             }
-            await Task.Delay(10000);
+            await Task.Delay(3000);
+
+            // Set entries to spectrum response state
+            foreach (var entry in spawnedEntries)
+            {
+                var timeState = entry.SetState<AudioSubject.AudioSubjectSpectrumResponseState>();
+                timeState.StopSpectrumResponseCalculation();
+                entry.ExitState();
+            }
 
             foreach (var generator in generators)
             {
                 generator?.Pause();
             }
+            StopAdapting();
         }
 
         [AppMenuItem("Beep")]
@@ -416,10 +534,30 @@ namespace Audio
             }
         }
 
+        private void StartAdapting(Func<Task> function)
+        {
+            if (adaptingTask != null && !adaptingTask.IsCompleted)
+            {
+                return;
+            }
+            adaptCts = new CancellationTokenSource();
+            adaptingTask = Task.Run(function, adaptCts.Token);
+            isAdapting = true;
+
+            Dispatcher.Invoke(() =>
+            {
+                PrepareButton.Visibility = System.Windows.Visibility.Collapsed;
+                ThresholdAdaptButton.Visibility = System.Windows.Visibility.Collapsed;
+                StartButton.Visibility = System.Windows.Visibility.Collapsed;
+                StopPrepareButton.Visibility = System.Windows.Visibility.Visible;
+            });
+        }
+
         private void StopAdapting()
         {
             adaptCts?.Cancel();
             isAdapting = false;
+            adaptCts = null;
             foreach (var entry in spawnedEntries)
             {
                 entry.ExitState();
@@ -427,13 +565,14 @@ namespace Audio
 
             Dispatcher.Invoke(() =>
             {
-                StopPrepareButton.Visibility = System.Windows.Visibility.Collapsed;
-                StartButton.Visibility = System.Windows.Visibility.Visible;
                 PrepareButton.Visibility = System.Windows.Visibility.Visible;
+                ThresholdAdaptButton.Visibility = System.Windows.Visibility.Visible;
+                StartButton.Visibility = System.Windows.Visibility.Visible;
+                StopPrepareButton.Visibility = System.Windows.Visibility.Collapsed;
             });
         }
 
-        private AudioSubject AddSubject()
+        private AudioSubject AddSubject() 
         {
             AudioSubject newSubject = new(256, 4096, InVolumeTriggerDebounce)
             {
@@ -464,14 +603,14 @@ namespace Audio
                 entry.UpdateSpectrogram();
             }
 
-            if (isAdapting)
-            {
-                foreach (var entry in spawnedEntries)
-                {
-                    entry.SetTriggerThreshold(Threshold);
-                    entry.ShowTriggerThresholds();
-                }
-            }
+            //if (isAdapting)
+            //{
+            //    foreach (var entry in spawnedEntries)
+            //    {
+            //        entry.SetTriggerThreshold(Tolerance);
+            //        entry.ShowTriggerThresholds();
+            //    }
+            //}
         }
 
         [AppMenuItem("/Show Recordings Folder")]
@@ -489,7 +628,7 @@ namespace Audio
 
         private static void AppendLog(long timeTick)
         {
-            string path = Path.Combine(Main.GetToolFolder(), "log");
+            string path = Path.Combine(MainWindow.GetToolFolder(), "log");
             if (!File.Exists(path))
             {
                 File.WriteAllText(path, "");
@@ -502,7 +641,7 @@ namespace Audio
 
         private static void TriggerBatchFile(long timestampUnix)
         {
-            string path = Path.Combine(Main.GetToolFolder(), "AudioTrigger.bat");
+            string path = Path.Combine(MainWindow.GetToolFolder(), "AudioTrigger.bat");
             if (!File.Exists(path)) return;
 
             System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo

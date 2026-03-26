@@ -1,9 +1,11 @@
+using Base.Core;
 using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
     public class GainPage : MFGKeyboardBasePage
     {
+        [Path("Keyboard")]
         public override string PageName => "Gain";
         public override string ShortName => "GAN";
         public override int NavOrder => 3;
@@ -22,7 +24,7 @@ namespace KeyboardHallSensor
             if (value > 7) keyDisplay.SetFillColor("Accent4Brush");
             else keyDisplay.SetFillColor("Accent2Brush");
 
-            sample.isFresh = false;
+            sample.dirtyCounter = 0;
         }
 
         protected override int ParseValue(ReadOnlyMemory<byte> values)

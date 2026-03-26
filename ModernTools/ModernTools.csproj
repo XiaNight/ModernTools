@@ -1,39 +1,66 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Platforms>AnyCPU;x64</Platforms>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <SelfContained>true</SelfContained>
-    <UseWPF>true</UseWPF>
-    <Nullable>disable</Nullable>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <InformationalVersion>V99_03_14</InformationalVersion>
-    <CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
-    <AppName>KeyboardUI</AppName>
-    <Company>AsusTek Computer Inc.</Company>
-    <CompanyName>Asus</CompanyName>
-    <Product>GamePad Toolset</Product>
-    <ProductName>$(Product)</ProductName>
-    <Copyright>Copyright © AsusTek Computer Inc. All rights reserved.</Copyright>
-    <AssemblyName>$(AppName)_$(CleanInformationalVersion)</AssemblyName>
-    <Title>$(Product) $(CleanInformationalVersion)</Title>
-    <ApplicationIcon>ROG_DevTool.ico</ApplicationIcon>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows10.0.26100.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Platforms>AnyCPU;x64</Platforms>
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		<UseWPF>true</UseWPF>
+		<Nullable>disable</Nullable>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+		<InformationalVersion>V01_00_15</InformationalVersion>
+		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
+		<AppName>ModernToolset</AppName>
+		<Company>AsusTek Computer Inc.</Company>
+		<CompanyName>Asus</CompanyName>
+		<Product>Modern Toolset</Product>
+		<ProductName>$(Product)</ProductName>
+		<Copyright>Copyright © AsusTek Computer Inc. All rights reserved.</Copyright>
+		<AssemblyName>$(AppName)_$(CleanInformationalVersion)</AssemblyName>
+		<Title>$(Product) $(CleanInformationalVersion)</Title>
+		<ApplicationIcon>ROG_DevTool.ico</ApplicationIcon>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+	</PropertyGroup>
 
-  <ItemGroup>
-	  <PackageReference Include="ModernWpfUI" Version="0.9.6" />
-	  <ProjectReference Include="..\Features\Audio\Audio.csproj">
-		  <ReferenceOutputAssembly>True</ReferenceOutputAssembly>
-		  <Private>True</Private>
-	  </ProjectReference>
-	  <ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
-	  <ProjectReference Include="..\Features\Gamepad\GamePadToolset.csproj" />
-	  <ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="ModernWpfUI" Version="0.9.6" />
+	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\Base\Base.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<ProjectReference Include="..\Features\Audio\Audio.csproj" />
+		<ProjectReference Include="..\Features\CommonProtocol\CommonProtocol.csproj" />
+		<ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
+		<ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
+		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
+	</ItemGroup>
+	
+	<Target Name="PublishPluginProjects" AfterTargets="Publish">
+		<Exec Command="dotnet msbuild ..\Features\Audio\Audio.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\CommonProtocol\CommonProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\Gamepad\GamePad.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+	</Target>
+
+	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
+		<DebugType>none</DebugType>
+		<DebugSymbols>false</DebugSymbols>
+		<PublishReferencesSymbols>false</PublishReferencesSymbols>
+	</PropertyGroup>
+
+	<Target Name="PostPublish_RemovePdbs" AfterTargets="Publish">
+		<ItemGroup>
+			<PublishedPdbs Include="$(PublishDir)**\*.pdb" />
+		</ItemGroup>
+
+		<Delete Files="@(PublishedPdbs)" />
+
+		<Message Importance="high" Text="Removed all PDB files from $(PublishDir)" />
+	</Target>
 </Project>

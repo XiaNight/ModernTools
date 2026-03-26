@@ -31,6 +31,11 @@ namespace Audio.Util
                 leftSpectrum = new float[halfBinSize],
                 rightSpectrum = new float[halfBinSize],
             };
+            Fill((ref TimedSpectrum spectrum) =>
+            {
+                spectrum.rightSpectrum = new float[halfBinSize];
+                spectrum.leftSpectrum = new float[halfBinSize];
+            });
         }
 
         public override bool TryDequeue(out TimedSpectrum result)

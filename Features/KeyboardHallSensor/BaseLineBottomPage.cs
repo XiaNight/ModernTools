@@ -1,3 +1,4 @@
+using Base.Core;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -5,6 +6,7 @@ namespace KeyboardHallSensor
 {
     public class BaseLineBottomPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Bottom Base Line";
         public override string ShortName => "BBL";
         public override int NavOrder => 5;

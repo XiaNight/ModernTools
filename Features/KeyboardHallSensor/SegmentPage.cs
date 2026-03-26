@@ -1,3 +1,4 @@
+using Base.Core;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -5,6 +6,7 @@ namespace KeyboardHallSensor
 {
     public class SegmentPage : MFGKeyboardStreamingPage
     {
+        [Path("Keyboard")]
         public override string PageName => "Segment";
         public override string ShortName => "SEG";
         public override int NavOrder => 2;
