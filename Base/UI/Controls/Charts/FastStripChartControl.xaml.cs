@@ -605,7 +605,7 @@ namespace Base.Components.Chart
                 IndicatorBrush,
                 dpi);
 
-            double labelX = Math.Max(0, plot.Left - 4 - ft.Width);
+            double labelX = Math.Max(0, _mousePx.X - ft.Width * 1.5f - 4.5);
             double labelY = dotY - ft.Height * 0.5;
             dc.DrawText(ft, new Point(labelX, labelY));
         }
