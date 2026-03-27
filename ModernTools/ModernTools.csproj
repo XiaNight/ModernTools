@@ -38,6 +38,7 @@
 		<ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
 		<ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
+		<ProjectReference Include="..\Features\ArmouryProtocol\ArmouryProtocol.csproj" />
 	</ItemGroup>
 	
 	<Target Name="PublishPluginProjects" AfterTargets="Publish">
@@ -46,6 +47,7 @@
 		<Exec Command="dotnet msbuild ..\Features\Gamepad\GamePad.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\ArmouryProtocol\ArmouryProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 	</Target>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">
