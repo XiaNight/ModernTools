@@ -128,6 +128,7 @@ namespace CommonProtocol
 
         private void ConnectToInterface()
         {
+            if (timer.IsEnabled) return;
             var device = DeviceSelection.Instance.ActiveDevice;
             try
             {
