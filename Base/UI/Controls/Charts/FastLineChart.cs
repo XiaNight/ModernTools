@@ -435,7 +435,7 @@ namespace Base.Components.Chart
             // Value label on the left side, aligned with the dot
             var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
             string labelText = displayY.ToString("0.###", CultureInfo.InvariantCulture);
-            var typeface = new Typeface(FontFamily, FontStyle, FontWeight, FontStretch);
+            var typeface = new Typeface(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
             var ft = new FormattedText(
                 labelText,
                 CultureInfo.InvariantCulture,
