@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TaskbarClock;
 
 namespace Gamepad
 {
@@ -44,6 +45,10 @@ namespace Gamepad
         public short RYf => NormalizeUnsigned(RY);
         public byte LTf => LT;
         public byte RTf => RT;
+
+        // JoyStick
+        private JoyStickMinMax leftJoyStick = new();
+        private JoyStickMinMax rightJoyStick = new();
 
         // Current state of the buttons (0/1)
         private const int BUTTON_COUNT = 32;
@@ -350,14 +355,14 @@ namespace Gamepad
 
             addRecordData = chartType switch
             {
-                0 => (DateTime time) => $"{time:HH:mm:ss.fff},{reportRate}",
-                1 => (DateTime time) => $"{time:HH:mm:ss.fff},{Xf}",
-                2 => (DateTime time) => $"{time:HH:mm:ss.fff},{Yf}",
-                3 => (DateTime time) => $"{time:HH:mm:ss.fff},{RXf}",
-                4 => (DateTime time) => $"{time:HH:mm:ss.fff},{RYf}",
-                5 => (DateTime time) => $"{time:HH:mm:ss.fff},{LTf}",
-                6 => (DateTime time) => $"{time:HH:mm:ss.fff},{RTf}",
-                _ => (DateTime time) => ""
+                0 => time => $"{time:HH:mm:ss.fff},{reportRate}",
+                1 => time => $"{time:HH:mm:ss.fff},{Xf}",
+                2 => time => $"{time:HH:mm:ss.fff},{Yf}",
+                3 => time => $"{time:HH:mm:ss.fff},{RXf}",
+                4 => time => $"{time:HH:mm:ss.fff},{RYf}",
+                5 => time => $"{time:HH:mm:ss.fff},{LTf}",
+                6 => time => $"{time:HH:mm:ss.fff},{RTf}",
+                _ => time => ""
             };
 
             switch (chartType)
@@ -456,6 +461,9 @@ namespace Gamepad
                     byte right = newData.xinput_state.Gamepad.bRightTrigger;
                     if (right != RT) rZCounter++;
                     RT = right;
+
+                    leftJoyStick.Update(Xf, Yf);
+                    rightJoyStick.Update(RXf, RYf);
                 }
 
                 if (!isChartPaused)
@@ -530,6 +538,8 @@ namespace Gamepad
         {
             page.LeftJoyStick.SetStick(Xf, Yf);
             page.RightJoyStick.SetStick(RXf, RYf);
+            page.LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
+            page.RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
 
             page.GamepadController.LeftStickX = Xf;
             page.GamepadController.LeftStickY = Yf;
@@ -741,6 +751,9 @@ namespace Gamepad
             page.RightJoyStick.Clear();
             page.RightTrigger.Clear();
             page.LeftTrigger.Clear();
+            leftJoyStick.Reset();
+            rightJoyStick.Reset();
+
             for (int i = 0; i < buttonCounter.Length; i++) buttonCounter[i] = 0;
             zCounter = 0;
             rZCounter = 0;
@@ -843,6 +856,28 @@ namespace Gamepad
         #endregion
 
         private static short NormalizeUnsigned(int v) => (short)(v + short.MinValue);
+
+        private class JoyStickMinMax
+        {
+            public int MinX { get; private set; } = int.MaxValue;
+            public int MaxX { get; private set; } = int.MinValue;
+            public int MinY { get; private set; } = int.MaxValue;
+            public int MaxY { get; private set; } = int.MinValue;
+            public void Update(int x, int y)
+            {
+                if (x < MinX) MinX = x;
+                if (x > MaxX) MaxX = x;
+                if (y < MinY) MinY = y;
+                if (y > MaxY) MaxY = y;
+            }
+            public void Reset()
+            {
+                MinX = int.MaxValue;
+                MaxX = int.MinValue;
+                MinY = int.MaxValue;
+                MaxY = int.MinValue;
+            }
+        }
 
         public struct Data
         {
