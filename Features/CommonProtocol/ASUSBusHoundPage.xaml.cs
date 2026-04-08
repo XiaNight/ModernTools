@@ -408,7 +408,6 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 }
                 e.Handled = true;
                 break;
-
         }
     }
 
@@ -819,7 +818,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             if (IsHex(c))
                 hexCount++;
             else if (!char.IsWhiteSpace(c))
-                throw new FormatException($"Invalid character '{c}'.");
+                return null;
         }
 
         if ((hexCount & 1) != 0)

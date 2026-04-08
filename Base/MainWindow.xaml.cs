@@ -115,7 +115,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
 
         SelectTabIndex(0);
-        _ = DeviceSelection.Instance.Refresh();
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
 
         LoadingCover.AutoFinish((t) =>
