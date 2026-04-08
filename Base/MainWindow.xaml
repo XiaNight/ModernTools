@@ -126,7 +126,7 @@
                         </Style>
                     </StackPanel.Style>
                     <ComboBox x:Name="PortComboBox" Grid.Column="2" Margin="0,4,10,4" VerticalAlignment="Stretch" MinWidth="200"/>
-                    <Button x:Name="RefreshButton" Grid.Column="3" Margin="0,4,10,4" VerticalAlignment="Stretch" Content="Refresh" Padding="8,0"/>
+
                     <Grid Grid.Column="4">
                         <Button x:Name="ConnectButton" Margin="0,4,10,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Connect" Padding="8,0"/>
                         <Button x:Name="DisconnectButton" Margin="0,4,10,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Disconnect" Padding="8,0" Visibility="Hidden"/>

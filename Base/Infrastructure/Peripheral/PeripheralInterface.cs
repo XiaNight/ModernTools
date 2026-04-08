@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Configuration;
 
 namespace Base.Services.Peripheral
 {

@@ -5,9 +5,10 @@ namespace Base.Services
     using Base.Services.APIService;
     using Core;
     using Peripheral;
+    using System.ComponentModel;
     using System.Windows.Controls;
+    using System.Windows.Data;
     using System.Windows.Input;
-    using Windows.Foundation.Metadata;
 
     public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
     {
@@ -16,12 +17,11 @@ namespace Base.Services
         public UIEvent OnActiveDeviceConnected = new();
         public UIEvent OnActiveDeviceDisconnected = new();
 
-        public List<Device> ConnectedDevices => connectedDevices;
-
         private Task<List<Device>> refreshTask;
-        private List<Device> connectedDevices = new();
+        private List<Device> discoveredDevices = new();
         private TextBlock pendingCmdCountText;
         private Device lastConnectedDevice;
+        private Device defferSelectedDevice;
 
         public Device ActiveDevice { get; private set; }
 
@@ -61,6 +61,8 @@ namespace Base.Services
 
         public override void Awake()
         {
+            ApplyComboxStyle();
+
             OnConnectedDevicesUpdated += UpdatePortComboBox;
             var deviceName = Main.MainFooter.AddLeft();
             pendingCmdCountText = new TextBlock()
@@ -72,7 +74,6 @@ namespace Base.Services
             };
             deviceName.Add(pendingCmdCountText);
 
-            Main.RefreshButton.Click += (_, _) => { _ = Refresh(); };
             Main.ConnectButton.Click += (_, _) => { _ = Connect(); };
             Main.DisconnectButton.Click += (_, _) => { _ = Disconnect(); };
 
@@ -83,7 +84,6 @@ namespace Base.Services
             {
                 Main.PortComboBox.Text = ActiveDevice.ToString();
                 Main.PortComboBox.IsEnabled = false;
-                Main.RefreshButton.IsEnabled = false;
                 Main.ConnectButton.Visibility = Visibility.Hidden;
                 Main.DisconnectButton.Visibility = Visibility.Visible;
                 Main.MainFooter.DeviceName.Text = $"{ActiveDevice.productName}";
@@ -93,7 +93,6 @@ namespace Base.Services
             OnActiveDeviceDisconnected += () =>
             {
                 Main.PortComboBox.IsEnabled = true;
-                Main.RefreshButton.IsEnabled = true;
                 Main.ConnectButton.Visibility = Visibility.Visible;
                 Main.DisconnectButton.Visibility = Visibility.Hidden;
                 Main.MainFooter.DeviceName.Text = "Disconnected";
@@ -112,8 +111,41 @@ namespace Base.Services
             {
                 OnSelectedDeviceChanged.Invoke();
             };
+            Main.PortComboBox.DropDownOpened += (sender, e) =>
+            {
+                _ = Refresh();
+            };
+            Main.PortComboBox.DropDownClosed += (sender, e) =>
+            {
+                RemoveUnavailableDevices();
+            };
 
             _ = Refresh();
+        }
+
+        private void PreviewDeviceSelection(object sender, MouseButtonEventArgs e)
+        {
+            var container = (ComboBoxItem)sender;
+
+            // original bound item
+            if (container.DataContext is not Device item) return;
+
+            if (refreshTask != null)
+            {
+                defferSelectedDevice = item;
+                OnConnectedDevicesUpdated += PreviewDeviceSelectionDeffered;
+                e.Handled = true;
+            }
+            Connect(item);
+        }
+
+        private void PreviewDeviceSelectionDeffered(List<Device> devices)
+        {
+            OnConnectedDevicesUpdated -= PreviewDeviceSelectionDeffered;
+            if(defferSelectedDevice == null) return;
+
+            Connect(defferSelectedDevice);
+            defferSelectedDevice = null;
         }
 
         private void UpdatePendingCmdCount()
@@ -161,19 +193,15 @@ namespace Base.Services
         public async Task Refresh()
         {
             if (refreshTask != null) return;
-            await Application.Current.Dispatcher.Invoke(async () =>
-            {
-                Main.RefreshButton.IsEnabled = false;
-            });
 
             refreshTask = Task.Run(FindConnectedDevices);
-            connectedDevices = await refreshTask;
+            discoveredDevices = await refreshTask;
 
-            await Application.Current.Dispatcher.Invoke(async () =>
+            _ = Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                Main.RefreshButton.IsEnabled = true;
+                Main.ConnectButton.IsEnabled = lastConnectedDevice?.IsAvailable ?? true;
 
-                OnConnectedDevicesUpdated?.Invoke(connectedDevices);
+                OnConnectedDevicesUpdated?.Invoke(discoveredDevices);
                 refreshTask = null;
             });
         }
@@ -182,7 +210,7 @@ namespace Base.Services
         {
             try
             {
-                return ConstructDevice(PeripheralInterface.GetConnectedDevices());
+                return MergeDiscoveredInterface(PeripheralInterface.GetConnectedDevices(), discoveredDevices);
             }
             catch (Exception ex)
             {
@@ -191,10 +219,20 @@ namespace Base.Services
             }
         }
 
-        public static List<Device> ConstructDevice(IEnumerable<IPeripheralDetail> interfaces)
+        public static List<Device> MergeDiscoveredInterface(IEnumerable<IPeripheralDetail> discoveredInterfacers, List<Device> existingDevices = null)
         {
-            List<Device> devices = [];
-            foreach (var deviceInterface in interfaces)
+            List<Device> devices = existingDevices ?? [];
+            var interfaceList = discoveredInterfacers.ToList();
+
+            // Disable devices that have no interfaces present in the newly discovered list
+            foreach (var device in devices)
+            {
+                bool hasAnyInterface = device.interfaces.Any(i => interfaceList.Contains(i));
+                device.IsAvailable = hasAnyInterface;
+
+            }
+
+            foreach (var deviceInterface in interfaceList)
             {
                 try
                 {
@@ -204,6 +242,7 @@ namespace Base.Services
                         dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product);
                         devices.Add(dev);
                     }
+                    dev.IsAvailable = true;
                     dev.AddInterface(deviceInterface);
                 }
                 catch (Exception ex)
@@ -214,6 +253,10 @@ namespace Base.Services
             return devices;
         }
 
+        public void RemoveUnavailableDevices()
+        {
+            discoveredDevices.RemoveAll(device => device != lastConnectedDevice && device.IsAvailable == false);
+        }
 
         [GET("connect/pid", true)]
         public bool SelectDropdownPID(ushort pid)
@@ -236,7 +279,7 @@ namespace Base.Services
             await Disconnect();
 
             int idx = Main.PortComboBox.SelectedIndex;
-            if (idx < 0 || idx >= connectedDevices.Count) return;
+            if (idx < 0 || idx >= discoveredDevices.Count) return;
 
             var device = Main.PortComboBox.ItemsSource.Cast<Device>().ToArray()[idx];
             Connect(device);
@@ -276,12 +319,41 @@ namespace Base.Services
             ActiveDevice = null;
         }
 
-        public class Device(ushort vid, ushort pid, string name)
+        private void ApplyComboxStyle()
+        {
+            var baseStyle = (Style)Application.Current.FindResource(typeof(ComboBoxItem));
+
+            var style = new Style(typeof(ComboBoxItem), baseStyle);
+
+            style.Setters.Add(new Setter(
+                UIElement.IsEnabledProperty,
+                new Binding("IsAvailable")));
+
+            style.Setters.Add(new EventSetter(
+                UIElement.PreviewMouseLeftButtonUpEvent,
+                new MouseButtonEventHandler(PreviewDeviceSelection)));
+
+            Main.PortComboBox.ItemContainerStyle = style;
+        }
+
+        public class Device(ushort vid, ushort pid, string name) : INotifyPropertyChanged
         {
             public ushort VID = vid;
             public ushort PID = pid;
             public string productName = name;
             public readonly List<IPeripheralDetail> interfaces = [];
+
+            private bool isAvailable = true;
+            public bool IsAvailable
+            {
+                get => isAvailable;
+                set
+                {
+                    if (isAvailable == value) return;
+                    isAvailable = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAvailable)));
+                }
+            }
 
             public override string ToString()
             {
@@ -293,6 +365,8 @@ namespace Base.Services
                 if (interfaces.Contains(@interface)) return;
                 interfaces.Add(@interface);
             }
+
+            public event PropertyChangedEventHandler PropertyChanged;
         }
     }
 }
