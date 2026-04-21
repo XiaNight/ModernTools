@@ -38,7 +38,7 @@ namespace Base.Pages
 
             var interfaceDetails = await BLEInterface.CreateInterfaceDetailFromAddress(device.Address);
             if (interfaceDetails == null) return;
-            var devices = DeviceSelection.ConstructDevice(interfaceDetails.Cast<IPeripheralDetail>());
+            var devices = DeviceSelection.MergeDiscoveredInterface(interfaceDetails.Cast<IPeripheralDetail>());
             DeviceSelection.Instance.Connect(devices[0]);
 
             /*

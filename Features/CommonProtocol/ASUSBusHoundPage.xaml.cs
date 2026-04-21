@@ -1,8 +1,10 @@
 ﻿namespace Base.UI.Pages;
 
 using Base.Core;
+using Base.Framework.Utilities;
 using Base.Pages;
 using Base.Services;
+using Base.Services.APIService;
 using Base.Services.Peripheral;
 using Microsoft.Win32;
 using System;
@@ -20,6 +22,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using static Base.UI.Pages.ASUSBusHoundPage.BusListener;
 
 public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 {
@@ -31,11 +34,9 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
     private const int MaxVisibleItems = 20000;
     private const int MaxBatchSizePerTick = 2000;
-    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(16);
 
     // Logs
     private readonly ConcurrentQueue<LogRow> pendingLogs = new();
-    private readonly DispatcherTimer flushTimer;
     private ScrollViewer scrollViewer;
     private bool stickToBottom = true;
 
@@ -63,24 +64,21 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     private List<QuickActionEntryData> quickActionEntries = new();
     private bool isQuickActionPanelOpen = false;
 
+    // Debug
+    //private readonly CancellationTokenSource usbpcapcts;
+
     public ASUSBusHoundPage()
     {
         InitializeComponent();
         DataContext = this;
 
-        flushTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = FlushInterval,
-        };
-        flushTimer.Tick += FlushPendingLogs;
-
         StartBtn.Click += StartBtn_Click;
         StopBtn.Click += StopBtn_Click;
 
         SendBtn.Click += SendBtn_Click;
-        Inputbox.PreviewKeyDown += Inputbox_KeyDown;
-        Inputbox.TextChanged += Inputbox_Validation;
-        Inputbox.PreviewTextInput += Inputbox_ValidateInputCharacter;
+        CmdInputbox.PreviewKeyDown += CmdInputbox_KeyDown;
+        CmdInputbox.TextChanged += CmdInputbox_Validation;
+        CmdInputbox.PreviewTextInput += CmdInputbox_ValidateInputCharacter;
         LogGrid.CopyingRowClipboardContent += CopyingRowClipboardContent;
 
         // Quick Action buttons
@@ -88,6 +86,227 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         QuickActionCloseBtn.Click += (_, _) => SetQuickActionPanelOpen(false);
         QuickActionAddBtn.Click += (_, _) => AddNewQuickActionEntry();
         QuickActionImportBtn.Click += (_, _) => ImportQuickActionFile();
+
+        //USBPCapHandler usbpcap = new();
+        //usbpcap.DebugPrintDeviceTree(8);
+
+        //usbpcap.OnPacketCaptured += Usbpcap_OnPacketCaptured;
+
+        //usbpcapcts = new CancellationTokenSource();
+        //Task.Run(() =>
+        //{
+        //    _ = usbpcap.StartCaptureToDebugAsync(@"\\.\USBPcap1", deviceAddress: 16, cancellationToken: usbpcapcts.Token);
+        //});
+        //Start8KTest();
+        //polling();
+    }
+
+    //DispatcherTimer testTimer;
+
+    //private void Start8KTest()
+    //{
+    //    testTimer = new DispatcherTimer
+    //    {
+    //        Interval = TimeSpan.FromMicroseconds(1/8000f)
+    //    };
+    //    testTimer.Tick += (_, _) =>
+    //    {
+    //        byte[] data = new byte[64];
+    //        new Random().NextBytes(data);
+    //        EnqueueLog("TestDevice", "IN", data, "1s");
+    //    };
+    //    testTimer.Start();
+    //}
+
+    //DispatcherTimer pollTimer;
+
+    //private void polling()
+    //{
+    //    pollTimer = new DispatcherTimer
+    //    {
+    //        Interval = TimeSpan.FromSeconds(0.5f)
+    //    };
+    //    pollTimer.Tick += (_, _) =>
+    //    {
+    //        FlushPendingLogs();
+    //    };
+    //    pollTimer.Start();
+    //}
+
+    //private void Usbpcap_OnPacketCaptured(ref USBPCapHandler.PcapRecordHeader pcapHeader, ref USBPCapHandler.UsbPcapPacket packet)
+    //{
+    //    //if (packet.Payload.Length == 0) return;
+    //    //string direction = packet.Direction switch
+    //    //{
+    //    //    USBPCapHandler.UsbPcapEndpointDirection.OUT => "OUT",
+    //    //    USBPCapHandler.UsbPcapEndpointDirection.IN => "IN",
+    //    //    _ => "UNKNOWN"
+    //    //};
+    //    //byte[] data = packet.Payload.ToArray();
+    //    //StartEnqueueLog();
+    //    EnqueueLog(
+    //        $"1",
+    //        "IN",
+    //        [0x01],
+    //        $"{pcapHeader.TsSec}.{pcapHeader.TsUsec}");
+    //}
+
+    private void StartEnqueueLog()
+    {
+        _ = Task.Run(() =>
+        {
+            int count = 0;
+            byte[] data = new byte[64];
+            new Random().NextBytes(data);
+            EnqueueLog("AsyncTestDevice", "IN", data, $"{count++}");
+        });
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+        FlushPendingLogs();
+    }
+
+    public override void OnDestroy()
+    {
+        base.OnDestroy();
+        // Persist quick action entries on destroy
+        SaveQuickActionEntries();
+        //usbpcapcts.Cancel();
+    }
+
+    public override void Start()
+    {
+        base.Start();
+        connectedInterfaces = [];
+        dataReceivedHandlers.Clear();
+        dataSentHandlers.Clear();
+        scrollViewer = FindVisualChild<ScrollViewer>(LogGrid);
+        historyCommands = [];
+        currentSelectedHistoryIndex = -1;
+
+        if (scrollViewer is not null)
+        {
+            scrollViewer.ScrollChanged += OnScrollChanged;
+            UpdateStickToBottom(scrollViewer);
+        }
+
+        // Load quick action entries from persistent storage
+        LoadQuickActionEntries();
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        DeviceSelection.Instance.OnActiveDeviceConnected += ConnectAndStart;
+        DeviceSelection.Instance.OnActiveDeviceDisconnected += Stop;
+
+        if (ActiveDevice != null)
+        {
+            ConnectAndStart();
+        }
+
+        if (Items.Count > 0)
+        {
+            Dispatcher.InvokeAsync(() => LogGrid.ScrollIntoView(Items[^1]), DispatcherPriority.Background);
+        }
+    }
+
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+        DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectAndStart;
+        DeviceSelection.Instance.OnActiveDeviceDisconnected -= Stop;
+    }
+
+    // ----------------------------
+    // External Listeners
+    // ----------------------------
+
+    public List<BusListener> busListeners = new();
+
+    [POST]
+    public void UnregisterListener(string name)
+    {
+        var listener = busListeners.FirstOrDefault(l => l.Name == name);
+        if (listener != null)
+        {
+            busListeners.Remove(listener);
+        }
+    }
+
+    [POST]
+    public bool RegisterNewListener(string name, int bufferSize, int bucketSize)
+    {
+        if (busListeners.Any(l => l.Name == name))
+        {
+            return false; // Name already exists
+        }
+        busListeners.Add(new BusListener(name, bufferSize, bucketSize));
+        return true;
+    }
+
+    public void EnqueueToListeners(byte[] data)
+    {
+        foreach (var listener in busListeners)
+        {
+            listener.EnqueueData(data);
+        }
+    }
+
+    [GET]
+    public ApiResponse ReadOne(string name)
+    {
+        var listener = busListeners.FirstOrDefault(l => l.Name == name);
+        if (listener != null)
+        {
+            if (!listener.ReceivedData.TryDequeue(out MemoryData item)) return null;
+            return new ApiResponse
+            {
+                Data = item.bucket.AsMemory(0, item.length),
+                Status = 200,
+            };
+        }
+        return null;
+    }
+
+    public class BusListener
+    {
+        public string Name { get; }
+        public readonly RingBuffer<MemoryData> ReceivedData;
+        public readonly int bufferSize;
+
+        public BusListener(string name, int bufferSize, int bucketSize)
+        {
+            Name = name;
+            ReceivedData = new RingBuffer<MemoryData>(bufferSize);
+            ReceivedData.Fill((ref MemoryData md) =>
+            {
+                md = new MemoryData
+                {
+                    bucket = new byte[bucketSize],
+                    length = 0
+                };
+            });
+            this.bufferSize = bufferSize;
+        }
+
+        public void EnqueueData(byte[] data)
+        {
+            ReceivedData.EnqueueValue((ref MemoryData memoryData) =>
+            {
+                int length = Math.Min(data.Length, bufferSize);
+                Array.Copy(data, memoryData.bucket, length);
+                memoryData.length = length;
+            });
+        }
+
+        public class MemoryData
+        {
+            public byte[] bucket;
+            public int length;
+        }
     }
 
     // ----------------------------
@@ -355,7 +574,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         ));
     }
 
-    private void Inputbox_ValidateInputCharacter(object sender, System.Windows.Input.TextCompositionEventArgs e)
+    private void CmdInputbox_ValidateInputCharacter(object sender, System.Windows.Input.TextCompositionEventArgs e)
     {
         // Allow only hex characters and whitespace.
         foreach (char c in e.Text)
@@ -371,15 +590,15 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             || (uint)((c | 32) - 'a') <= 5;
     }
 
-    private void Inputbox_Validation(object sender, TextChangedEventArgs e)
+    private void CmdInputbox_Validation(object sender, TextChangedEventArgs e)
     {
-        byte[] parsedCmd = ParseCommand(Inputbox.Text);
-        Inputbox.BorderBrush = parsedCmd == null
+        byte[] parsedCmd = ParseCommand(CmdInputbox.Text);
+        CmdInputbox.BorderBrush = parsedCmd == null
             ? ResourceBrush.Find("SystemControlErrorTextForegroundBrush")
             : ResourceBrush.Find("SystemControlBackgroundBaseHighRevealBorderBrush");
     }
 
-    private void Inputbox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void CmdInputbox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         switch (e.Key)
         {
@@ -389,26 +608,25 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 e.Handled = true;
                 break;
             case System.Windows.Input.Key.Up:
-                if (currentSelectedHistoryIndex < 0) currentBufferCommand = Inputbox.Text;
+                if (currentSelectedHistoryIndex < 0) currentBufferCommand = CmdInputbox.Text;
                 if (historyCommands.Count > currentSelectedHistoryIndex + 1)
                 {
-                    Inputbox.Text = historyCommands[++currentSelectedHistoryIndex];
+                    CmdInputbox.Text = historyCommands[++currentSelectedHistoryIndex];
                 }
                 e.Handled = true;
                 break;
             case System.Windows.Input.Key.Down:
                 if (currentSelectedHistoryIndex > 0)
                 {
-                    Inputbox.Text = historyCommands[--currentSelectedHistoryIndex];
+                    CmdInputbox.Text = historyCommands[--currentSelectedHistoryIndex];
                 }
                 else
                 {
-                    Inputbox.Text = currentBufferCommand;
+                    CmdInputbox.Text = currentBufferCommand;
                     currentSelectedHistoryIndex = -1;
                 }
                 e.Handled = true;
                 break;
-
         }
     }
 
@@ -416,17 +634,10 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         if (UsageSelectionBox.SelectedItem is AvailableDeviceItem t)
         {
-            PeripheralInterface targetInterface = connectedInterfaces.Find(
-                (i) => i.ProductInfo.Usage == t.usage && i.ProductInfo.UsagePage == t.usagePage
-            );
-            if (targetInterface == null) return;
+            string inputText = CmdInputbox.Text;
+            SendCmd(t.usage, t.usagePage, inputText);
 
-            string inputText = Inputbox.Text;
-            byte[] parsedCmd = ParseCommand(inputText);
-            if (parsedCmd == null || parsedCmd.Length == 0) return;
-
-            ProtocolService.AppendCmd(targetInterface, parsedCmd);
-
+            // Update history: only add if it's not the same as the last command.
             currentSelectedHistoryIndex = -1;
             currentBufferCommand = null;
             string last = historyCommands.FirstOrDefault();
@@ -443,55 +654,20 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         }
     }
 
-    public override void Start()
+    private bool SendCmd(ushort usage, ushort usagePage, string cmdText)
     {
-        base.Start();
-        connectedInterfaces = [];
-        dataReceivedHandlers.Clear();
-        dataSentHandlers.Clear();
-        scrollViewer = FindVisualChild<ScrollViewer>(LogGrid);
-        historyCommands = [];
-        currentSelectedHistoryIndex = -1;
-
-        if (scrollViewer is not null)
-        {
-            scrollViewer.ScrollChanged += OnScrollChanged;
-            UpdateStickToBottom(scrollViewer);
-        }
-
-        // Load quick action entries from persistent storage
-        LoadQuickActionEntries();
+        if (connectedInterfaces is null || connectedInterfaces.Count == 0) return false;
+        PeripheralInterface targetInterface = connectedInterfaces.Find(
+            i => i.ProductInfo.Usage == usage && i.ProductInfo.UsagePage == usagePage);
+        return targetInterface == null ? false : SendCmd(targetInterface, cmdText);
     }
 
-    protected override void OnEnable()
+    private bool SendCmd(PeripheralInterface pInterface, string cmdText)
     {
-        base.OnEnable();
-        DeviceSelection.Instance.OnActiveDeviceConnected += ConnectAndStart;
-        DeviceSelection.Instance.OnActiveDeviceDisconnected += Stop;
-
-        if (ActiveDevice != null && !flushTimer.IsEnabled)
-        {
-            ConnectAndStart();
-        }
-
-        if (Items.Count > 0)
-        {
-            Dispatcher.InvokeAsync(() => LogGrid.ScrollIntoView(Items[^1]), DispatcherPriority.Background);
-        }
-    }
-
-    protected override void OnDisable()
-    {
-        base.OnDisable();
-        DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectAndStart;
-        DeviceSelection.Instance.OnActiveDeviceDisconnected -= Stop;
-    }
-
-    public override void OnDestroy()
-    {
-        base.OnDestroy();
-        // Persist quick action entries on destroy
-        SaveQuickActionEntries();
+        byte[] parsedCmd = ParseCommand(cmdText);
+        if (parsedCmd == null || parsedCmd.Length == 0) return false;
+        ProtocolService.AppendCmd(pInterface, parsedCmd);
+        return true;
     }
 
     private void StartBtn_Click(object sender, RoutedEventArgs e)
@@ -588,8 +764,6 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         }
         PopulateComboBox();
 
-        flushTimer.Start();
-
         StartBtn.IsEnabled = false;
         StopBtn.IsEnabled = true;
     }
@@ -601,7 +775,6 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
     private void Stop()
     {
-        flushTimer.Stop();
         if (connectedInterfaces is null || connectedInterfaces.Count == 0)
         {
             return;
@@ -716,7 +889,9 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
     public void EnqueueLog(string device, string phase, byte[] data, string delta)
     {
-        pendingLogs.Enqueue(new LogRow(device, phase, data, ByteToString(data), ByteToDescription(data), delta));
+        pendingLogs.Enqueue(new LogRow(device, phase, data, ByteToString(data), "", delta));
+        
+        EnqueueToListeners(data);
     }
 
     public void ClearLogs()
@@ -744,16 +919,17 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         stickToBottom = sv.ScrollableHeight <= 0 || sv.VerticalOffset >= sv.ScrollableHeight - 1.0;
     }
 
-    private void FlushPendingLogs(object? sender, EventArgs e)
+    readonly List<LogRow> batch = new(Math.Min(MaxBatchSizePerTick, 1024));
+
+    private void FlushPendingLogs()
     {
         if (pendingLogs.IsEmpty)
         {
             return;
         }
 
-        List<LogRow> batch = new(Math.Min(MaxBatchSizePerTick, 1024));
-
-        while (batch.Count < MaxBatchSizePerTick && pendingLogs.TryDequeue(out LogRow? row))
+        batch.Clear();
+        while (batch.Count < MaxBatchSizePerTick && pendingLogs.TryDequeue(out LogRow row))
         {
             batch.Add(row);
         }
@@ -819,7 +995,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             if (IsHex(c))
                 hexCount++;
             else if (!char.IsWhiteSpace(c))
-                throw new FormatException($"Invalid character '{c}'.");
+                return null;
         }
 
         if ((hexCount & 1) != 0)

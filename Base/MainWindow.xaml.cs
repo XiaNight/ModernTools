@@ -13,7 +13,10 @@ namespace Base;
 
 using Components;
 using System.ComponentModel;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using static Base.Components.VerticalTabsManager;
 
@@ -49,6 +52,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Debug.OnLog += LogMessage;
     }
+
+    #region WndProc
+
+    public event Action<IntPtr, int, IntPtr, IntPtr, bool> WindowMessageReceived;
+    public nint Handle => new WindowInteropHelper(this).Handle;
+    private void RegisterWndProc()
+    {
+        var hwndSource = HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        if (hwndSource != null)
+            hwndSource.AddHook(WndProc);
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        WindowMessageReceived?.Invoke(hwnd, msg, wParam, lParam, handled);
+        return IntPtr.Zero;
+    }
+
+    #endregion
 
     #region WPF public
 
@@ -101,6 +123,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         UpdateLayoutMode(ActualWidth);
         MainWindowLoading();
+        RegisterWndProc();
     }
 
     private async void MainWindowLoading()
@@ -115,7 +138,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
 
         SelectTabIndex(0);
-        _ = DeviceSelection.Instance.Refresh();
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
 
         LoadingCover.AutoFinish((t) =>

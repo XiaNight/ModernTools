@@ -9,7 +9,7 @@
 		<Nullable>disable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
-		<InformationalVersion>V01_00_15</InformationalVersion>
+		<InformationalVersion>V01_00_17</InformationalVersion>
 		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
 		<AppName>ModernToolset</AppName>
 		<Company>AsusTek Computer Inc.</Company>
@@ -20,7 +20,6 @@
 		<AssemblyName>$(AppName)_$(CleanInformationalVersion)</AssemblyName>
 		<Title>$(Product) $(CleanInformationalVersion)</Title>
 		<ApplicationIcon>ROG_DevTool.ico</ApplicationIcon>
-		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 	</PropertyGroup>
 
@@ -33,19 +32,23 @@
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<ProjectReference Include="..\Base\Base.csproj" />
 		<ProjectReference Include="..\Features\Audio\Audio.csproj" />
 		<ProjectReference Include="..\Features\CommonProtocol\CommonProtocol.csproj" />
 		<ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
 		<ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
+		<ProjectReference Include="..\Features\ArmouryProtocol\ArmouryProtocol.csproj" />
 	</ItemGroup>
 	
 	<Target Name="PublishPluginProjects" AfterTargets="Publish">
+		<Exec Command="dotnet msbuild ..\Base\Base.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\Audio\Audio.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\CommonProtocol\CommonProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\Gamepad\GamePad.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\ArmouryProtocol\ArmouryProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 	</Target>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">

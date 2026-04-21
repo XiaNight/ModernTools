@@ -1,7 +1,12 @@
-﻿using Base.Pages;
+﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
+using ModernWpf;
+using ModernWpf.Controls;
+using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace CommonProtocol
@@ -82,8 +87,48 @@ namespace CommonProtocol
             ProtocolService.AppendCmd(activeInterface, "get_log", true);
         }
 
+        [AppMenuItem("Set Interval")]
+        private async void IntervalPopup()
+        {
+            var textBox = new TextBox
+            {
+                MinWidth = 220,
+                Margin = new Thickness(0, 12, 0, 0),
+                Text = "1000"
+            };
+
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Enter interval (ms):"
+            });
+            panel.Children.Add(textBox);
+
+            var dialog = new ContentDialog
+            {
+                Title = "Interval",
+                Content = panel,
+                PrimaryButtonText = "OK",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            if (int.TryParse(textBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int interval) && interval > 0)
+            {
+                Dispatcher.Invoke(() => timer.Interval = TimeSpan.FromMilliseconds(interval));
+            }
+        }
+
+
         private void ConnectToInterface()
         {
+            if (timer.IsEnabled) return;
             var device = DeviceSelection.Instance.ActiveDevice;
             try
             {

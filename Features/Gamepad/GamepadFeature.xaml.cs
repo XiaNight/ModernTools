@@ -8,6 +8,7 @@ using ModernWpf.Controls;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,7 +24,6 @@ namespace Gamepad
 
     public class GamepadPage : PageBase
     {
-        [Path("Gamepad")]
         public override string PageName => "Gamepad";
         public override string Glyph => "\uE7FC";
         public override int NavOrder => 0;
@@ -44,6 +44,10 @@ namespace Gamepad
         public short RYf => NormalizeUnsigned(RY);
         public byte LTf => LT;
         public byte RTf => RT;
+
+        // JoyStick
+        private JoyStickMinMax leftJoyStick = new();
+        private JoyStickMinMax rightJoyStick = new();
 
         // Current state of the buttons (0/1)
         private const int BUTTON_COUNT = 32;
@@ -73,7 +77,7 @@ namespace Gamepad
         // Chart
         private Action<long> appendChartData = (_) => { }; // Add data point to chart
         private Action<long> tickChartData;
-        private int chartType = 0;
+        private ChartType chartType = 0;
         private ChartRenderMode renderMode = ChartRenderMode.Line;
         private bool isChartPaused = false;
         private FullWindowChart fullWindowChart = null;
@@ -265,8 +269,8 @@ namespace Gamepad
                 _ = dialog.ShowAsync();
             };
 
-            page.ChartType.SelectionChanged += (_, _) => SetChartType(page.ChartType.SelectedIndex);
-            SetChartType(page.ChartType.SelectedIndex);
+            page.ChartType.SelectionChanged += (_, _) => SetChartType((ChartType)page.ChartType.SelectedIndex);
+            SetChartType((ChartType)page.ChartType.SelectedIndex);
             tickChartData = (t) => StripChart.Tick(t);
 
             root.Children.Add(page);
@@ -282,7 +286,7 @@ namespace Gamepad
         protected override void OnEnable()
         {
             base.OnEnable();
-            Clear();
+            //Clear();
         }
 
         protected override void OnDisable()
@@ -316,61 +320,64 @@ namespace Gamepad
             }
         }
 
-        private void SetChartType(int chartIndex)
+        private void SetChartType(ChartType chartIndex)
         {
             chartType = chartIndex;
-            page.XYChartContainer.Visibility = chartType > 6 ? Visibility.Visible : Visibility.Collapsed;
-            page.StripChartContainer.Visibility = chartType <= 6 ? Visibility.Visible : Visibility.Collapsed;
+            page.XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+            page.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
             page.ChartsCanvas.Visibility = fullWindowChart == null ? Visibility.Visible : Visibility.Collapsed;
 
             if (fullWindowChart != null)
             {
-                fullWindowChart.XYChartContainer.Visibility = chartType > 6 ? Visibility.Visible : Visibility.Collapsed;
-                fullWindowChart.StripChartContainer.Visibility = chartType <= 6 ? Visibility.Visible : Visibility.Collapsed;
+                fullWindowChart.XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+                fullWindowChart.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            page.RecordButton.IsEnabled = chartType <= 6;
+            page.RecordButton.IsEnabled = chartType <= ChartType.RT;
 
             StripChart.Clear();
             XYChart.Clear();
 
             appendChartData = chartType switch
             {
-                0 => (l) => StripChart.AddSample(reportRate, l),
-                1 => (l) => StripChart.AddSample(Xf, l),
-                2 => (l) => StripChart.AddSample(Yf, l),
-                3 => (l) => StripChart.AddSample(RXf, l),
-                4 => (l) => StripChart.AddSample(RYf, l),
-                5 => (l) => StripChart.AddSample(LTf, l),
-                6 => (l) => StripChart.AddSample(RTf, l),
-                7 => (_) => XYChart.AddSample(new(X, -Y)),
-                8 => (_) => XYChart.AddSample(new(RX, -RY)),
+                ChartType.ReportRate => (l) => StripChart.AddSample(reportRate, l),
+                ChartType.SmoothedReportRate => (l) => StripChart.AddSample(reportRateSmoothed, l),
+                ChartType.X => (l) => StripChart.AddSample(Xf, l),
+                ChartType.Y => (l) => StripChart.AddSample(Yf, l),
+                ChartType.RX => (l) => StripChart.AddSample(RXf, l),
+                ChartType.RY => (l) => StripChart.AddSample(RYf, l),
+                ChartType.LT => (l) => StripChart.AddSample(LTf, l),
+                ChartType.RT => (l) => StripChart.AddSample(RTf, l),
+                ChartType.LeftStick => (_) => XYChart.AddSample(new(X, -Y)),
+                ChartType.RightStick => (_) => XYChart.AddSample(new(RX, -RY)),
                 _ => (_) => { }
             };
 
             addRecordData = chartType switch
             {
-                0 => (DateTime time) => $"{time:HH:mm:ss.fff},{reportRate}",
-                1 => (DateTime time) => $"{time:HH:mm:ss.fff},{Xf}",
-                2 => (DateTime time) => $"{time:HH:mm:ss.fff},{Yf}",
-                3 => (DateTime time) => $"{time:HH:mm:ss.fff},{RXf}",
-                4 => (DateTime time) => $"{time:HH:mm:ss.fff},{RYf}",
-                5 => (DateTime time) => $"{time:HH:mm:ss.fff},{LTf}",
-                6 => (DateTime time) => $"{time:HH:mm:ss.fff},{RTf}",
-                _ => (DateTime time) => ""
+                ChartType.ReportRate => time => $"{time:HH:mm:ss.fff},{reportRate}",
+                ChartType.SmoothedReportRate => time => $"{time:HH:mm:ss.fff},{reportRateSmoothed}",
+                ChartType.X => time => $"{time:HH:mm:ss.fff},{Xf}",
+                ChartType.Y => time => $"{time:HH:mm:ss.fff},{Yf}",
+                ChartType.RX => time => $"{time:HH:mm:ss.fff},{RXf}",
+                ChartType.RY => time => $"{time:HH:mm:ss.fff},{RYf}",
+                ChartType.LT => time => $"{time:HH:mm:ss.fff},{LTf}",
+                ChartType.RT => time => $"{time:HH:mm:ss.fff},{RTf}",
+                _ => time => ""
             };
 
             switch (chartType)
             {
-                case 0:
+                case ChartType.ReportRate:
+                case ChartType.SmoothedReportRate:
                     StripChart.MaxY = 10000; StripChart.MinY = 0; break;
-                case 1:
-                case 2:
-                case 3:
-                case 4:
+                case ChartType.X:
+                case ChartType.Y:
+                case ChartType.RX:
+                case ChartType.RY:
                     StripChart.MaxY = 32768; StripChart.MinY = -32768; break;
-                case 5:
-                case 6:
+                case ChartType.LT:
+                case ChartType.RT:
                     StripChart.MaxY = 256; StripChart.MinY = 0; break;
             }
         }
@@ -456,6 +463,9 @@ namespace Gamepad
                     byte right = newData.xinput_state.Gamepad.bRightTrigger;
                     if (right != RT) rZCounter++;
                     RT = right;
+
+                    leftJoyStick.Update(Xf, Yf);
+                    rightJoyStick.Update(RXf, RYf);
                 }
 
                 if (!isChartPaused)
@@ -508,9 +518,9 @@ namespace Gamepad
                 LT = xinput_state.Gamepad.bLeftTrigger;
                 RT = xinput_state.Gamepad.bRightTrigger;
 
-                if (!isChartPaused && chartType <= 6)
+                if (!isChartPaused && chartType <= ChartType.RT)
                 {
-                    if (chartType == 0 && ++noDataCounter > 5)
+                    if (chartType <= ChartType.SmoothedReportRate && ++noDataCounter > 5)
                     {
                         reportRate = 0;
                         appendChartData.Invoke(DateTime.UtcNow.Ticks);
@@ -530,6 +540,8 @@ namespace Gamepad
         {
             page.LeftJoyStick.SetStick(Xf, Yf);
             page.RightJoyStick.SetStick(RXf, RYf);
+            page.LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
+            page.RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
 
             page.GamepadController.LeftStickX = Xf;
             page.GamepadController.LeftStickY = Yf;
@@ -634,7 +646,7 @@ namespace Gamepad
             }
             if (index < 0) index = 0;
 
-            Clear();
+            //Clear();
 
             ActiveInterface = ActiveDevice.interfaces[index].Connect(true);
             ActiveInterface.OnDataReceived += Parse;
@@ -741,6 +753,9 @@ namespace Gamepad
             page.RightJoyStick.Clear();
             page.RightTrigger.Clear();
             page.LeftTrigger.Clear();
+            leftJoyStick.Reset();
+            rightJoyStick.Reset();
+
             for (int i = 0; i < buttonCounter.Length; i++) buttonCounter[i] = 0;
             zCounter = 0;
             rZCounter = 0;
@@ -844,6 +859,28 @@ namespace Gamepad
 
         private static short NormalizeUnsigned(int v) => (short)(v + short.MinValue);
 
+        private class JoyStickMinMax
+        {
+            public int MinX { get; private set; } = int.MaxValue;
+            public int MaxX { get; private set; } = int.MinValue;
+            public int MinY { get; private set; } = int.MaxValue;
+            public int MaxY { get; private set; } = int.MinValue;
+            public void Update(int x, int y)
+            {
+                if (x < MinX) MinX = x;
+                if (x > MaxX) MaxX = x;
+                if (y < MinY) MinY = y;
+                if (y > MaxY) MaxY = y;
+            }
+            public void Reset()
+            {
+                MinX = int.MaxValue;
+                MaxX = int.MinValue;
+                MinY = int.MaxValue;
+                MaxY = int.MinValue;
+            }
+        }
+
         public struct Data
         {
             public readonly byte[] data;
@@ -859,6 +896,20 @@ namespace Gamepad
                 this.data = data;
                 this.xinput_state = xinput_state;
             }
+        }
+
+        public enum ChartType : int
+        {
+            ReportRate = 0,
+            SmoothedReportRate = 1,
+            X = 2,
+            Y = 3,
+            RX = 4,
+            RY = 5,
+            LT = 6,
+            RT = 7,
+            LeftStick = 8,
+            RightStick = 9,
         }
     }
 }

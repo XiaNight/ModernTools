@@ -2,129 +2,194 @@
 using Base.Services;
 using Base.Services.Peripheral;
 using System.Collections.Concurrent;
-using System.Data;
+using System.Runtime.InteropServices;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace GenericMouseAnalyzer
+namespace GenericMouseAnalyzer;
+
+/// <summary>
+/// Interaction logic for GenericMouseAnalyzer.xaml
+/// </summary>
+public partial class GenericMouseAnalyzer : UserControl
 {
-    /// <summary>
-    /// Interaction logic for GenericMouseAnalyzer.xaml
-    /// </summary>
-    public partial class GenericMouseAnalyzer : UserControl
+    public GenericMouseAnalyzer()
     {
-        public GenericMouseAnalyzer()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+    }
+}
+
+public class GenericMouseAnalyzerPage : Base.Pages.PageBase
+{
+    [Path("Mouse")]
+    public override string PageName => "Genric Mouse Analyzer";
+
+    protected GenericMouseAnalyzer page;
+    protected PeripheralInterface ActiveInterface { get; private set; }
+
+    // Report Rate
+    private readonly System.Diagnostics.Stopwatch stopwatch = new();
+    private readonly ConcurrentQueue<long> timestamps = new();
+    private float reportRateSmoothed = 0;
+    private readonly long startTime = DateTime.Now.Ticks;
+    private readonly long lastTimestamp = DateTime.Now.Ticks;
+    private readonly float reportRate = 0f;
+    private readonly float reportRateRaw = 0f;
+    private readonly float momentum = 0;
+    private readonly int noDataCounter = 0;
+
+    private const int WM_INPUT = 0x00FF;
+    private const int RID_INPUT = 0x10000003;
+    private const int RIM_TYPEMOUSE = 0;
+    private const int RIDEV_INPUTSINK = 0x00000100;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTHEADER
+    {
+        public uint dwType;
+        public uint dwSize;
+        public IntPtr hDevice;
+        public IntPtr wParam;
     }
 
-    public class GenericMouseAnalyzerPage : Base.Pages.PageBase
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWMOUSE
     {
-        [Path("Mouse")]
-        public override string PageName => "Genric Mouse Analyzer";
+        public ushort usFlags;
+        public uint ulButtons;
+        public ushort usButtonFlags;
+        public ushort usButtonData;
+        public uint ulRawButtons;
+        public int lLastX;
+        public int lLastY;
+        public uint ulExtraInformation;
+    }
 
-        protected GenericMouseAnalyzer page;
-        protected PeripheralInterface ActiveInterface { get; private set; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUT
+    {
+        public RAWINPUTHEADER header;
+        public RAWMOUSE mouse;
+    }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTDEVICE
+    {
+        public ushort usUsagePage;
+        public ushort usUsage;
+        public uint dwFlags;
+        public IntPtr hwndTarget;
+    }
 
-        // Report Rate
-        private readonly System.Diagnostics.Stopwatch stopwatch = new();
-        private readonly ConcurrentQueue<long> timestamps = new();
-        private float reportRateSmoothed = 0;
-        private long startTime = DateTime.Now.Ticks;
-        private long lastTimestamp = DateTime.Now.Ticks;
-        private float reportRate = 0f;
-        private float reportRateRaw = 0f;
-        private float momentum = 0;
-        private int noDataCounter = 0;
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetRawInputData(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
 
-        public override void Awake()
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterRawInputDevices([In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
+
+    public override void Awake()
+    {
+        base.Awake();
+        page = new GenericMouseAnalyzer();
+
+        WriteableBitmap bmp = new(1024, 1024, 96, 96, PixelFormats.Bgra32, null);
+        Image img = new() { Source = bmp };
+        root.Children.Add(img);
+        root.Children.Add(page);
+    }
+
+    public override void Start()
+    {
+        base.Start();
+        RegisterRawMouseDevice();
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        ConnectToInterface();
+    }
+
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+        DisconnectInterface();
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+
+        // Report-rate window
+        float windowSeconds = 1f;
+        long window = stopwatch.ElapsedTicks - TimeSpan.FromSeconds(windowSeconds).Ticks;
+        while (timestamps.TryPeek(out long ts) && ts < window)
+            timestamps.TryDequeue(out _);
+
+        reportRateSmoothed = timestamps.Count / 1f;
+
+        page.ReportRateText.Text = $"{reportRateSmoothed}";
+    }
+
+    private void ConnectToInterface()
+    {
+        timestamps.Clear();
+        stopwatch.Restart();
+
+        Main.WindowMessageReceived += OnWndProc;
+    }
+
+    private void DisconnectInterface()
+    {
+        if (ActiveInterface == null) return;
+        ActiveInterface = null;
+
+        stopwatch.Stop();
+        timestamps.Clear();
+
+        Main.WindowMessageReceived -= OnWndProc;
+    }
+
+    protected void OnWndProc(nint hwnd, int msg, nint wParam, nint lParam, bool handled)
+    {
+        if (msg == WM_INPUT)
         {
-            base.Awake();
-            page = new GenericMouseAnalyzer();
-
-            WriteableBitmap bmp = new WriteableBitmap(1024, 1024, 96, 96, PixelFormats.Bgra32, null);
-            Image img = new Image { Source = bmp };
-            root.Children.Add(img);
-
-            root.Children.Add(page);
-        }
-
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-
-            DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
-        }
-
-        protected override void OnDisable()
-        {
-            base.OnDisable();
-
-            DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectToInterface;
-        }
-
-        protected override void Update()
-        {
-            base.Update();
-
-            // Report-rate window
-            float windowSeconds = 1f;
-            long window = stopwatch.ElapsedTicks - TimeSpan.FromSeconds(windowSeconds).Ticks;
-            while (timestamps.TryPeek(out long ts) && ts < window)
-                timestamps.TryDequeue(out _);
-
-            reportRateSmoothed = timestamps.Count / 1f;
-
-            page.ReportRateText.Text = $"{reportRateSmoothed}";
-        }
-
-        private void ConnectToInterface()
-        {
-            DisconnectInterface();
-
-            var info = DeviceSelection.Instance.ActiveDevice;
-
-            if (ActiveDevice.interfaces.Count == 0) return;
-
-            foreach(var interf in info.interfaces)
+            uint dwSize = 0;
+            GetRawInputData(lParam, RID_INPUT, IntPtr.Zero, ref dwSize, (uint)Marshal.SizeOf(typeof(RAWINPUTHEADER)));
+            if (dwSize > 0)
             {
-                var conn = interf.Connect(true);
-                conn.OnDataReceived += Parse;
+                IntPtr buffer = Marshal.AllocHGlobal((int)dwSize);
+                try
+                {
+                    if (GetRawInputData(lParam, RID_INPUT, buffer, ref dwSize, (uint)Marshal.SizeOf(typeof(RAWINPUTHEADER))) == dwSize)
+                    {
+                        RAWINPUT raw = Marshal.PtrToStructure<RAWINPUT>(buffer);
+                        if ((raw.header.dwType == RIM_TYPEMOUSE) &&
+                            (raw.mouse.lLastX != 0 || raw.mouse.lLastY != 0))
+                        {
+                            long tick = stopwatch.ElapsedTicks;
+                            timestamps.Enqueue(tick);
+                        }
+                    }
+                }
+                finally { Marshal.FreeHGlobal(buffer); }
             }
-
-            //var usagePage = info.PID == 0x1ACE ? 0xFF01 : 0x0C;
-            //if (info.interfaces.Count == 0) return;
-
-            //var deviceInterface = info.interfaces.FirstOrDefault(@interface =>
-            //    (@interface.UsagePage == usagePage) && (@interface.Usage == 1),
-            //    info.interfaces[0]
-            //);
-            //if (deviceInterface == null) return;
-
-            //ActiveInterface = deviceInterface.Connect(true);
-            //ActiveInterface.OnDataReceived += Parse;
-
-            stopwatch.Restart();
         }
+    }
+    private void RegisterRawMouseDevice()
+    {
+        var rid = new RAWINPUTDEVICE[1];
+        rid[0].usUsagePage = 0x01;
+        rid[0].usUsage = 0x02;
+        rid[0].dwFlags = RIDEV_INPUTSINK;
+        rid[0].hwndTarget = Main.Handle;
 
-        private void DisconnectInterface()
+        if (!RegisterRawInputDevices(rid, 1, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE))))
         {
-            if (ActiveInterface == null) return;
-            ActiveInterface = null;
-
-            stopwatch.Stop();
-            timestamps.Clear();
-        }
-
-        private void Parse(ReadOnlyMemory<byte> readOnlyByte, DateTime time)
-        {
-            var data = readOnlyByte.Span;
-
-            long tick = stopwatch.ElapsedTicks;
-            timestamps.Enqueue(tick);
+            int err = Marshal.GetLastWin32Error();
+            Debug.Log($"RegisterRawInputDevices failed. Error {err}");
         }
     }
 }

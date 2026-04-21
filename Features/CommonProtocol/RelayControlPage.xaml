@@ -1,0 +1,89 @@
+<base:PageBase x:Class="CommonProtocol.RelayControlPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:CommonProtocol"
+             xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+             mc:Ignorable="d"
+             d:DesignHeight="500" d:DesignWidth="800" d:Background="White">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Text="Control USB relay board channels. Select the device by PID and usage page."
+            Opacity="0.9"
+            Margin="0,0,0,10"/>
+
+        <!-- Connection settings -->
+        <Border Grid.Row="1" Padding="12" CornerRadius="6" BorderThickness="1" BorderBrush="#33FFFFFF" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Device Connection" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                    <UniformGrid Columns="4" Margin="0,0,0,8">
+                        <TextBlock VerticalAlignment="Center" Text="Device PID (hex)"/>
+                        <TextBox x:Name="PidTextBox" Text="1800" Width="120" HorizontalAlignment="Left"/>
+
+                        <TextBlock VerticalAlignment="Center" Text="Usage Page (hex)"/>
+                        <TextBox x:Name="UsagePageTextBox" Text="FF00" Width="120" HorizontalAlignment="Left"/>
+                    </UniformGrid>
+
+                    <TextBlock x:Name="StatusTextBlock" Text="Not connected." Opacity="0.8" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="12,0,0,0">
+                    <Button x:Name="ConnectButton" Content="Connect" Width="100" Margin="0,0,0,6"/>
+                    <Button x:Name="DisconnectButton" Content="Disconnect" Width="100" IsEnabled="False"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Relay buttons -->
+        <Border Grid.Row="2" Padding="12" CornerRadius="6" BorderThickness="1" BorderBrush="#33FFFFFF">
+            <StackPanel>
+                <TextBlock Text="Relay Channels" FontWeight="SemiBold" Margin="0,0,0,10"/>
+
+                <!-- Key 4 relays (index 0-3) -->
+                <TextBlock Text="Group A - Key 4 (4 channels)" Opacity="0.7" Margin="0,0,0,6" FontSize="11"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <Button x:Name="RelayA0Button" Content="A0" Width="90" Height="60" Margin="0,0,8,0"
+                            Click="RelayButton_Click" Tag="A0"/>
+                    <Button x:Name="RelayA1Button" Content="A1" Width="90" Height="60" Margin="0,0,8,0"
+                            Click="RelayButton_Click" Tag="A1"/>
+                    <Button x:Name="RelayA2Button" Content="A2" Width="90" Height="60" Margin="0,0,8,0"
+                            Click="RelayButton_Click" Tag="A2"/>
+                    <Button x:Name="RelayA3Button" Content="A3" Width="90" Height="60"
+                            Click="RelayButton_Click" Tag="A3"/>
+                </StackPanel>
+
+                <!-- Key 3 relays (index 0-1) -->
+                <TextBlock Text="Group B - Key 3 (2 channels)" Opacity="0.7" Margin="0,0,0,6" FontSize="11"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="RelayB0Button" Content="B0" Width="90" Height="60" Margin="0,0,8,0"
+                            Click="RelayButton_Click" Tag="B0"/>
+                    <Button x:Name="RelayB1Button" Content="B1" Width="90" Height="60"
+                            Click="RelayButton_Click" Tag="B1"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="AllOnButton" Content="All ON" Width="90" Margin="0,0,8,0"/>
+                    <Button x:Name="AllOffButton" Content="All OFF" Width="90"/>
+                </StackPanel>
+
+                <TextBlock Opacity="0.6" Margin="0,8,0,0" FontSize="11"
+                           Text="Button color: Green = ON, Red = OFF, Gray = Unknown. Click a button to toggle the relay."/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</base:PageBase>

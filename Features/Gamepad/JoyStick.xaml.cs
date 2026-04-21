@@ -71,10 +71,9 @@ namespace Gamepad
         {
             radiusPx = 80.0;
             UpdateVisual();
-            UpdateCircularityLine();
         }
 
-        private void UpdateVisual()
+        public void UpdateVisual()
         {
             // deadzone
             var sx = stickX;
@@ -87,6 +86,12 @@ namespace Gamepad
             directionSegment.Point = new Point(px, py);
             Canvas.SetLeft(CenterPoint, px);
             Canvas.SetTop(CenterPoint, py);
+
+            double circularity = CalculateCircularity();
+            CircularityText.Text = circularity.ToString("P2");
+            MagnitudeText.Text = lastMagnitude.ToString("P2");
+
+            UpdateCircularityLine();
         }
 
         public void SetStick(int x, int y)
@@ -95,11 +100,6 @@ namespace Gamepad
             stickY = -y / 32767f;
             XValueText.Text = $"{x: #;-#; 0}";
             YValueText.Text = $"{y: #;-#; 0}";
-
-            if (x < xMin) { xMin = x; XValueMinText.Text = xMin.ToString(" #;-#; 0"); }
-            if (x > xMax) { xMax = x; XValueMaxText.Text = xMax.ToString(" #;-#; 0"); }
-            if (y < yMin) { yMin = y; YValueMinText.Text = yMin.ToString(" #;-#; 0"); }
-            if (y > yMax) { yMax = y; YValueMaxText.Text = yMax.ToString(" #;-#; 0"); }
 
             int currentSegment = CalculateSegmentIndex(x, y);
             float currentMagnitude = UnitMagnitude(x, y);
@@ -110,13 +110,16 @@ namespace Gamepad
                 lastMagnitude = segmentMagnitudes[currentSegment];
             }
 
-            double circularity = CalculateCircularity();
-            CircularityText.Text = circularity.ToString("P2");
-            MagnitudeText.Text = currentMagnitude.ToString("P2");
-
-            UpdateVisual();
-            UpdateCircularityLine();
             lastSegment = currentSegment;
+            UpdateVisual();
+        }
+
+        public void SetMinMax(int xMin, int xMax, int yMin, int yMax)
+        {
+            XValueMinText.Text = xMin.ToString(" #;-#; 0");
+            XValueMaxText.Text = xMax.ToString(" #;-#; 0");
+            YValueMinText.Text = yMin.ToString(" #;-#; 0");
+            YValueMaxText.Text = yMax.ToString(" #;-#; 0");
         }
 
         private void ApplyArcInterpolation(int lastSegment, int segment, float currentMagnitude)
@@ -197,12 +200,12 @@ namespace Gamepad
 
         public void Clear()
         {
-            xMin = int.MaxValue; XValueMinText.Text = " --";
-            xMax = int.MinValue; XValueMaxText.Text = " --";
-            yMin = int.MaxValue; YValueMinText.Text = " --";
-            yMax = int.MinValue; YValueMaxText.Text = " --";
             XValueText.Text = " --";
             YValueText.Text = " --";
+            XValueMinText.Text = " --";
+            YValueMinText.Text = " --";
+            XValueMaxText.Text = " --";
+            YValueMaxText.Text = " --";
             MagnitudeText.Text = " --";
             CircularityText.Text = " --";
 
@@ -218,7 +221,7 @@ namespace Gamepad
             stickY = 0;
             lastSegment = -1;
             lastMagnitude = 0f;
-            UpdateCircularityLine();
+            UpdateVisual();
         }
 
         private readonly LineSegment directionSegment;
@@ -226,11 +229,6 @@ namespace Gamepad
 
         private double stickX;
         private double stickY;
-
-        private int xMin = 0;
-        private int xMax = 0;
-        private int yMin = 0;
-        private int yMax = 0;
 
         // Circularity segments
         private const int segments = 64;
