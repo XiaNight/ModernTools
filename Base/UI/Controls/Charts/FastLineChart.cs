@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -56,8 +57,15 @@ namespace Base.Components.Chart
             SetCurrentValue(LabelBrushProperty, Brushes.Black);
             SetCurrentValue(AxisPenProperty, new Pen(Brushes.Gray, 1));
 
+            SetCurrentValue(IndicatorBrushProperty, Brushes.OrangeRed);
+            SetCurrentValue(CursorLineBrushProperty, new SolidColorBrush(Color.FromArgb(140, 200, 200, 200)));
+            SetCurrentValue(CursorLabelFontSizeProperty, 11d);
+
             UpdateLinePen();
             ApplyAA();
+
+            MouseMove += OnMouseMove;
+            MouseLeave += OnMouseLeave;
         }
 
         // ---- Dependency Properties ----
@@ -128,6 +136,18 @@ namespace Base.Components.Chart
         public static readonly DependencyProperty AxisPenProperty =
             DependencyProperty.Register(nameof(AxisPen), typeof(Pen), typeof(FastLineChartControl),
                 new FrameworkPropertyMetadata(new Pen(Brushes.Gray, 1), FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty IndicatorBrushProperty =
+            DependencyProperty.Register(nameof(IndicatorBrush), typeof(Brush), typeof(FastLineChartControl),
+                new FrameworkPropertyMetadata(Brushes.OrangeRed, FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty CursorLineBrushProperty =
+            DependencyProperty.Register(nameof(CursorLineBrush), typeof(Brush), typeof(FastLineChartControl),
+                new FrameworkPropertyMetadata(new SolidColorBrush(Color.FromArgb(140, 200, 200, 200)), FrameworkPropertyMetadataOptions.AffectsRender));
+
+        public static readonly DependencyProperty CursorLabelFontSizeProperty =
+            DependencyProperty.Register(nameof(CursorLabelFontSize), typeof(double), typeof(FastLineChartControl),
+                new FrameworkPropertyMetadata(11d, FrameworkPropertyMetadataOptions.AffectsRender));
 
         public double MinY
         {
@@ -231,6 +251,24 @@ namespace Base.Components.Chart
             set => SetValue(AxisPenProperty, value);
         }
 
+        public Brush IndicatorBrush
+        {
+            get => (Brush)GetValue(IndicatorBrushProperty);
+            set => SetValue(IndicatorBrushProperty, value);
+        }
+
+        public Brush CursorLineBrush
+        {
+            get => (Brush)GetValue(CursorLineBrushProperty);
+            set => SetValue(CursorLineBrushProperty, value);
+        }
+
+        public double CursorLabelFontSize
+        {
+            get => (double)GetValue(CursorLabelFontSizeProperty);
+            set => SetValue(CursorLabelFontSizeProperty, value);
+        }
+
         // ---- Public API ----
         public void SetData(float[] data)
         {
@@ -262,6 +300,8 @@ namespace Base.Components.Chart
 
             if (ShowAxis)
                 DrawAxis(dc, full, plot);
+
+            _plot = plot;
 
             var data = _data;
             if (data == null || data.Length < 2)
@@ -309,6 +349,105 @@ namespace Base.Components.Chart
                 dc.DrawImage(bitmap, plot);
                 dc.Pop();
             }
+
+            if (_hover && _plot.Contains(_mousePx))
+                DrawCursorOverlay(dc, plot);
+        }
+
+        // ---- Cursor / hover overlay  (づ｡◕‿‿◕｡)づ ----
+        private void OnMouseLeave(object sender, MouseEventArgs e)
+        {
+            _hover = false;
+            InvalidateVisual();
+        }
+
+        private void OnMouseMove(object sender, MouseEventArgs e)
+        {
+            _mousePx = e.GetPosition(this);
+            _hover = _plot.Width > 0 && _plot.Contains(_mousePx) && _data != null && _data.Length >= 2;
+            InvalidateVisual();
+        }
+
+        private void DrawCursorOverlay(DrawingContext dc, Rect plot)
+        {
+            var data = _data;
+            if (data == null || data.Length < 2) return;
+
+            // Determine the active data slice (same as PrepareRenderData)
+            int i0 = 0, i1 = data.Length - 1;
+            if (SpectralMode && TryGetBinRange(data.Length, out int b0, out int b1))
+            {
+                i0 = b0;
+                i1 = b1;
+            }
+            int length = i1 - i0 + 1;
+            if (length < 2) return;
+
+            // Map mouse X to data index
+            double t = (_mousePx.X - plot.Left) / Math.Max(1e-12, plot.Width);
+            t = Math.Max(0, Math.Min(1, t));
+            int idx = (int)Math.Round(t * (length - 1));
+            idx = Math.Max(0, Math.Min(length - 1, idx));
+
+            float rawY = data[i0 + idx];
+
+            // Compute screen Y and display value
+            float effectiveMinY = (float)MinY;
+            float effectiveMaxY = (float)MaxY;
+            if (effectiveMaxY <= effectiveMinY) effectiveMaxY = effectiveMinY + 1e-6f;
+
+            double displayY;
+            double screenT;
+
+            if (ScaleMode == YScaleMode.Linear)
+            {
+                displayY = rawY;
+                screenT = (rawY - effectiveMinY) / (effectiveMaxY - effectiveMinY);
+            }
+            else
+            {
+                double eps = LogEpsilon;
+                if (!(eps > 0)) eps = 1e-12;
+                float logEps = (float)Math.Log10(eps);
+                float adjMinY = effectiveMinY < logEps ? logEps : effectiveMinY;
+                float adjMaxY = effectiveMaxY < adjMinY + 1e-6f ? adjMinY + 1e-6f : effectiveMaxY;
+
+                double logV = rawY < eps ? logEps : Math.Log10(rawY);
+                displayY = rawY;
+                screenT = (logV - adjMinY) / (adjMaxY - adjMinY);
+            }
+
+            screenT = Math.Max(0, Math.Min(1, screenT));
+            double dotX = _mousePx.X;
+            double dotY = plot.Bottom - screenT * plot.Height;
+
+            // Vertical dashed cursor line
+            var vPen = new Pen(CursorLineBrush, 1.0) { DashStyle = DashStyles.Dash };
+            dc.DrawLine(vPen, new Point(dotX, plot.Top), new Point(dotX, plot.Bottom));
+
+            // Horizontal dashed reference line
+            var hPen = new Pen(CursorLineBrush, 1.0) { DashStyle = DashStyles.Dash };
+            dc.DrawLine(hPen, new Point(plot.Left, dotY), new Point(plot.Right, dotY));
+
+            // Indicator dot
+            dc.DrawEllipse(IndicatorBrush, new Pen(Brushes.White, 1.5), new Point(dotX, dotY), 4.5, 4.5);
+
+            // Value label on the left side, aligned with the dot
+            var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            string labelText = displayY.ToString("0.###", CultureInfo.InvariantCulture);
+            var typeface = new Typeface(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+            var ft = new FormattedText(
+                labelText,
+                CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                CursorLabelFontSize,
+                IndicatorBrush,
+                dpi);
+
+            double labelX = Math.Max(0, plot.Left - 4 - ft.Width);
+            double labelY = dotY - ft.Height * 0.5;
+            dc.DrawText(ft, new Point(labelX, labelY));
         }
 
         private float[] PrepareRenderData(float[] data, out float minY, out float maxY)
@@ -562,5 +701,10 @@ namespace Base.Components.Chart
         private float[] _colMin;
         private float[] _colMax;
         private byte[] _colHas;
+
+        // ---- Hover / cursor state ----
+        private bool _hover;
+        private Point _mousePx;
+        private Rect _plot;
     }
 }
