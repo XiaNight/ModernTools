@@ -219,9 +219,18 @@ namespace Base.Services.APIService
                 }
 
                 Exception? lastBindError = null;
+                bool hasBodyData = bodyKV.Count > 0 || bodyRoot != null;
                 foreach (Route route in candidates)
                 {
-                    if (route.Parameters.Length != queryKV.Count) continue;
+                    // When a JSON/form body is present, params may come from the body instead of the
+                    // query string, so skip the strict count check and let Bind resolve them.
+                    // Without a body, require: required params ≤ queryKV.Count ≤ total params
+                    // (allowing optional/default params to be omitted from the query string).
+                    if (!hasBodyData)
+                    {
+                        int requiredParamCount = route.Parameters.Count(p => !p.HasDefaultValue);
+                        if (queryKV.Count < requiredParamCount || queryKV.Count > route.Parameters.Length) continue;
+                    }
                     try
                     {
                         var (target, args) = Bind(route, queryKV, bodyKV, bodyRoot);

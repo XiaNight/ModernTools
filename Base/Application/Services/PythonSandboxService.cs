@@ -3,454 +3,395 @@ using Base.Services.APIService;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
 using System.Text;
 
 namespace Base.Services
 {
     /// <summary>
-    /// Background Python sandbox service. Provides an API to set up an isolated virtual
-    /// environment, execute raw Python code strings, and tear down the environment.
-    /// No UI is involved. The environment is only created on demand and is automatically
-    /// terminated when the application closes.
+    /// Background Python sandbox service.
+    /// Manages a self-contained embedded Python runtime (downloaded on first setup, stored in app
+    /// data) and a set of independently named <see cref="PythonExecution"/> instances.
+    /// No UI is involved; the service is lifecycle-managed by the application.
+    ///
+    /// HTTP API (auto-registered by <c>APIService</c> under the class namespace path):
+    /// <code>
+    ///   GET  …/PythonSandboxService/status?name=default    – execution state + exit code
+    ///   POST …/PythonSandboxService/setup                  – download/verify embedded Python
+    ///   POST …/PythonSandboxService/run    {name, code}    – start a named execution
+    ///   GET  …/PythonSandboxService/read?name=default      – read stdout since last call
+    ///   POST …/PythonSandboxService/write  {name, input}   – write a line to stdin
+    ///   POST …/PythonSandboxService/close  {name}          – kill a named execution
+    /// </code>
     /// </summary>
     public class PythonSandboxService : WpfBehaviourSingleton<PythonSandboxService>
     {
-        private string _envPath;
-        private string _pythonExe;
-        private readonly List<Process> _activeProcesses = new();
-        private readonly object _processLock = new();
+        // ── Embedded Python location (app-data, never touches host Python) ─────────
 
-        /// <summary>Whether a virtual environment has been set up and is ready.</summary>
-        public bool IsSetup { get; private set; }
+        private static readonly string EmbeddedPythonDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ModernTools", "PythonEmbedded");
 
-        /// <summary>Absolute path to the active virtual environment directory, or null if not set up.</summary>
-        public string EnvironmentPath => _envPath;
+        private const string EmbedVersion = "3.11.9";
 
-        // ── Lifecycle ──────────────────────────────────────────────────────────────
+        // Windows x64 embeddable package – self-contained, no installer, no PATH changes.
+        private const string EmbedDownloadUrl =
+            "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip";
 
-        /// <summary>Ensures the environment is closed when the application exits.</summary>
+        private string PythonExe => Path.Combine(EmbeddedPythonDir, "python.exe");
+
+        /// <summary>True once the embedded Python executable is present on disk.</summary>
+        public bool IsReady => File.Exists(PythonExe);
+
+        // ── Named executions ──────────────────────────────────────────────────────
+
+        private readonly Dictionary<string, PythonExecution> _executions = new();
+        private readonly object _executionsLock = new();
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────────
+
         public override void OnApplicationQuit(CancelEventArgs e)
         {
             base.OnApplicationQuit(e);
-            CloseEnvironment();
+            lock (_executionsLock)
+            {
+                foreach (var exec in _executions.Values)
+                    exec.Kill();
+                _executions.Clear();
+            }
         }
 
-        // ── HTTP API ───────────────────────────────────────────────────────────────
+        // ── HTTP API ──────────────────────────────────────────────────────────────
 
-        /// <summary>Returns the current sandbox status.</summary>
-        [GET("~/python/status", false)]
-        private object GetStatus() => new
+        /// <summary>Returns the status of a named execution (state + exit code).</summary>
+        [GET("status")]
+        private object GetStatusApi(string name = "default")
         {
-            IsSetup,
-            EnvironmentPath = _envPath,
-            PythonExecutable = _pythonExe,
-        };
+            if (string.IsNullOrEmpty(name)) name = "default";
+            lock (_executionsLock)
+            {
+                if (!_executions.TryGetValue(name, out var exec))
+                    return new { name, isReady = IsReady, state = "NotStarted", exitCode = (int?)null };
+                return exec.GetStatus();
+            }
+        }
 
-        /// <summary>Sets up (or reuses) a Python virtual environment.</summary>
-        /// <param name="envPath">Optional path for the venv. Omit to use the default location.</param>
-        [POST("~/python/setup", false)]
-        private SetupResult SetupApi(string envPath = null)
-            => SetupEnvironment(envPath);
+        /// <summary>Downloads and verifies the embedded Python runtime.</summary>
+        [POST("setup")]
+        private async Task<SetupResult> SetupApi() => await SetupEnvironmentAsync();
 
-        /// <summary>Executes raw Python code inside the sandbox.</summary>
-        /// <param name="code">Python source code to run.</param>
-        /// <param name="timeoutSeconds">Maximum execution time in seconds (default 30).</param>
-        [POST("~/python/run", false)]
-        private async Task<RunResult> RunApi(string code, int timeoutSeconds = 30)
-            => await RunCodeAsync(code, timeoutSeconds);
+        /// <summary>Starts a named Python execution asynchronously.</summary>
+        [POST("run")]
+        private object RunApi(RunRequest request)
+        {
+            if (request == null) return new { success = false, error = "Request body required." };
+            if (string.IsNullOrEmpty(request.Name)) request.Name = "default";
+            return StartExecution(request.Name, request.Code);
+        }
 
-        /// <summary>Tears down the active environment and terminates any running processes.</summary>
-        [POST("~/python/close", false)]
-        private void CloseApi() => CloseEnvironment();
+        /// <summary>Returns stdout written since the last Read call for a named execution.</summary>
+        [GET("read")]
+        private object ReadApi(string name = "default")
+        {
+            if (string.IsNullOrEmpty(name)) name = "default";
+            lock (_executionsLock)
+            {
+                if (!_executions.TryGetValue(name, out var exec))
+                    return new { error = $"No execution named '{name}' found." };
+                return new { name, output = exec.Read() };
+            }
+        }
 
-        // ── Public programmatic API ────────────────────────────────────────────────
+        /// <summary>Writes a line to the stdin of a named execution.</summary>
+        [POST("write")]
+        private object WriteApi(WriteRequest request)
+        {
+            if (request == null) return new { success = false, error = "Request body required." };
+            string name = string.IsNullOrEmpty(request.Name) ? "default" : request.Name;
+            lock (_executionsLock)
+            {
+                if (!_executions.TryGetValue(name, out var exec))
+                    return new { success = false, error = $"No execution named '{name}' found." };
+                exec.Write(request.Input ?? string.Empty);
+                return new { success = true };
+            }
+        }
+
+        /// <summary>Kills a named execution and removes it.</summary>
+        [POST("close")]
+        private void CloseApi(string name = "default")
+        {
+            if (string.IsNullOrEmpty(name)) name = "default";
+            CloseExecution(name);
+        }
+
+        // ── Public programmatic API ───────────────────────────────────────────────
 
         /// <summary>
-        /// Creates (or reuses) a Python virtual environment at <paramref name="envPath"/>.
-        /// If <paramref name="envPath"/> is null or empty, a default path under
-        /// <c>%LOCALAPPDATA%\ModernTools\PythonSandbox</c> is used.
+        /// Downloads the embedded Python package to the app-data directory if it is not already
+        /// present. Safe to call repeatedly; returns immediately if Python is already ready.
         /// </summary>
-        public SetupResult SetupEnvironment(string envPath = null)
+        public async Task<SetupResult> SetupEnvironmentAsync()
         {
-            string systemPython = FindSystemPython();
-            if (systemPython == null)
-            {
+            if (IsReady)
                 return new SetupResult
                 {
-                    Success = false,
-                    Message = "Python executable not found. Ensure Python is installed and available in PATH.",
+                    Success = true,
+                    Message = "Embedded Python already available.",
+                    PythonPath = EmbeddedPythonDir,
+                    Version = EmbedVersion,
                 };
-            }
 
-            if (string.IsNullOrWhiteSpace(envPath))
-            {
-                envPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "ModernTools",
-                    "PythonSandbox");
-            }
+            Debug.Log($"[PythonSandbox] Downloading embedded Python {EmbedVersion}...");
 
             try
             {
-                string parentDir = Path.GetDirectoryName(envPath);
-                if (!string.IsNullOrEmpty(parentDir))
-                    Directory.CreateDirectory(parentDir);
+                Directory.CreateDirectory(EmbeddedPythonDir);
+                string zipPath = Path.Combine(EmbeddedPythonDir, "python-embed.zip");
+
+                using var http = new HttpClient();
+                http.Timeout = TimeSpan.FromMinutes(2);
+                using var httpStream = await http.GetStreamAsync(EmbedDownloadUrl).ConfigureAwait(false);
+                using (var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    await httpStream.CopyToAsync(fileStream).ConfigureAwait(false);
+
+                ZipFile.ExtractToDirectory(zipPath, EmbeddedPythonDir, overwriteFiles: true);
+                try { File.Delete(zipPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+
+                if (!IsReady)
+                    return new SetupResult { Success = false, Message = "python.exe not found after extraction." };
+
+                Debug.Log($"[PythonSandbox] Embedded Python {EmbedVersion} ready at '{EmbeddedPythonDir}'");
+                return new SetupResult
+                {
+                    Success = true,
+                    Message = "Embedded Python setup complete.",
+                    PythonPath = EmbeddedPythonDir,
+                    Version = EmbedVersion,
+                };
             }
             catch (Exception ex)
             {
-                return new SetupResult { Success = false, Message = $"Failed to create parent directory: {ex.Message}" };
+                return new SetupResult { Success = false, Message = $"Setup failed: {ex.Message}" };
             }
-
-            // Create the venv only if it does not already exist.
-            if (!Directory.Exists(envPath))
-            {
-                var createResult = RunProcessSync(systemPython, $"-m venv \"{envPath}\"", 60);
-                if (!createResult.Success || createResult.ExitCode != 0)
-                {
-                    string detail = string.IsNullOrWhiteSpace(createResult.Error)
-                        ? createResult.Output
-                        : createResult.Error;
-                    return new SetupResult
-                    {
-                        Success = false,
-                        Message = $"Failed to create virtual environment: {detail}",
-                    };
-                }
-            }
-
-            string venvPython = GetVenvPython(envPath);
-            if (!File.Exists(venvPython))
-            {
-                return new SetupResult
-                {
-                    Success = false,
-                    Message = $"Virtual environment Python executable not found at expected path: {venvPython}",
-                };
-            }
-
-            // Query Python version for reporting.
-            var versionResult = RunProcessSync(venvPython, "--version", 10);
-            string version = versionResult.Output.Trim();
-            if (string.IsNullOrWhiteSpace(version))
-                version = versionResult.Error.Trim();
-
-            _envPath = envPath;
-            _pythonExe = venvPython;
-            IsSetup = true;
-
-            Debug.Log($"[PythonSandbox] Environment ready at '{envPath}' ({version})");
-
-            return new SetupResult
-            {
-                Success = true,
-                Message = "Environment ready.",
-                EnvironmentPath = envPath,
-                PythonVersion = version,
-            };
         }
 
         /// <summary>
-        /// Executes raw Python <paramref name="code"/> inside the sandbox and returns
-        /// stdout, stderr, exit code, and elapsed time.
-        /// If the environment has not been set up, it is created automatically using
-        /// the default location before the code is run.
+        /// Starts executing <paramref name="code"/> under the given <paramref name="name"/>.
+        /// If the embedded Python is not yet ready it is set up automatically.
+        /// Returns immediately; use <see cref="ReadExecution"/> / <see cref="WriteExecution"/>
+        /// and <see cref="GetExecutionStatus"/> to interact with the running process.
         /// </summary>
-        public async Task<RunResult> RunCodeAsync(string code, int timeoutSeconds = 30)
+        public object StartExecution(string name, string code)
         {
+            if (string.IsNullOrEmpty(name)) name = "default";
+
+            if (!IsReady)
+                return new { success = false, error = "Embedded Python not ready. Call setup first." };
+
             if (string.IsNullOrWhiteSpace(code))
-                return new RunResult { Success = false, Error = "Code must not be empty." };
+                return new { success = false, error = "Code must not be empty." };
 
-            // Auto-setup if no environment is active.
-            if (!IsSetup)
+            lock (_executionsLock)
             {
-                var setup = SetupEnvironment();
-                if (!setup.Success)
-                    return new RunResult { Success = false, Error = $"Environment setup failed: {setup.Message}" };
-            }
+                if (_executions.TryGetValue(name, out var existing) && existing.IsRunning)
+                    return new { success = false, error = $"Execution '{name}' is already running." };
 
-            // Write the code to a dedicated sandbox temp directory to reduce the chance
-            // of other processes observing or interfering with the temporary script file.
-            string sandboxTempDir = Path.Combine(Path.GetTempPath(), "ModernTools_PySandbox");
-            Directory.CreateDirectory(sandboxTempDir);
-            string tempFile = Path.Combine(sandboxTempDir, $"{Guid.NewGuid():N}.py");
-            try
-            {
-                await File.WriteAllTextAsync(tempFile, code, Encoding.UTF8);
-                return await RunFileAsync(tempFile, timeoutSeconds);
-            }
-            finally
-            {
-                try { File.Delete(tempFile); } catch { }
+                var exec = new PythonExecution(name, PythonExe, code);
+                _executions[name] = exec;
+                exec.Start();
+                return new { success = true, name };
             }
         }
 
-        /// <summary>
-        /// Kills all active Python processes and resets the sandbox to the uninitialized state.
-        /// The virtual environment directory on disk is preserved so it can be reused.
-        /// </summary>
-        public void CloseEnvironment()
+        /// <summary>Kills the named execution and removes it from the registry.</summary>
+        public void CloseExecution(string name)
         {
-            lock (_processLock)
+            lock (_executionsLock)
             {
-                foreach (var p in _activeProcesses)
+                if (_executions.TryGetValue(name, out var exec))
                 {
-                    try { if (!p.HasExited) p.Kill(entireProcessTree: true); } catch { }
-                    try { p.Dispose(); } catch { }
+                    exec.Kill();
+                    _executions.Remove(name);
                 }
-                _activeProcesses.Clear();
             }
-
-            _envPath = null;
-            _pythonExe = null;
-            IsSetup = false;
-
-            Debug.Log("[PythonSandbox] Environment closed.");
+            Debug.Log($"[PythonSandbox] Execution '{name}' closed.");
         }
 
-        // ── Private helpers ────────────────────────────────────────────────────────
+        // ── Request / Result DTOs ─────────────────────────────────────────────────
 
-        private async Task<RunResult> RunFileAsync(string filePath, int timeoutSeconds)
+        public class RunRequest
         {
-            var sw = Stopwatch.StartNew();
-            var outputSb = new StringBuilder();
-            var errorSb = new StringBuilder();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = _pythonExe,
-                    Arguments = $"\"{filePath}\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8,
-                },
-                EnableRaisingEvents = true,
-            };
-
-            process.OutputDataReceived += (_, e) => { if (e.Data != null) outputSb.AppendLine(e.Data); };
-            process.ErrorDataReceived += (_, e) => { if (e.Data != null) errorSb.AppendLine(e.Data); };
-
-            lock (_processLock)
-                _activeProcesses.Add(process);
-
-            try
-            {
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                // Capture a local reference to avoid a potential race between the cancellation
-                // callback and the finally block that disposes the process object.
-                var capturedProcess = process;
-                cts.Token.Register(() =>
-                {
-                    try { if (!capturedProcess.HasExited) capturedProcess.Kill(entireProcessTree: true); } catch { }
-                });
-
-                await process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
-                process.WaitForExit(); // drain async output buffers
-
-                sw.Stop();
-
-                return new RunResult
-                {
-                    Success = process.ExitCode == 0,
-                    ExitCode = process.ExitCode,
-                    Output = outputSb.ToString(),
-                    Error = errorSb.ToString(),
-                    ElapsedMs = sw.Elapsed.TotalMilliseconds,
-                };
-            }
-            catch (OperationCanceledException)
-            {
-                sw.Stop();
-                return new RunResult
-                {
-                    Success = false,
-                    ExitCode = -1,
-                    Error = $"Execution timed out after {timeoutSeconds} seconds.",
-                    ElapsedMs = sw.Elapsed.TotalMilliseconds,
-                };
-            }
-            catch (Exception ex)
-            {
-                sw.Stop();
-                return new RunResult
-                {
-                    Success = false,
-                    ExitCode = -1,
-                    Error = ex.Message,
-                    ElapsedMs = sw.Elapsed.TotalMilliseconds,
-                };
-            }
-            finally
-            {
-                lock (_processLock)
-                    _activeProcesses.Remove(process);
-                try { process.Dispose(); } catch { }
-            }
+            public string Name { get; set; } = "default";
+            public string Code { get; set; }
         }
 
-        /// <summary>Runs an external process synchronously and returns captured output.</summary>
-        private static SimpleResult RunProcessSync(string exe, string args, int timeoutSeconds)
+        public class WriteRequest
         {
-            var outputSb = new StringBuilder();
-            var errorSb = new StringBuilder();
-
-            using var p = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = exe,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8,
-                },
-                EnableRaisingEvents = true,
-            };
-
-            p.OutputDataReceived += (_, e) => { if (e.Data != null) outputSb.AppendLine(e.Data); };
-            p.ErrorDataReceived += (_, e) => { if (e.Data != null) errorSb.AppendLine(e.Data); };
-
-            try
-            {
-                p.Start();
-                p.BeginOutputReadLine();
-                p.BeginErrorReadLine();
-
-                bool exited = p.WaitForExit(timeoutSeconds * 1000);
-                if (!exited)
-                {
-                    try { p.Kill(entireProcessTree: true); } catch { }
-                }
-                p.WaitForExit(); // drain buffers
-
-                return new SimpleResult
-                {
-                    Success = exited && p.ExitCode == 0,
-                    ExitCode = exited ? p.ExitCode : -1,
-                    Output = outputSb.ToString(),
-                    Error = errorSb.ToString(),
-                };
-            }
-            catch (Exception ex)
-            {
-                return new SimpleResult { Success = false, ExitCode = -1, Output = string.Empty, Error = ex.Message };
-            }
+            public string Name { get; set; } = "default";
+            public string Input { get; set; }
         }
 
-        /// <summary>
-        /// Attempts to locate a Python 3 executable on the current machine.
-        /// Checks PATH first, then common Windows installation directories.
-        /// Returns null if Python cannot be found.
-        /// </summary>
-        private static string FindSystemPython()
-        {
-            // Check well-known executable names that may be on PATH.
-            foreach (var candidate in new[] { "python", "python3" })
-            {
-                try
-                {
-                    using var p = new Process
-                    {
-                        StartInfo = new ProcessStartInfo
-                        {
-                            FileName = candidate,
-                            Arguments = "--version",
-                            UseShellExecute = false,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            CreateNoWindow = true,
-                        },
-                    };
-                    p.Start();
-                    bool exited = p.WaitForExit(5000);
-                    if (exited && p.ExitCode == 0)
-                        return candidate;
-                }
-                catch { }
-            }
-
-            // Fall back to common Windows install locations.
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-
-            var searchRoots = new[]
-            {
-                Path.Combine(localAppData, "Programs", "Python"),
-                Path.Combine(programFiles, "Python"),
-                Path.Combine(programFilesX86, "Python"),
-                @"C:\Python3",
-            };
-
-            foreach (var root in searchRoots)
-            {
-                if (!Directory.Exists(root)) continue;
-                foreach (string subDir in Directory.GetDirectories(root, "Python3*"))
-                {
-                    string exe = Path.Combine(subDir, "python.exe");
-                    if (File.Exists(exe)) return exe;
-                }
-                // Also check the root itself (e.g. C:\Python3\python.exe)
-                string rootExe = Path.Combine(root, "python.exe");
-                if (File.Exists(rootExe)) return rootExe;
-            }
-
-            return null;
-        }
-
-        /// <summary>Returns the path to the Python executable inside a virtual environment.</summary>
-        private static string GetVenvPython(string envPath)
-        {
-            // Windows layout: <venv>/Scripts/python.exe
-            string win = Path.Combine(envPath, "Scripts", "python.exe");
-            if (File.Exists(win)) return win;
-
-            // Unix layout: <venv>/bin/python3 or <venv>/bin/python
-            string unix3 = Path.Combine(envPath, "bin", "python3");
-            if (File.Exists(unix3)) return unix3;
-
-            return Path.Combine(envPath, "bin", "python");
-        }
-
-        // ── Result types ───────────────────────────────────────────────────────────
-
-        /// <summary>Result returned by <see cref="SetupEnvironment"/>.</summary>
         public class SetupResult
         {
             public bool Success { get; set; }
             public string Message { get; set; }
-            public string EnvironmentPath { get; set; }
-            public string PythonVersion { get; set; }
+            public string PythonPath { get; set; }
+            public string Version { get; set; }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // PythonExecution – a single named, long-lived Python process
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Manages a single Python process: its script file, redirected stdout/stderr (accumulated in
+    /// an output buffer), and stdin (for interactive <c>input()</c> calls).
+    /// </summary>
+    public class PythonExecution
+    {
+        private static readonly string ScriptTempDir =
+            Path.Combine(Path.GetTempPath(), "ModernTools_PySandbox");
+
+        public string Name { get; }
+        private readonly string _pythonExe;
+        private readonly string _code;
+        private string _scriptFile;
+
+        private Process _process;
+        private readonly StringBuilder _outputBuffer = new();
+        private int _lastReadPos;
+        private readonly object _bufferLock = new();
+
+        public ExecutionState State { get; private set; } = ExecutionState.NotStarted;
+        public int? ExitCode { get; private set; }
+
+        /// <summary>True while the underlying Python process is still running.</summary>
+        public bool IsRunning => State == ExecutionState.Running;
+
+        public PythonExecution(string name, string pythonExe, string code)
+        {
+            Name = name;
+            _pythonExe = pythonExe;
+            _code = code;
         }
 
-        /// <summary>Result returned by <see cref="RunCodeAsync"/>.</summary>
-        public class RunResult
+        /// <summary>Writes the script to a temp file and launches the Python process.</summary>
+        public void Start()
         {
-            public bool Success { get; set; }
-            public int ExitCode { get; set; }
-            public string Output { get; set; }
-            public string Error { get; set; }
-            public double ElapsedMs { get; set; }
+            Directory.CreateDirectory(ScriptTempDir);
+            _scriptFile = Path.Combine(ScriptTempDir, $"{Name}_{Guid.NewGuid():N}.py");
+            File.WriteAllText(_scriptFile, _code, Encoding.UTF8);
+
+            _process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = _pythonExe,
+                    Arguments = $"\"{_scriptFile}\"",
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                },
+                EnableRaisingEvents = true,
+            };
+
+            _process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data != null)
+                    lock (_bufferLock) _outputBuffer.AppendLine(e.Data);
+            };
+            _process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null)
+                    lock (_bufferLock) _outputBuffer.AppendLine(e.Data);
+            };
+            _process.Exited += (_, _) =>
+            {
+                // Protect shared state that Read() and Kill() also access.
+                lock (_bufferLock)
+                {
+                    ExitCode = _process.ExitCode;
+                    State = ExecutionState.Finished;
+                }
+                try { if (_scriptFile != null && File.Exists(_scriptFile)) File.Delete(_scriptFile); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            };
+
+            State = ExecutionState.Running;
+            _process.Start();
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
         }
 
-        private struct SimpleResult
+        /// <summary>
+        /// Returns all output written to stdout/stderr since the last call to this method.
+        /// Non-blocking: returns an empty string if no new output has appeared.
+        /// </summary>
+        public string Read()
         {
-            public bool Success;
-            public int ExitCode;
-            public string Output;
-            public string Error;
+            lock (_bufferLock)
+            {
+                string all = _outputBuffer.ToString();
+                if (_lastReadPos >= all.Length) return string.Empty;
+                string newData = all[_lastReadPos..];
+                _lastReadPos = all.Length;
+                return newData;
+            }
         }
+
+        /// <summary>Sends <paramref name="input"/> as a line to the process's stdin.</summary>
+        public void Write(string input)
+        {
+            if (_process == null || _process.HasExited) return;
+            try
+            {
+                _process.StandardInput.WriteLine(input);
+                _process.StandardInput.Flush();
+            }
+            catch (InvalidOperationException) { } // stdin not redirected or process exited
+            catch (IOException) { }               // broken pipe
+        }
+
+        /// <summary>Terminates the process and cleans up the script file.</summary>
+        public void Kill()
+        {
+            lock (_bufferLock)
+            {
+                State = ExecutionState.Killed;
+                ExitCode = null;
+            }
+            try { if (_process != null && !_process.HasExited) _process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { } // process already exited
+            catch (System.ComponentModel.Win32Exception) { }
+            try { _process?.Dispose(); } catch (ObjectDisposedException) { }
+            try { if (_scriptFile != null && File.Exists(_scriptFile)) File.Delete(_scriptFile); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        /// <summary>Returns a snapshot of this execution's status.</summary>
+        public object GetStatus()
+        {
+            lock (_bufferLock)
+            {
+                return new
+                {
+                    name = Name,
+                    state = State.ToString(),
+                    exitCode = ExitCode,
+                    isRunning = IsRunning,
+                };
+            }
+        }
+
+        public enum ExecutionState { NotStarted, Running, Finished, Killed }
     }
 }
