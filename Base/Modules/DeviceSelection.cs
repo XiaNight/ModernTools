@@ -18,7 +18,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
     public UIEvent OnActiveDeviceDisconnected = new();
 
     private Task<List<Device>> refreshTask;
-    private List<Device> discoveredDevices = new();
+    public List<Device> DiscoveredDevices { get; private set; } = new();
     private TextBlock pendingCmdCountText;
     private Device lastConnectedDevice;
     private Device defferSelectedDevice;
@@ -219,22 +219,28 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         if (refreshTask != null) return;
 
         refreshTask = Task.Run(FindConnectedDevices);
-        discoveredDevices = await refreshTask;
+        DiscoveredDevices = await refreshTask;
 
         await Application.Current.Dispatcher.InvokeAsync(() =>
         {
             Main.ConnectButton.IsEnabled = lastConnectedDevice?.IsAvailable ?? true;
 
-            OnConnectedDevicesUpdated?.Invoke(discoveredDevices);
+            OnConnectedDevicesUpdated?.Invoke(DiscoveredDevices);
             refreshTask = null;
         });
+    }
+
+    [GET]
+    public List<Device> ListDiscoveredDevices()
+    {
+        return DiscoveredDevices;
     }
 
     private List<Device> FindConnectedDevices()
     {
         try
         {
-            return MergeDiscoveredInterface(PeripheralInterface.GetConnectedDevices(), discoveredDevices);
+            return MergeDiscoveredInterface(PeripheralInterface.GetConnectedDevices(), DiscoveredDevices);
         }
         catch (Exception ex)
         {
@@ -245,7 +251,9 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
     public static List<Device> MergeDiscoveredInterface(IEnumerable<IPeripheralDetail> discoveredInterfacers, List<Device> existingDevices = null)
     {
-        List<Device> devices = existingDevices ?? [];
+        //List<Device> devices = existingDevices ?? [];
+        List<Device> devices = [];
+
         var interfaceList = discoveredInterfacers.ToList();
 
         // Disable devices that have no interfaces present in the newly discovered list
@@ -253,7 +261,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         {
             bool hasAnyInterface = device.interfaces.Any(i => interfaceList.Contains(i));
             device.IsAvailable = hasAnyInterface;
-
+            device.interfaces.Clear();
         }
 
         foreach (var deviceInterface in interfaceList)
@@ -279,7 +287,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
     public void RemoveUnavailableDevices()
     {
-        discoveredDevices.RemoveAll(device => device != lastConnectedDevice && device.IsAvailable == false);
+        DiscoveredDevices.RemoveAll(device => device != lastConnectedDevice && device.IsAvailable == false);
     }
 
     [GET("connect/pid", true)]
@@ -298,29 +306,47 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
     /// Connect to the selected device from the dropdown list.
     /// </summary>
     /// <returns></returns>
-    public async Task Connect()
+    public async Task<bool> Connect()
     {
         await Disconnect();
 
         int idx = Main.PortComboBox.SelectedIndex;
-        if (idx < 0 || idx >= discoveredDevices.Count) return;
+        if (idx < 0 || idx >= DiscoveredDevices.Count) return false;
 
         var device = Main.PortComboBox.ItemsSource.Cast<Device>().ToArray()[idx];
-        Connect(device);
+        return Connect(device);
     }
 
-    public void Connect(ushort vid, ushort pid, string name, params IPeripheralDetail[] interfaces)
+    [POST(requireMainThread: true)]
+    public async Task<bool> Connect(string productIdentifier)
+    {
+        await Disconnect();
+        var device = DiscoveredDevices.FirstOrDefault(d => string.Compare(d.ProductIdentifier, productIdentifier) == 0);
+        if (device == null) return false;
+        return Connect(device);
+    }
+
+    [POST(requireMainThread: true)]
+    public async Task<bool> Connect(ushort vid, ushort pid)
+    {
+        await Disconnect();
+        var device = DiscoveredDevices.FirstOrDefault(d => d.VID == vid && d.PID == pid);
+        if (device == null) return false;
+        return Connect(device);
+    }
+
+    public bool Connect(ushort vid, ushort pid, string name, params IPeripheralDetail[] interfaces)
     {
         List<IPeripheralDetail> filteredInterfaces = new(interfaces);
         filteredInterfaces.RemoveAll(@interface => @interface == null);
-        if (filteredInterfaces.Count == 0) return;
+        if (filteredInterfaces.Count == 0) return false;
 
         var newDevice = new Device(vid, pid, name);
         newDevice.interfaces.AddRange(interfaces);
-        Connect(newDevice);
+        return Connect(newDevice);
     }
 
-    public void Connect(Device device)
+    public bool Connect(Device device)
     {
         ActiveDevice = device;
         lastConnectedDevice = device;
@@ -330,6 +356,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         Main.ReloadPage();
 
         LocalAppDataStore.Instance.Set(LAST_CONNECTED_DEVICE_KEY, lastConnectedDevice.ProductIdentifier);
+        return true;
     }
 
     private async void DisconnectAndQuit()

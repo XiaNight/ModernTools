@@ -63,10 +63,14 @@ namespace Base.Core
 
     public sealed class ResourceBrush
     {
-
         public static Brush Find(string key)
         {
             return (Brush)Application.Current.Resources[key];
+        }
+
+        public static SolidColorBrush FindSolid(string key)
+        {
+            return (SolidColorBrush)Application.Current.Resources[key];
         }
     }
 }

@@ -74,6 +74,7 @@
                 </StackPanel>
                 <ComboBox x:Name="ChartType" HorizontalAlignment="Stretch" SelectedIndex="0" Padding="16,0,16,0">
                     <ComboBoxItem>Report Rate</ComboBoxItem>
+                    <ComboBoxItem>Report Rate (avg)</ComboBoxItem>
                     <ComboBoxItem>Left X</ComboBoxItem>
                     <ComboBoxItem>Left Y</ComboBoxItem>
                     <ComboBoxItem>Right X</ComboBoxItem>
@@ -169,10 +170,9 @@
                                 LabelBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
                                 BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                                 Capacity="32768"
-                                LineThickness="3"
-                                DotThickness="4"
-                                MinY="-10"
-                                MaxY="1"/>
+                                LineThickness="3" DotThickness="4"
+                                AxisYLabelCount="5"
+                                MinY="-10" MaxY="1"/>
                         </Grid>
                     </Border>
 

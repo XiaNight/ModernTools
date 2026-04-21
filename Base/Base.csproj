@@ -88,11 +88,14 @@
   </ItemGroup>
 
   <ItemGroup>
-	<Folder Include="Framework\Behaviors\" />
+	<Content Include="Tools\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
-	<Content Include="Tools\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Compile Remove="Framework\Behaviors\**" />
+    <EmbeddedResource Remove="Framework\Behaviors\**" />
+    <None Remove="Framework\Behaviors\**" />
+    <Page Remove="Framework\Behaviors\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -107,8 +110,6 @@
 	</DesignData>
   </ItemGroup>
 	
-	
-
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">
 		<ItemGroup>
 			<_FilesToDelete Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" />

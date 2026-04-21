@@ -136,7 +136,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <ComboBox x:Name="UsageSelectionBox" Grid.Column="0" Margin="4" MinWidth="150"/>
-            <TextBox x:Name="Inputbox" Grid.Column="1" Margin="4"/>
+            <TextBox x:Name="CmdInputbox" Grid.Column="1" Margin="4"/>
             <Button x:Name="SendBtn" Width="48" Height="32" Margin="4" Grid.Column="2" Padding="0">
                 <ui:FontIcon Glyph="&#xE724;" FontSize="18" FontFamily="Segoe Fluent Icons"/>
             </Button>

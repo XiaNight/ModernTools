@@ -3,6 +3,7 @@ using Audio.Receiver;
 using Audio.Trigger;
 using Audio.Util;
 using Base.Components.Chart;
+using Base.Framework.Utilities;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using TimedFloat = Audio.Receiver.AudioChannelHandler.TimedValue<float>;

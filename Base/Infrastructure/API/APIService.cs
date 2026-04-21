@@ -2,6 +2,7 @@
 using API;
 using Base.Core;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Reflection;
@@ -17,7 +18,7 @@ using System.Windows.Threading;
 namespace Base.Services.APIService
 {
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public abstract class HttpMethodAttribute(string path, bool requireMainThread = false) : Attribute
+    public abstract class HttpMethodAttribute(string path = "", bool requireMainThread = false) : Attribute
     {
         public string Path { get; } = Normalize(path);
         public bool RequireMainThread { get; } = requireMainThread;
@@ -32,8 +33,8 @@ namespace Base.Services.APIService
         }
     }
 
-    public sealed class GETAttribute(string path, bool requireMainThread = false) : HttpMethodAttribute(path, requireMainThread) { }
-    public sealed class POSTAttribute(string path, bool requireMainThread = false) : HttpMethodAttribute(path, requireMainThread) { }
+    public sealed class GETAttribute(string path = "", bool requireMainThread = false) : HttpMethodAttribute(path, requireMainThread) { }
+    public sealed class POSTAttribute(string path = "", bool requireMainThread = false) : HttpMethodAttribute(path, requireMainThread) { }
 }
 
 // -------------------------------------------------------
@@ -52,6 +53,12 @@ namespace Base.Services.APIService
         public bool RequireMainThread;
     }
 
+    public sealed class ApiResponse
+    {
+        public int Status { get; set; }
+        public object? Data { get; set; }
+    }
+
     public class APIService : WpfBehaviourSingleton<APIService>
     {
         private readonly HttpListener listener = new();
@@ -64,6 +71,7 @@ namespace Base.Services.APIService
             PropertyNameCaseInsensitive = true,
             NumberHandling = JsonNumberHandling.AllowReadingFromString,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            IncludeFields = true,
             Converters = { new JsonStringEnumConverter() }
         };
 
@@ -113,6 +121,9 @@ namespace Base.Services.APIService
                     thread = new Thread(() => RunLoop(cts.Token)) { IsBackground = true, Name = "APIService.HttpListener" };
                     thread.Start();
                     IsRunning = true;
+
+                    Debug.Log($"APIService started and listening on {prefix}");
+                    Debug.Log($"Use /api/v1/listroute to list all routes"); 
                 }
                 catch (Exception e)
                 {
@@ -208,8 +219,9 @@ namespace Base.Services.APIService
                 }
 
                 Exception? lastBindError = null;
-                foreach (var route in candidates)
+                foreach (Route route in candidates)
                 {
+                    if (route.Parameters.Length != queryKV.Count) continue;
                     try
                     {
                         var (target, args) = Bind(route, queryKV, bodyKV, bodyRoot);
@@ -238,7 +250,7 @@ namespace Base.Services.APIService
                             }
                         }
 
-                        WriteOk(res, result);
+                        WriteResponse(res, result);
                         return;
                     }
                     catch (TargetInvocationException tie)
@@ -401,7 +413,15 @@ namespace Base.Services.APIService
             if (t == typeof(Guid)) return Guid.Parse(input);
             if (t == typeof(DateTime)) return DateTime.Parse(input, null, System.Globalization.DateTimeStyles.RoundtripKind);
             if (t == typeof(TimeSpan)) return TimeSpan.Parse(input);
-            return Convert.ChangeType(input, t);
+            try
+            {
+                return Convert.ChangeType(input, t);
+            }
+            catch(FormatException)
+            {
+                long hexValue = long.Parse(input, NumberStyles.AllowHexSpecifier);
+                return Convert.ChangeType(hexValue, t);
+            }
         }
 
         private object? ChangeTypeFlexible(object? value, Type targetType)
@@ -474,15 +494,19 @@ namespace Base.Services.APIService
             return dict;
         }
 
-        private void WriteOk(HttpListenerResponse res, object? payload)
+        private void WriteResponse(HttpListenerResponse res, object? payload, int defaultCode = 200)
         {
             if (payload is null)
             {
-                WriteJson(res, 200, new { status = 200 });
+                WriteJson(res, defaultCode, new { status = defaultCode });
+            }
+            else if(payload is ApiResponse apiRes)
+            {
+                WriteJson(res, apiRes.Status, new { status = apiRes.Status, data = apiRes.Data });
             }
             else
             {
-                WriteJson(res, 200, new { status = 200, data = payload });
+                WriteJson(res, defaultCode, new { status = defaultCode, data = payload });
             }
         }
 
@@ -571,11 +595,20 @@ namespace Base.Services.APIService
                 foreach (var r in route.Value)
                 {
                     var path = r.Path;
-                    if (r.IsStatic)
-                        path += " (static)";
-                    if (r.RequireMainThread)
-                        path += " (UI thread only)";
-                    list.Add($"{r.Verb} {path} => {r.DeclaringType.FullName}.{r.Method.Name}");
+                    string staticTag = r.IsStatic ? " (static)" : "";
+                    string uiTag = r.RequireMainThread ? " (UI thread)" : "";
+
+                    string paramStr = string.Join("&", r.Parameters.Select(p =>
+                        {
+                            var typeName = Nullable.GetUnderlyingType(p.ParameterType)?.Name ?? p.ParameterType.Name;
+                            var suffix = p.HasDefaultValue ? $"({p.DefaultValue ?? "null"})" : "";
+                            return $"{p.Name}={typeName}{suffix}";
+                        }));
+
+                    if (paramStr.Length > 0)
+                        path += "?";
+
+                    list.Add($"{r.Verb} {path}{paramStr} =>{staticTag}{uiTag} {r.DeclaringType.FullName}.{r.Method.Name}");
                 }
             }
             list.Sort();

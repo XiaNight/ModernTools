@@ -181,7 +181,6 @@
                                              OpenWidth="270" ClosedWidth="60">
                         <mtc:VerticalTabsManager.TopButtons>
                             <mtc:NavigationExpander Text="Keyboard" Glyph="&#xE765;" OrderIndex="100"/>
-                            <mtc:NavigationExpander Text="Gamepad" Glyph="&#xE7FC;" OrderIndex="100"/>
                             <mtc:NavigationExpander Text="Mouse" Glyph="&#xE962;" OrderIndex="100"/>
                             <mtc:NavigationExpander Text="Audio" Glyph="&#xE8D6;" OrderIndex="100"/>
                         </mtc:VerticalTabsManager.TopButtons>

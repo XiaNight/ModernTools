@@ -19,7 +19,7 @@ namespace Base.Helpers
     public partial class DarkColorsView : Pages.PageBase
     {
         public override string PageName => "Dark Colors";
-        public override int NavOrder => -1;
+        public override int NavOrder => 0;
 
         private readonly ObservableCollection<ColorKeyItem> _items = new();
         private ICollectionView? _view;
