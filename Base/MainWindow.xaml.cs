@@ -13,9 +13,7 @@ namespace Base;
 
 using Components;
 using System.ComponentModel;
-using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using static Base.Components.VerticalTabsManager;
@@ -515,6 +513,31 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
     }
+    public void SelectTabByName(string name)
+    {
+        Stack<IEnumerable<INavigationItem>> stack = new();
+        stack.Push(NavTabsManager.TopButtons);
+        stack.Push(NavTabsManager.BottomButtons);
+        while (stack.Count > 0)
+        {
+            foreach (INavigationItem item in stack.Pop())
+            {
+                if (item is NavigationButton button)
+                {
+                    if (button.Text == name)
+                    {
+                        button.Click();
+                        return;
+                    }
+                }
+                else if (item is NavigationExpander expander)
+                {
+                    stack.Push(expander.Items);
+                }
+            }
+        }
+    }
+
     public static string GetOutputFolder(params string[] subFolders)
         => GetOutputFolder(true, subFolders);
     public static string GetOutputFolder(bool create = true, params string[] subFolders)

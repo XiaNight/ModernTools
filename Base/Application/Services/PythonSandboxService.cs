@@ -87,7 +87,7 @@ namespace Base.Services
         {
             if (request == null) return new { success = false, error = "Request body required." };
             if (string.IsNullOrEmpty(request.Name)) request.Name = "default";
-            return StartExecution(request.Name, request.Code);
+            return StartExecution(request.Name, request.body);
         }
 
         /// <summary>Returns stdout written since the last Read call for a named execution.</summary>
@@ -224,7 +224,7 @@ namespace Base.Services
         public class RunRequest
         {
             public string Name { get; set; } = "default";
-            public string Code { get; set; }
+            public string body { get; set; }
         }
 
         public class WriteRequest
@@ -344,6 +344,15 @@ namespace Base.Services
                 string newData = all[_lastReadPos..];
                 _lastReadPos = all.Length;
                 return newData;
+            }
+        }
+
+        public bool HasNext()
+        {
+            lock (_bufferLock)
+            {
+                string all = _outputBuffer.ToString();
+                return _lastReadPos < all.Length;
             }
         }
 
