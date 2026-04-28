@@ -123,7 +123,7 @@ namespace Base.Services.APIService
                     IsRunning = true;
 
                     Debug.Log($"APIService started and listening on {prefix}");
-                    Debug.Log($"Use /api/v1/listroute to list all routes"); 
+                    Debug.Log($"Use /api/v1/listroute to list all routes");
                 }
                 catch (Exception e)
                 {
@@ -184,15 +184,19 @@ namespace Base.Services.APIService
 
                 var queryKV = ParseQuery(req.Url.Query);
 
-                Dictionary<string, object?> bodyKV = new();
+                Dictionary<string, object?> paramsKV = new();
                 object? bodyRoot = null;
                 if (verb is "POST" or "PUT" or "PATCH")
                 {
-                    if (IsJson(req.ContentType))
+                    using var sr = new StreamReader(req.InputStream, Encoding.UTF8);
+                    var bodyText = sr.ReadToEnd();
+
+                    if (!string.IsNullOrWhiteSpace(bodyText))
                     {
-                        using var sr = new StreamReader(req.InputStream, Encoding.UTF8);
-                        var bodyText = sr.ReadToEnd();
-                        if (!string.IsNullOrWhiteSpace(bodyText))
+                        // Parse url encoded into paramsKV
+                        foreach (var kv in ParseQuery("?" + bodyText)) paramsKV[kv.Key] = kv.Value;
+
+                        if (IsJson(req.ContentType))
                         {
                             try
                             {
@@ -200,7 +204,7 @@ namespace Base.Services.APIService
                                 if (bodyRoot is JsonElement je && je.ValueKind == JsonValueKind.Object)
                                 {
                                     foreach (var p in je.EnumerateObject())
-                                        bodyKV[p.Name] = ToObject(p.Value);
+                                        paramsKV[p.Name] = ToObject(p.Value);
                                 }
                             }
                             catch (Exception ex)
@@ -209,32 +213,31 @@ namespace Base.Services.APIService
                                 return;
                             }
                         }
-                    }
-                    else if (IsFormUrlEncoded(req.ContentType))
-                    {
-                        using var sr = new StreamReader(req.InputStream, Encoding.UTF8);
-                        var bodyText = sr.ReadToEnd();
-                        foreach (var kv in ParseQuery("?" + bodyText)) bodyKV[kv.Key] = kv.Value;
+                        else if(IsPlainText(req.ContentType))
+                        {
+                            paramsKV["body"] = bodyText;
+                        }
                     }
                 }
 
                 Exception? lastBindError = null;
+                bool hasBodyData = paramsKV.Count > 0 || bodyRoot != null;
                 foreach (Route route in candidates)
                 {
-                    if (route.Parameters.Length != queryKV.Count) continue;
+                    // When a JSON/form body is present, params may come from the body instead of the
+                    // query string, so skip the strict count check and let Bind resolve them.
+                    // Without a body, require: required params ≤ queryKV.Count ≤ total params
+                    // (allowing optional/default params to be omitted from the query string).
+                    if (!hasBodyData)
+                    {
+                        int requiredParamCount = route.Parameters.Count(p => !p.HasDefaultValue);
+                        if (queryKV.Count < requiredParamCount || queryKV.Count > route.Parameters.Length) continue;
+                    }
                     try
                     {
-                        var (target, args) = Bind(route, queryKV, bodyKV, bodyRoot);
+                        var (target, args) = Bind(route, queryKV, paramsKV, bodyRoot);
 
-                        object? result;
-                        if (route.RequireMainThread)
-                        {
-                            result = InvokeOnUI(() => route.Method.Invoke(target, args));
-                        }
-                        else
-                        {
-                            result = route.Method.Invoke(target, args);
-                        }
+                        object? result = route.RequireMainThread ? InvokeOnUI(() => route.Method.Invoke(target, args)) : route.Method.Invoke(target, args);
 
                         // Await if it's a Task or Task<T>
                         if (result is Task task)
@@ -313,12 +316,9 @@ namespace Base.Services.APIService
             if (pars.Length == 1 && ShouldTreatAsComplex(pars[0].ParameterType))
             {
                 var pType = pars[0].ParameterType;
-                if (bodyRoot is JsonElement je)
-                    args[0] = JsonSerializer.Deserialize(je.GetRawText(), pType, jsonOptions);
-                else if (bodyKV.Count > 0)
-                    args[0] = MapDictionaryToObject(bodyKV, pType);
-                else
-                    args[0] = BindSimple(pars[0], queryKV.GetValueOrDefault(pars[0].Name!, null));
+                args[0] = bodyRoot is JsonElement je
+                    ? JsonSerializer.Deserialize(je.GetRawText(), pType, jsonOptions)
+                    : bodyKV.Count > 0 ? MapDictionaryToObject(bodyKV, pType) : BindSimple(pars[0], queryKV.GetValueOrDefault(pars[0].Name!, null));
                 return (target, args);
             }
 
@@ -334,22 +334,13 @@ namespace Base.Services.APIService
                 }
                 else if (bodyKV.TryGetValue(name, out var bv))
                 {
-                    if (bv is JsonElement je)
-                        val = JsonToType(je, p.ParameterType);
-                    else
-                        val = ChangeTypeFlexible(bv, p.ParameterType);
-                }
-                else if (p.HasDefaultValue)
-                {
-                    val = p.DefaultValue;
-                }
-                else if (IsNullable(p.ParameterType))
-                {
-                    val = null;
+                    val = bv is JsonElement je ? JsonToType(je, p.ParameterType) : ChangeTypeFlexible(bv, p.ParameterType);
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Missing required parameter '{name}'.");
+                    val = p.HasDefaultValue
+                        ? p.DefaultValue
+                        : IsNullable(p.ParameterType) ? null : throw new InvalidOperationException($"Missing required parameter '{name}'.");
                 }
 
                 args[i] = val;
@@ -369,9 +360,7 @@ namespace Base.Services.APIService
         private T InvokeOnUI<T>(Func<T> func)
         {
             var d = uiDispatcher;
-            if (d == null) return func();
-            if (d.CheckAccess()) return func();
-            return d.Invoke(func);
+            return d == null ? func() : d.CheckAccess() ? func() : d.Invoke(func);
         }
 
         private void InvokeOnUI(Action action)
@@ -388,21 +377,16 @@ namespace Base.Services.APIService
         private static bool ShouldTreatAsComplex(Type t)
         {
             if (t == typeof(string)) return false;
-            if (t.IsPrimitive) return false;
-            if (Nullable.GetUnderlyingType(t)?.IsPrimitive == true) return false;
-            return true;
+            return t.IsPrimitive ? false : (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true;
         }
 
         private static bool IsNullable(Type t) => !t.IsValueType || Nullable.GetUnderlyingType(t) != null;
 
         private object? BindSimple(ParameterInfo p, string? value)
         {
-            if (value is null)
-            {
-                if (IsNullable(p.ParameterType)) return null;
-                throw new InvalidOperationException($"Missing required parameter '{p.Name}'.");
-            }
-            return ConvertTo(value, p.ParameterType);
+            return value is null
+                ? IsNullable(p.ParameterType) ? null : throw new InvalidOperationException($"Missing required parameter '{p.Name}'.")
+                : ConvertTo(value, p.ParameterType);
         }
 
         private static object? ConvertTo(string? input, Type targetType)
@@ -417,7 +401,7 @@ namespace Base.Services.APIService
             {
                 return Convert.ChangeType(input, t);
             }
-            catch(FormatException)
+            catch (FormatException)
             {
                 long hexValue = long.Parse(input, NumberStyles.AllowHexSpecifier);
                 return Convert.ChangeType(hexValue, t);
@@ -443,8 +427,7 @@ namespace Base.Services.APIService
 
         private object? JsonToType(JsonElement je, Type t)
         {
-            if (t == typeof(string)) return je.ToString();
-            return JsonSerializer.Deserialize(je.GetRawText(), t, jsonOptions);
+            return t == typeof(string) ? je.ToString() : JsonSerializer.Deserialize(je.GetRawText(), t, jsonOptions);
         }
 
         private static object ToObject(JsonElement je)
@@ -465,11 +448,22 @@ namespace Base.Services.APIService
             };
         }
 
+        private const string APPLICATION_JSON = "application/json";
+        private const string FORM_URLENCODED = "application/x-www-form-urlencoded";
+        private const string MULTIPART_FORM_DATA = "multipart/form-data";
+        private const string PLAIN_TEXT = "text/plain";
+
         private static bool IsJson(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType!.IndexOf("application/json", StringComparison.OrdinalIgnoreCase) >= 0;
+            => !string.IsNullOrEmpty(contentType) && contentType.Contains(APPLICATION_JSON, StringComparison.OrdinalIgnoreCase);
 
         private static bool IsFormUrlEncoded(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType!.IndexOf("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase) >= 0;
+            => !string.IsNullOrEmpty(contentType) && contentType.Contains(FORM_URLENCODED, StringComparison.OrdinalIgnoreCase);
+
+        static bool IsMultipartFormData(string? contentType)
+            => !string.IsNullOrEmpty(contentType) && contentType.Contains(MULTIPART_FORM_DATA, StringComparison.OrdinalIgnoreCase);
+        
+        static bool IsPlainText(string? contentType)
+            => !string.IsNullOrEmpty(contentType) && contentType.Contains(PLAIN_TEXT, StringComparison.OrdinalIgnoreCase);
 
         private static Dictionary<string, string?> ParseQuery(string query)
         {
@@ -500,7 +494,7 @@ namespace Base.Services.APIService
             {
                 WriteJson(res, defaultCode, new { status = defaultCode });
             }
-            else if(payload is ApiResponse apiRes)
+            else if (payload is ApiResponse apiRes)
             {
                 WriteJson(res, apiRes.Status, new { status = apiRes.Status, data = apiRes.Data });
             }
@@ -567,14 +561,9 @@ namespace Base.Services.APIService
                 {
                     try
                     {
-                        if (value is JsonElement je)
-                        {
-                            value = JsonSerializer.Deserialize(je.GetRawText(), prop.PropertyType, jsonOptions);
-                        }
-                        else
-                        {
-                            value = ChangeTypeFlexible(value, prop.PropertyType);
-                        }
+                        value = value is JsonElement je
+                            ? JsonSerializer.Deserialize(je.GetRawText(), prop.PropertyType, jsonOptions)
+                            : ChangeTypeFlexible(value, prop.PropertyType);
 
                         prop.SetValue(obj, value);
                     }

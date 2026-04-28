@@ -18,6 +18,12 @@ namespace API
             Main.SelectTabIndex(index);
         }
 
+        [POST("SelectTabByName", true)]
+        private void SelectTabByName(string name)
+        {
+            Main.SelectTabByName(name);
+        }
+
         [GET("ListRoute", false)]
         private string[] ListRoute()
         {
