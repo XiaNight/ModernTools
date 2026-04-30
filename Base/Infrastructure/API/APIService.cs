@@ -213,7 +213,7 @@ namespace Base.Services.APIService
                                 return;
                             }
                         }
-                        else if(IsPlainText(req.ContentType))
+                        else if (IsPlainText(req.ContentType))
                         {
                             paramsKV["body"] = bodyText;
                         }
@@ -243,14 +243,12 @@ namespace Base.Services.APIService
                         if (result is Task task)
                         {
                             await task.ConfigureAwait(false);
-                            if (result.GetType().IsGenericType && result.GetType().GetGenericTypeDefinition() == typeof(Task<>))
-                            {
-                                result = result.GetType().GetProperty("Result")!.GetValue(result);
-                            }
-                            else
-                            {
-                                result = null; // Task with no result
-                            }
+
+                            var returnType = route.Method.ReturnType;
+
+                            result = returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>)
+                                ? returnType.GetProperty(nameof(Task<object>.Result))!.GetValue(result)
+                                : null;
                         }
 
                         WriteResponse(res, result);
@@ -326,23 +324,13 @@ namespace Base.Services.APIService
             {
                 var p = pars[i];
                 var name = p.Name!;
-                object? val = null;
-
-                if (queryKV.TryGetValue(name, out var qv))
-                {
-                    val = ConvertTo(qv, p.ParameterType);
-                }
-                else if (bodyKV.TryGetValue(name, out var bv))
-                {
-                    val = bv is JsonElement je ? JsonToType(je, p.ParameterType) : ChangeTypeFlexible(bv, p.ParameterType);
-                }
-                else
-                {
-                    val = p.HasDefaultValue
+                object? val = queryKV.TryGetValue(name, out var qv)
+                    ? ConvertTo(qv, p.ParameterType)
+                    : bodyKV.TryGetValue(name, out var bv)
+                        ? bv is JsonElement je ? JsonToType(je, p.ParameterType) : ChangeTypeFlexible(bv, p.ParameterType)
+                        : p.HasDefaultValue
                         ? p.DefaultValue
                         : IsNullable(p.ParameterType) ? null : throw new InvalidOperationException($"Missing required parameter '{name}'.");
-                }
-
                 args[i] = val;
             }
 
@@ -376,8 +364,7 @@ namespace Base.Services.APIService
         // -------------------------------------------------------
         private static bool ShouldTreatAsComplex(Type t)
         {
-            if (t == typeof(string)) return false;
-            return t.IsPrimitive ? false : (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true;
+            return t == typeof(string) ? false : t.IsPrimitive ? false : (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true;
         }
 
         private static bool IsNullable(Type t) => !t.IsValueType || Nullable.GetUnderlyingType(t) != null;
@@ -461,7 +448,7 @@ namespace Base.Services.APIService
 
         static bool IsMultipartFormData(string? contentType)
             => !string.IsNullOrEmpty(contentType) && contentType.Contains(MULTIPART_FORM_DATA, StringComparison.OrdinalIgnoreCase);
-        
+
         static bool IsPlainText(string? contentType)
             => !string.IsNullOrEmpty(contentType) && contentType.Contains(PLAIN_TEXT, StringComparison.OrdinalIgnoreCase);
 

@@ -178,10 +178,10 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
     {
         try
         {
-            Application.Current?.Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher.BeginInvoke(() =>
             {
                 pendingCmdCountText.Text = $"Pending commands: {ProtocolService.PendingCmdCount}";
-            }, System.Windows.Threading.DispatcherPriority.Background);
+            }, System.Windows.Threading.DispatcherPriority.Normal);
         }
         catch { }
     }

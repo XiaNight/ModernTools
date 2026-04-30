@@ -19,7 +19,8 @@ namespace Base.Services
     /// <code>
     ///   GET  …/PythonSandboxService/status?name=default    – execution state + exit code
     ///   POST …/PythonSandboxService/setup                  – download/verify embedded Python
-    ///   POST …/PythonSandboxService/run    {name, code}    – start a named execution
+    ///   POST …/PythonSandboxService/run       {name, body}               – start a named execution
+    ///   POST …/PythonSandboxService/runwait   {name, body, timeoutMs}    – run and wait for result
     ///   GET  …/PythonSandboxService/read?name=default      – read stdout since last call
     ///   POST …/PythonSandboxService/write  {name, input}   – write a line to stdin
     ///   POST …/PythonSandboxService/close  {name}          – kill a named execution
@@ -66,64 +67,88 @@ namespace Base.Services
 
         /// <summary>Returns the status of a named execution (state + exit code).</summary>
         [GET("status")]
-        private object GetStatusApi(string name = "default")
+        private ApiResponse GetStatusApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
             lock (_executionsLock)
             {
                 if (!_executions.TryGetValue(name, out var exec))
-                    return new { name, isReady = IsReady, state = "NotStarted", exitCode = (int?)null };
-                return exec.GetStatus();
+                    return new ApiResponse { Status = 200, Data = new { name, isReady = IsReady, state = "NotStarted", exitCode = (int?)null } };
+                return new ApiResponse { Status = 200, Data = exec.GetStatus() };
             }
         }
 
         /// <summary>Downloads and verifies the embedded Python runtime.</summary>
         [POST("setup")]
-        private async Task<SetupResult> SetupApi() => await SetupEnvironmentAsync();
-
-        /// <summary>Starts a named Python execution asynchronously.</summary>
-        [POST("run")]
-        private object RunApi(RunRequest request)
+        private async Task<ApiResponse> SetupApi()
         {
-            if (request == null) return new { success = false, error = "Request body required." };
+            var result = await SetupEnvironmentAsync();
+            return new ApiResponse { Status = result.Success ? 200 : 500, Data = result };
+        }
+
+        /// <summary>Starts a named Python execution and returns immediately.</summary>
+        [POST("run")]
+        private ApiResponse RunApi(RunRequest request)
+        {
+            if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
             if (string.IsNullOrEmpty(request.Name)) request.Name = "default";
-            return StartExecution(request.Name, request.body);
+            var result = StartExecution(request.Name, request.body);
+            // StartExecution returns anonymous { success, error? } or { success, name }
+            // Reflect success to pick status code
+            bool success = (bool)(result.GetType().GetProperty("success")?.GetValue(result) ?? false);
+            return new ApiResponse { Status = success ? 200 : 400, Data = result };
+        }
+
+        /// <summary>
+        /// Runs a Python script, waits until it finishes (or the timeout elapses), and returns
+        /// all stdout/stderr output in a single response.
+        /// If the timeout elapses the process is killed and <c>timedOut</c> is <c>true</c>.
+        /// </summary>
+        [POST("runwait")]
+        private async Task<ApiResponse> RunWaitApi(RunWaitRequest request)
+        {
+            if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
+            if (string.IsNullOrEmpty(request.Name)) request.Name = "default";
+            RunWaitResult result = await RunAndWaitAsync(request.Name, request.body, request.TimeoutMs);
+            int status = result.Success ? 200 : result.TimedOut ? 408 : 400;
+            return new ApiResponse { Status = status, Data = result };
         }
 
         /// <summary>Returns stdout written since the last Read call for a named execution.</summary>
         [GET("read")]
-        private object ReadApi(string name = "default")
+        private ApiResponse ReadApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
             lock (_executionsLock)
             {
                 if (!_executions.TryGetValue(name, out var exec))
-                    return new { error = $"No execution named '{name}' found." };
-                return new { name, output = exec.Read() };
+                    return new ApiResponse { Status = 404, Data = new { error = $"No execution named '{name}' found." } };
+                return new ApiResponse { Status = 200, Data = new { name, output = exec.Read() } };
             }
         }
 
         /// <summary>Writes a line to the stdin of a named execution.</summary>
         [POST("write")]
-        private object WriteApi(WriteRequest request)
+        private ApiResponse WriteApi(WriteRequest request)
         {
-            if (request == null) return new { success = false, error = "Request body required." };
+            if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
             string name = string.IsNullOrEmpty(request.Name) ? "default" : request.Name;
             lock (_executionsLock)
             {
                 if (!_executions.TryGetValue(name, out var exec))
-                    return new { success = false, error = $"No execution named '{name}' found." };
+                    return new ApiResponse { Status = 404, Data = new { error = $"No execution named '{name}' found." } };
                 exec.Write(request.Input ?? string.Empty);
-                return new { success = true };
+                return new ApiResponse { Status = 200, Data = new { success = true } };
             }
         }
 
         /// <summary>Kills a named execution and removes it.</summary>
         [POST("close")]
-        private void CloseApi(string name = "default")
+        private ApiResponse CloseApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
             CloseExecution(name);
+            return new ApiResponse { Status = 200, Data = new { success = true, name } };
         }
 
         // ── Public programmatic API ───────────────────────────────────────────────
@@ -179,9 +204,7 @@ namespace Base.Services
 
         /// <summary>
         /// Starts executing <paramref name="code"/> under the given <paramref name="name"/>.
-        /// If the embedded Python is not yet ready it is set up automatically.
-        /// Returns immediately; use <see cref="ReadExecution"/> / <see cref="WriteExecution"/>
-        /// and <see cref="GetExecutionStatus"/> to interact with the running process.
+        /// Returns immediately; use <see cref="RunAndWaitAsync"/> if you need the output inline.
         /// </summary>
         public object StartExecution(string name, string code)
         {
@@ -201,8 +224,88 @@ namespace Base.Services
                 var exec = new PythonExecution(name, PythonExe, code);
                 _executions[name] = exec;
                 exec.Start();
-                return new { success = true, name };
+                return new { success = true, name = name };
             }
+        }
+
+        /// <summary>
+        /// Runs <paramref name="code"/> under <paramref name="name"/>, waits for it to finish
+        /// (up to <paramref name="timeoutMs"/> milliseconds), then returns all stdout/stderr output.
+        /// If the timeout elapses the process is killed and <c>timedOut</c> is <c>true</c> in the
+        /// result. Pass <c>0</c> or a negative value to wait indefinitely.
+        /// </summary>
+        public async Task<RunWaitResult> RunAndWaitAsync(string name, string code, int timeoutMs = 30_000)
+        {
+            if (string.IsNullOrEmpty(name)) name = "default";
+
+            if (!IsReady)
+                return new RunWaitResult { Success = false, TimedOut = false, Error = "Embedded Python not ready. Call setup first." };
+
+            if (string.IsNullOrWhiteSpace(code))
+                return new RunWaitResult { Success = false, TimedOut = false, Error = "Code must not be empty." };
+
+            PythonExecution exec;
+            lock (_executionsLock)
+            {
+                if (_executions.TryGetValue(name, out var existing) && existing.IsRunning)
+                    return new RunWaitResult { Success = false, TimedOut = false, Error = $"Execution '{name}' is already running." };
+
+                exec = new PythonExecution(name, PythonExe, code);
+                _executions[name] = exec;
+                exec.Start();
+            }
+
+            bool timedOut = false;
+            try
+            {
+                using var cts = timeoutMs > 0
+                    ? new CancellationTokenSource(timeoutMs)
+                    : new CancellationTokenSource();
+
+                while (exec.IsRunning)
+                {
+                    if (cts.IsCancellationRequested)
+                    {
+                        timedOut = true;
+                        break;
+                    }
+                    await Task.Delay(50, cts.Token).ContinueWith(_ => { });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                timedOut = true;
+            }
+
+            if (timedOut)
+            {
+                exec.Kill();
+                lock (_executionsLock) _executions.Remove(name);
+                Debug.Log($"[PythonSandbox] Execution '{name}' timed out after {timeoutMs} ms.");
+                return new RunWaitResult
+                {
+                    Success = false,
+                    TimedOut = true,
+                    Name = name,
+                    Output = exec.ReadAll(),
+                    ExitCode = null,
+                    Error = $"Execution timed out after {timeoutMs} ms.",
+                };
+            }
+
+            string output = exec.ReadAll();
+            int? exitCode = exec.ExitCode;
+            lock (_executionsLock) _executions.Remove(name);
+            Debug.Log($"[PythonSandbox] Execution '{name}' finished with exit code {exitCode}.");
+
+            return new RunWaitResult
+            {
+                Success = true,
+                TimedOut = false,
+                Name = name,
+                Output = output,
+                ExitCode = exitCode,
+            };
         }
 
         /// <summary>Kills the named execution and removes it from the registry.</summary>
@@ -221,10 +324,28 @@ namespace Base.Services
 
         // ── Request / Result DTOs ─────────────────────────────────────────────────
 
+        public class RunWaitResult
+        {
+            public bool Success { get; set; }
+            public bool TimedOut { get; set; }
+            public string Name { get; set; }
+            public string Output { get; set; }
+            public int? ExitCode { get; set; }
+            public string Error { get; set; }
+        }
+
         public class RunRequest
         {
             public string Name { get; set; } = "default";
             public string body { get; set; }
+        }
+
+        public class RunWaitRequest
+        {
+            public string Name { get; set; } = "default";
+            public string body { get; set; }
+            /// <summary>Maximum time to wait in milliseconds. Use 0 or negative to wait indefinitely. Default: 30 000 ms.</summary>
+            public int TimeoutMs { get; set; } = 30_000;
         }
 
         public class WriteRequest
@@ -314,7 +435,6 @@ namespace Base.Services
             };
             _process.Exited += (_, _) =>
             {
-                // Protect shared state that Read() and Kill() also access.
                 lock (_bufferLock)
                 {
                     ExitCode = _process.ExitCode;
@@ -347,6 +467,17 @@ namespace Base.Services
             }
         }
 
+        /// <summary>Returns the entire accumulated output buffer regardless of read position.</summary>
+        public string ReadAll()
+        {
+            lock (_bufferLock)
+            {
+                string all = _outputBuffer.ToString();
+                _lastReadPos = all.Length;
+                return all;
+            }
+        }
+
         public bool HasNext()
         {
             lock (_bufferLock)
@@ -365,8 +496,8 @@ namespace Base.Services
                 _process.StandardInput.WriteLine(input);
                 _process.StandardInput.Flush();
             }
-            catch (InvalidOperationException) { } // stdin not redirected or process exited
-            catch (IOException) { }               // broken pipe
+            catch (InvalidOperationException) { }
+            catch (IOException) { }
         }
 
         /// <summary>Terminates the process and cleans up the script file.</summary>
@@ -378,7 +509,7 @@ namespace Base.Services
                 ExitCode = null;
             }
             try { if (_process != null && !_process.HasExited) _process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { } // process already exited
+            catch (InvalidOperationException) { }
             catch (System.ComponentModel.Win32Exception) { }
             try { _process?.Dispose(); } catch (ObjectDisposedException) { }
             try { if (_scriptFile != null && File.Exists(_scriptFile)) File.Delete(_scriptFile); }

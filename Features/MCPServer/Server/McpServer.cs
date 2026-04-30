@@ -57,9 +57,14 @@ public sealed class McpServer
     /// </summary>
     public async Task RunAsync(CancellationToken ct = default)
     {
-        // Use raw streams with UTF-8 to avoid platform line-ending translation.
-        using var stdin  = new StreamReader(Console.OpenStandardInput(),  Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: false);
-        using var stdout = new StreamWriter(Console.OpenStandardOutput(), Encoding.UTF8, leaveOpen: false) { AutoFlush = true };
+        // Set encoding explicitly before opening streams so Console.In/Out use UTF-8
+        // without BOM regardless of whether a console window is attached (e.g. when
+        // spawned headless by Claude Code via stdio MCP transport).
+        Console.InputEncoding  = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        Console.OutputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+        using var stdin  = new StreamReader(Console.OpenStandardInput(),  Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+        using var stdout = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
 
         Log("ModernTools MCP Server started — waiting for client…");
 

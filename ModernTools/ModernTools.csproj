@@ -9,7 +9,7 @@
 		<Nullable>disable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
-		<InformationalVersion>V01_00_17</InformationalVersion>
+		<InformationalVersion>V99_00_18</InformationalVersion>
 		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
 		<AppName>ModernToolset</AppName>
 		<Company>AsusTek Computer Inc.</Company>
@@ -40,15 +40,6 @@
 		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
 		<ProjectReference Include="..\Features\ArmouryProtocol\ArmouryProtocol.csproj" />
 	</ItemGroup>
-	
-	<!-- Build MCPServer and copy its exe to the same output directory as ModernTools -->
-	<Target Name="BuildMCPServer" AfterTargets="Build">
-		<Exec Command="dotnet build &quot;$(MSBuildThisFileDirectory)..\Features\MCPServer\MCPServer.csproj&quot; --configuration $(Configuration) -p:Platform=x64" />
-		<ItemGroup>
-			<_MCPServerOutput Include="$(MSBuildThisFileDirectory)..\Features\MCPServer\bin\x64\$(Configuration)\net8.0-windows\win-x64\ModernToolsMCPServer.*" />
-		</ItemGroup>
-		<Copy SourceFiles="@(_MCPServerOutput)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
-	</Target>
 
 	<Target Name="PublishPluginProjects" AfterTargets="Publish">
 		<Exec Command="dotnet msbuild ..\Base\Base.csproj /t:Publish /p:PublishProfile=FolderProfile" />
@@ -58,6 +49,7 @@
 		<Exec Command="dotnet msbuild ..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\ArmouryProtocol\ArmouryProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\MCPServer\MCPServer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 	</Target>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">

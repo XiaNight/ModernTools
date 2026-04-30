@@ -40,7 +40,7 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-AppDomain.CurrentDomain.ProcessExit += (_, _) => cts.Cancel();
+AppDomain.CurrentDomain.ProcessExit += (_, _) => { try { cts.Cancel(); } catch (ObjectDisposedException) { } };
 
 var server = new McpServer(modernToolsUrl);
 await server.RunAsync(cts.Token);
