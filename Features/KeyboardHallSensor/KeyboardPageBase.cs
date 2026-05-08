@@ -53,7 +53,6 @@ namespace KeyboardHallSensor
         {
             base.OnDisable();
 
-            Exit();
             if (ActiveInterface == null) return;
 
             ActiveInterface.OnDataReceived -= Parse;

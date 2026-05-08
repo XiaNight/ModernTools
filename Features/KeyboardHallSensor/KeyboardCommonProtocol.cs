@@ -27,7 +27,8 @@ namespace KeyboardHallSensor
             {
                 if (isCurrentKeyboardPage)
                 {
-                    //- Do nothing, still on keyboard page
+                    //- Still on keyboard pages: notify the previous page to exit its mode
+                    OnInterfaceDisconnected?.Invoke();
                 }
                 else
                 {
@@ -94,20 +95,38 @@ namespace KeyboardHallSensor
         private async void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
-            if (!ActiveInterface.IsDeviceConnected) return;
-            OnInterfaceDisconnected?.Invoke();
+
+            var interfaceSnapshot = ActiveInterface;
+            bool canSendCmds = interfaceSnapshot.IsDeviceConnected;
+
+            //- Clear any pending commands before queuing the exit sequence
             ProtocolService.ClearCmd();
 
-            await Task.Run(() =>
+            if (!canSendCmds)
             {
-                //- Pre closing sequence
-                ProtocolService.ExitHallSensor(ActiveInterface);
-                ProtocolService.ExitFactory(ActiveInterface);
-
+                //- Device is already gone; null out so Exit() skips sending protocol commands
                 ActiveInterface = null;
+            }
 
-                Debug.Log("[HID] Disconnected");
-            });
+            //- Notify keyboard pages to run their exit protocol (e.g., ExitHallProdTest).
+            //- When connected, ActiveInterface is still set so Exit() can queue commands.
+            //- When disconnected, ActiveInterface is already null so Exit() only unsubscribes.
+            OnInterfaceDisconnected?.Invoke();
+
+            //- Null out immediately to prevent duplicate calls (e.g. from OnDisable)
+            ActiveInterface = null;
+
+            if (canSendCmds)
+            {
+                await Task.Run(() =>
+                {
+                    //- Pre closing sequence (reverse order of entry)
+                    ProtocolService.ExitHallSensor(interfaceSnapshot);
+                    ProtocolService.ExitFactory(interfaceSnapshot);
+                });
+            }
+
+            Debug.Log("[HID] Disconnected");
         }
     }
 }
