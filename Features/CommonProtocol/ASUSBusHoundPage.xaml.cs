@@ -151,16 +151,16 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     //        $"{pcapHeader.TsSec}.{pcapHeader.TsUsec}");
     //}
 
-    private void StartEnqueueLog()
-    {
-        _ = Task.Run(() =>
-        {
-            int count = 0;
-            byte[] data = new byte[64];
-            new Random().NextBytes(data);
-            EnqueueLog("AsyncTestDevice", "IN", data, $"{count++}");
-        });
-    }
+    //private void StartEnqueueLog()
+    //{
+    //    _ = Task.Run(() =>
+    //    {
+    //        int count = 0;
+    //        byte[] data = new byte[64];
+    //        new Random().NextBytes(data);
+    //        EnqueueLog("AsyncTestDevice", Phase.IN, data, $"{count++}");
+    //    });
+    //}
 
     protected override void Update()
     {
@@ -247,14 +247,6 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         return true;
     }
 
-    public void EnqueueToListeners(byte[] data)
-    {
-        foreach (var listener in busListeners)
-        {
-            listener.EnqueueData(data);
-        }
-    }
-
     [GET]
     public ApiResponse ReadOne(string name)
     {
@@ -262,13 +254,54 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         if (listener != null)
         {
             if (!listener.ReceivedData.TryDequeue(out MemoryData item)) return null;
+            string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
             return new ApiResponse
             {
-                Data = item.bucket.AsMemory(0, item.length),
+                Data = new
+                {
+                    Bytes = byteAsString,
+                    Phase = Enum.GetName(item.phase),
+                    Delta = FormatInterval(TimeSpan.FromTicks(item.delta))
+                },
                 Status = 200,
             };
         }
-        return null;
+        return new ApiResponse
+        {
+            Status = 200,
+            Data = null
+        };
+    }
+
+    [GET]
+    public ApiResponse ReadAll(string name)
+    {
+        var listener = busListeners.FirstOrDefault(l => l.Name == name);
+        if (listener != null)
+        {
+            List<object> allData = new();
+            while (listener.ReceivedData.TryDequeue(out MemoryData item))
+            {
+                string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
+                allData.Add(
+                    new
+                    {
+                        Bytes = byteAsString,
+                        Phase = Enum.GetName(item.phase),
+                        Delta = FormatInterval(TimeSpan.FromTicks(item.delta))
+                    });
+            }
+            return new ApiResponse
+            {
+                Data = allData,
+                Status = 200,
+            };
+        }
+        return new ApiResponse
+        {
+            Status = 200,
+            Data = null
+        };
     }
 
     public class BusListener
@@ -292,13 +325,15 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             this.bufferSize = bufferSize;
         }
 
-        public void EnqueueData(byte[] data)
+        public void EnqueueData(byte[] data, Phase phase, long delta)
         {
             ReceivedData.EnqueueValue((ref MemoryData memoryData) =>
             {
                 int length = Math.Min(data.Length, bufferSize);
                 Array.Copy(data, memoryData.bucket, length);
                 memoryData.length = length;
+                memoryData.phase = phase;
+                memoryData.delta = delta;
             });
         }
 
@@ -306,6 +341,8 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         {
             public byte[] bucket;
             public int length;
+            public Phase phase;
+            public long delta;
         }
     }
 
@@ -554,7 +591,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
             e.Item,
             LogGrid.Columns[1],
-            $"{item.Phase}\t"
+            $"{Enum.GetName(item.Phase)}\t"
         ));
 
         e.ClipboardRowContent.Add(new DataGridClipboardCellContent(
@@ -654,9 +691,14 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         }
     }
 
+    [POST]
     private bool SendCmd(ushort usage, ushort usagePage, string cmdText)
     {
         if (connectedInterfaces is null || connectedInterfaces.Count == 0) return false;
+        if(string.Compare(cmdText, "04 05") == 0)
+        {
+            Debug.Log("Exit Hall Sensor");
+        }
         PeripheralInterface targetInterface = connectedInterfaces.Find(
             i => i.ProductInfo.Usage == usage && i.ProductInfo.UsagePage == usagePage);
         return targetInterface == null ? false : SendCmd(targetInterface, cmdText);
@@ -668,6 +710,54 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         if (parsedCmd == null || parsedCmd.Length == 0) return false;
         ProtocolService.AppendCmd(pInterface, parsedCmd);
         return true;
+    }
+
+    /// <summary>
+    /// Writes a hex command to the specified interface and waits for a response within the given timeout.
+    /// </summary>
+    /// <param name="usage">HID Usage of the target interface.</param>
+    /// <param name="usagePage">HID Usage Page of the target interface.</param>
+    /// <param name="cmdText">Hex string command (e.g. "02 00 B5 00").</param>
+    /// <param name="timeoutMs">Timeout in milliseconds to wait for a response.</param>
+    [POST]
+    public async Task<ApiResponse> WriteAndRead(ushort usage, ushort usagePage, string cmdText, int timeoutMs = 1000)
+    {
+        if (connectedInterfaces is null || connectedInterfaces.Count == 0)
+            return new ApiResponse { Status = 503, Data = "No device connected." };
+
+        PeripheralInterface targetInterface = connectedInterfaces.Find(
+            i => i.ProductInfo.Usage == usage && i.ProductInfo.UsagePage == usagePage)
+            ?? connectedInterfaces.FirstOrDefault();
+
+        if (targetInterface is null)
+            return new ApiResponse { Status = 503, Data = "No matching interface found." };
+
+        byte[] parsedCmd = ParseCommand(cmdText);
+        if (parsedCmd is null || parsedCmd.Length == 0)
+            return new ApiResponse { Status = 400, Data = "Invalid command string." };
+
+        try
+        {
+            using var cts = new CancellationTokenSource(timeoutMs);
+            byte[] response = await targetInterface.WriteAndReadAsync(parsedCmd, cts.Token);
+            return new ApiResponse
+            {
+                Status = 200,
+                Data = new
+                {
+                    Bytes = ByteToString(response, false),
+                    Length = response.Length
+                }
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            return new ApiResponse { Status = 408, Data = $"Read timed out after {timeoutMs} ms." };
+        }
+        catch (Exception ex)
+        {
+            return new ApiResponse { Status = 500, Data = ex.Message };
+        }
     }
 
     private void StartBtn_Click(object sender, RoutedEventArgs e)
@@ -696,7 +786,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
                 Action<ReadOnlyMemory<byte>, DateTime> receivedHandler = (data, time) =>
                 {
-                    string delta = "";
+                    long delta = 0;
 
                     // Shared interval across all interfaces.
                     long previousTicks = Interlocked.Exchange(ref lastReceivedTicksShared, time.Ticks);
@@ -705,20 +795,20 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                         long diffTicks = time.Ticks - previousTicks;
                         if (diffTicks >= 0)
                         {
-                            delta = FormatInterval(TimeSpan.FromTicks(diffTicks));
+                            delta = diffTicks;
                         }
                     }
 
                     EnqueueLog(
                         deviceInterface.UsagePage.ToString("X4"),
-                        "OUT",
+                        Phase.IN,
                         data[1..].ToArray(),
                         delta);
                 };
 
                 Action<ReadOnlyMemory<byte>, DateTime> sentHandler = (data, time) =>
                 {
-                    string delta = "";
+                    long delta = 0;
 
                     // Shared interval across all interfaces.
                     long previousTicks = Interlocked.Exchange(ref lastReceivedTicksShared, time.Ticks);
@@ -727,13 +817,13 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                         long diffTicks = time.Ticks - previousTicks;
                         if (diffTicks >= 0)
                         {
-                            delta = FormatInterval(TimeSpan.FromTicks(diffTicks));
+                            delta = diffTicks;
                         }
                     }
 
                     EnqueueLog(
                         deviceInterface.UsagePage.ToString("X4"),
-                        "IN",
+                        Phase.OUT,
                         data.ToArray(),
                         delta);
                 };
@@ -887,11 +977,20 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         }
     }
 
-    public void EnqueueLog(string device, string phase, byte[] data, string delta)
+    public void EnqueueLog(string device, Phase phase, byte[] data, long delta)
     {
-        pendingLogs.Enqueue(new LogRow(device, phase, data, ByteToString(data), "", delta));
-        
-        EnqueueToListeners(data);
+        string diff = FormatInterval(TimeSpan.FromTicks(delta));
+        pendingLogs.Enqueue(new LogRow(device, phase, data, ByteToString(data), "", diff));
+
+        EnqueueToListeners(data, phase, delta);
+    }
+
+    private void EnqueueToListeners(byte[] data, Phase phase, long delta)
+    {
+        foreach (var listener in busListeners)
+        {
+            listener.EnqueueData(data, phase, delta);
+        }
     }
 
     public void ClearLogs()
@@ -1105,9 +1204,16 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     }
 }
 
+public enum Phase
+{
+    IN,
+    OUT,
+    CTL
+}
+
 public sealed record LogRow(
     string Device,
-    string Phase,
+    Phase Phase,
     byte[] Data,
     string DataString,
     string Description,

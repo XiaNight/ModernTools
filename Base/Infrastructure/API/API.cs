@@ -19,9 +19,41 @@ namespace API
         }
 
         [POST("SelectTabByName", true)]
-        private void SelectTabByName(string name)
+        private ApiResponse SelectTabByName(string name)
         {
-            Main.SelectTabByName(name);
+            bool success = Main.SelectTabByName(name);
+
+            return success ? new ApiResponse
+            {
+                Status = 200,
+                Data = $"Tab '{name}' selected successfully."
+            } : new ApiResponse
+            {
+                Status = 404,
+                Data = $"Tab '{name}' not found."
+            };
+        }
+
+        [GET("GetCurrentTab", true)]
+        private ApiResponse GetCurrentTab()
+        {
+            var currentTab = Main.GetCurrentTab();
+            return new ApiResponse
+            {
+                Status = 200,
+                Data = currentTab
+            };
+        }
+
+        [GET("ListTabs", true)]
+        private ApiResponse ListTabs()
+        {
+            var tabNames = Main.ListTabs().ToArray();
+            return new ApiResponse
+            {
+                Status = 200,
+                Data = tabNames
+            };
         }
 
         [GET("ListRoute", false)]
