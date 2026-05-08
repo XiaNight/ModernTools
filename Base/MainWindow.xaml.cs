@@ -513,7 +513,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
     }
-    public void SelectTabByName(string name)
+
+    public bool SelectTabByName(string name)
     {
         Stack<IEnumerable<INavigationItem>> stack = new();
         stack.Push(NavTabsManager.TopButtons);
@@ -527,8 +528,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     if (button.Text == name)
                     {
                         button.Click();
-                        return;
+                        return true;
                     }
+                }
+                else if (item is NavigationExpander expander)
+                {
+                    stack.Push(expander.Items);
+                }
+            }
+        }
+        return false;
+    }
+
+    public IEnumerable<string> ListTabs()
+    {
+        Stack<IEnumerable<INavigationItem>> stack = new();
+        stack.Push(NavTabsManager.TopButtons);
+        stack.Push(NavTabsManager.BottomButtons);
+        while (stack.Count > 0)
+        {
+            foreach (INavigationItem item in stack.Pop())
+            {
+                if (item is NavigationButton button)
+                {
+                    yield return button.Text;
                 }
                 else if (item is NavigationExpander expander)
                 {
@@ -538,11 +561,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    public string GetCurrentTab()
+    {
+        return currentPage?.PageName ?? "None";
+    }
+
     public static string GetOutputFolder(params string[] subFolders)
         => GetOutputFolder(true, subFolders);
     public static string GetOutputFolder(bool create = true, params string[] subFolders)
         => GetFolder("Output", create, subFolders);
-    public static string GetToolFolder(params string[] subFolders)
+    public static string GetToolFolder(params string[] subFolders) 
         => GetToolFolder(true, subFolders);
     public static string GetToolFolder(bool create = true, params string[] subFolders)
         => GetFolder("Tools", create, subFolders);
@@ -554,10 +582,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         => GetPluginsFolder(true, subFolders);
     public static string GetPluginsFolder(bool create = true, params string[] subFolders)
         => GetFolder("Plugins", create, subFolders);
-
+    
     public static string GetFolder(string folderName, bool create = true, params string[] subFolders)
     {
-        string exeDir = AppContext.BaseDirectory;
+        string exeDir = AppContext.BaseDirectory;  
         string dir = Path.Combine(exeDir, folderName, Path.Combine(subFolders));
         if (create) Directory.CreateDirectory(dir); // Safe even if it exists
         return dir;

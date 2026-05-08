@@ -112,7 +112,15 @@ namespace Base.Services
 			byte[] payload = parameter is null || parameter.Length == 0 ? [] : (byte[])parameter.Clone();
 			CmdData item = new(device, cmd, wait, payload);
 			pendingCommands.Enqueue(item);
-			OnCmdQueued?.Invoke(item);
+            try
+            {
+			    OnCmdQueued?.Invoke(item);
+            }
+            catch (Exception e)
+            {
+                Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
+                Debug.Log(e);
+            }
 			queueSignal.Release();
 		}
 

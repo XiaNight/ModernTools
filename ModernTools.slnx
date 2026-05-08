@@ -4,6 +4,9 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/Feature/">
+    <Project Path="Features/MCPServer/MCPServer.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="Features/ArmouryProtocol/ArmouryProtocol.csproj" Id="5fb62e9c-cb6a-4746-8f6c-e21d8510f1b5">
       <Platform Solution="*|x64" Project="x64" />
     </Project>

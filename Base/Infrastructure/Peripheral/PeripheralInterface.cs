@@ -245,11 +245,10 @@ public abstract class PeripheralInterface : IDisposable
         DateTime now = DateTime.UtcNow;
         if (data.IsEmpty) return;
 
-        if (rxSignal.CurrentCount > 0)
-        {
-            rxQueue.Enqueue(data);
-            rxSignal.Release();
-        }
+        // Always enqueue so WriteAndReadAsync can pick it up even if the
+        // device responds before WaitForNextReportAsync starts waiting.
+        rxQueue.Enqueue(data);
+        rxSignal.Release();
 
         Action<ReadOnlyMemory<byte>, DateTime> handler;
         lock (lockObject) handler = onDataReceived;
