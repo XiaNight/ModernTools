@@ -6,11 +6,11 @@ using MCPServer.Protocol;
 namespace MCPServer.Server;
 
 /// <summary>
-/// Connects to a running ModernTools application via its local HTTP API (default port 2345),
+/// Connects to a running ModernToolset application via its local HTTP API (default port 2345),
 /// discovers all registered API routes, and provides methods for proxying MCP tool calls
 /// as HTTP requests to those routes.
 /// </summary>
-public sealed class ModernToolsApiProxy : IDisposable
+public sealed class ModernToolsetApiProxy : IDisposable
 {
     private readonly HttpClient _http;
     private readonly string _baseUrl;
@@ -21,7 +21,7 @@ public sealed class ModernToolsApiProxy : IDisposable
         WriteIndented = false,
     };
 
-    public ModernToolsApiProxy(string baseUrl = "http://127.0.0.1:2345")
+    public ModernToolsetApiProxy(string baseUrl = "http://127.0.0.1:2345")
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
@@ -30,7 +30,7 @@ public sealed class ModernToolsApiProxy : IDisposable
     // ── Connectivity ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Returns true when the ModernTools HTTP API is reachable.
+    /// Returns true when the ModernToolset HTTP API is reachable.
     /// </summary>
     public async Task<bool> IsAvailableAsync(CancellationToken ct = default)
     {
@@ -49,7 +49,7 @@ public sealed class ModernToolsApiProxy : IDisposable
     // ── Route discovery ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Retrieves the route listing from ModernTools and parses it into
+    /// Retrieves the route listing from ModernToolset and parses it into
     /// <see cref="ParsedRoute"/> objects ready for MCP tool registration.
     /// </summary>
     public async Task<IReadOnlyList<ParsedRoute>> DiscoverRoutesAsync(CancellationToken ct = default)
@@ -86,7 +86,7 @@ public sealed class ModernToolsApiProxy : IDisposable
     // ── Tool invocation ───────────────────────────────────────────────────────
 
     /// <summary>
-    /// Proxies a tool call to the matching ModernTools HTTP endpoint.
+    /// Proxies a tool call to the matching ModernToolset HTTP endpoint.
     /// GET routes receive parameters as query-string; POST routes receive them as JSON body.
     /// </summary>
     public async Task<ToolCallResult> InvokeAsync(

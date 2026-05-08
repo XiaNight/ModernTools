@@ -9,9 +9,9 @@ namespace MCPServer.Server;
 /// Core MCP server that communicates over stdin/stdout using the JSON-RPC 2.0
 /// transport defined by the Model Context Protocol specification (2024-11-05).
 ///
-/// All ModernTools HTTP-API routes are auto-discovered and exposed as MCP tools.
+/// All ModernToolset HTTP-API routes are auto-discovered and exposed as MCP tools.
 /// Dedicated tools for Python sandbox management are always registered regardless
-/// of whether ModernTools is currently running.
+/// of whether ModernToolset is currently running.
 /// </summary>
 public sealed class McpServer
 {
@@ -29,7 +29,7 @@ public sealed class McpServer
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    private readonly ModernToolsApiProxy _proxy;
+    private readonly ModernToolsetApiProxy _proxy;
 
     /// <summary>
     /// Route table: tool-name → parsed route, populated at initialise time.
@@ -45,7 +45,7 @@ public sealed class McpServer
 
     public McpServer(string modernToolsUrl = DefaultModernToolsUrl)
     {
-        _proxy = new ModernToolsApiProxy(modernToolsUrl);
+        _proxy = new ModernToolsetApiProxy(modernToolsUrl);
         _staticTools = BuildStaticTools();
     }
 
@@ -158,7 +158,7 @@ public sealed class McpServer
 
     private async Task<InitializeResult> HandleInitializeAsync(JsonRpcRequest request, CancellationToken ct)
     {
-        // On initialize, attempt to discover routes from the running ModernTools instance.
+        // On initialize, attempt to discover routes from the running ModernToolset instance.
         await RefreshRoutesAsync(ct).ConfigureAwait(false);
         _initialized = true;
 
@@ -181,7 +181,7 @@ public sealed class McpServer
 
     private async Task<ToolsListResult> HandleToolsListAsync(CancellationToken ct)
     {
-        // Refresh routes in case ModernTools was started after this server.
+        // Refresh routes in case ModernToolset was started after this server.
         if (!_initialized || _routeTable.Count == 0)
             await RefreshRoutesAsync(ct).ConfigureAwait(false);
 
@@ -307,13 +307,13 @@ public sealed class McpServer
         new McpTool
         {
             Name        = "moderntools_status",
-            Description = "Check whether the ModernTools application is running and its HTTP API is reachable.",
+            Description = "Check whether the ModernToolset application is running and its HTTP API is reachable.",
             InputSchema = new JsonSchema { Type = "object" }
         },
         new McpTool
         {
             Name        = "moderntools_list_routes",
-            Description = "List all HTTP API routes currently registered in the running ModernTools instance.",
+            Description = "List all HTTP API routes currently registered in the running ModernToolset instance.",
             InputSchema = new JsonSchema { Type = "object" }
         },
     ];
@@ -391,7 +391,7 @@ public sealed class McpServer
                     .ToList();
                 var text = lines.Count > 0
                     ? string.Join('\n', lines)
-                    : "No routes discovered (is ModernTools running?).";
+                    : "No routes discovered (is ModernToolset running?).";
                 return new ToolCallResult
                 {
                     Content = [new ContentItem { Type = "text", Text = text }]

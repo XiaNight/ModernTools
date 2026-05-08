@@ -4,7 +4,7 @@ using MCPServer.Protocol;
 namespace MCPServer.Server;
 
 /// <summary>
-/// Parses the route listing strings returned by the ModernTools HTTP API's
+/// Parses the route listing strings returned by the ModernToolset HTTP API's
 /// <c>GET /api/v1/listroute</c> endpoint and converts them into <see cref="McpTool"/>
 /// definitions together with the information needed to proxy calls back.
 /// </summary>

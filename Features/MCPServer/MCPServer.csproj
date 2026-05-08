@@ -6,7 +6,7 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Platforms>AnyCPU;x64</Platforms>
-		<AssemblyName>ModernToolsMCPServer</AssemblyName>
+		<AssemblyName>ModernToolsetMCPServer</AssemblyName>
 		<RootNamespace>MCPServer</RootNamespace>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<AllowUnsafeBlocks>false</AllowUnsafeBlocks>

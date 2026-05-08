@@ -1,11 +1,11 @@
 using MCPServer.Server;
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ModernTools MCP Server – entry point
+// ModernToolset MCP Server – entry point
 //
 // This process communicates over stdin/stdout using the Model Context Protocol
 // (MCP) specification 2024-11-05, allowing Claude Code and other MCP clients to
-// interact with all ModernTools APIs and the embedded Python execution sandbox.
+// interact with all ModernToolset APIs and the embedded Python execution sandbox.
 //
 // Usage:
 //   ModernToolsMCPServer.exe [--url http://127.0.0.1:2345]
