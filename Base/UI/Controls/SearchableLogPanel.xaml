@@ -62,7 +62,7 @@
                          IsReadOnly="True"
                          IsDocumentEnabled="False"
                          VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Disabled"
+                         HorizontalScrollBarVisibility="Auto"
                          Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
                          BorderThickness="0"
                          FontFamily="Consolas"
