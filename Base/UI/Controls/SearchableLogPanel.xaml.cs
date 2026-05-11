@@ -103,6 +103,12 @@ namespace Base.Components
             Loaded += (_, __) =>
             {
                 HookScrollViewer();
+                LogBox.SizeChanged += OnLogBoxSizeChanged;
+            };
+
+            Unloaded += (_, __) =>
+            {
+                LogBox.SizeChanged -= OnLogBoxSizeChanged;
             };
 
             UpdateMatchLabel();
@@ -613,6 +619,27 @@ namespace Base.Components
         }
 
         #region Initialization Helpers
+
+        private void OnLogBoxSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!e.WidthChanged) return;
+            if (Math.Abs(e.NewSize.Width - e.PreviousSize.Width) < 1.0) return;
+
+            double newWidth = e.NewSize.Width;
+            if (newWidth <= 0) return;
+
+            var doc = LogBox.Document;
+            if (doc == null) return;
+
+            // Only grow PageWidth, never shrink it.
+            // This prevents the FlowDocument from reflowing text to a narrower layout
+            // when the window is resized to a small width, which would freeze the UI.
+            // When the window narrows, the horizontal scrollbar handles overflow instead.
+            if (double.IsNaN(doc.PageWidth) || newWidth > doc.PageWidth)
+            {
+                doc.PageWidth = newWidth;
+            }
+        }
 
         private void HookScrollViewer()
         {
