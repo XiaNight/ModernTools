@@ -6,6 +6,7 @@ using System.Windows.Controls;
 
 namespace KeyboardHallSensor
 {
+    [PageInfo("Multi Calibration Analog", ShortName = "MCA", NavOrder = 3, Path = ["Keyboard"])]
     public partial class MultiCalibrationAnalogPage : PageBase, IKeyboardPage
     {
         [Path("Keyboard")]

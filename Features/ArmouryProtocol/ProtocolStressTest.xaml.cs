@@ -1,4 +1,5 @@
-﻿using Base.Pages;
+﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
@@ -89,6 +90,7 @@ public sealed class StressTestResult
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+[PageInfo("Protocol Stress Test")]
 public partial class ProtocolStressTest : PageBase
 {
     public override string PageName => "Protocol Stress Test";

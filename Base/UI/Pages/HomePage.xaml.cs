@@ -12,9 +12,12 @@ using System.Windows.Threading;
 
 namespace Base.Pages
 {
+    using Base.Core;
+
     /// <summary>
     /// Interaction logic for HomePage.xaml
     /// </summary>
+    [PageInfo("Home", NavOrder = 0)]
     public partial class HomePage : PageBase, INotifyPropertyChanged
     {
         public override string PageName => "Home";

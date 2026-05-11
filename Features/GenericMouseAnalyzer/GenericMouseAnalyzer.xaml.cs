@@ -21,6 +21,7 @@ public partial class GenericMouseAnalyzer : UserControl
     }
 }
 
+[PageInfo("Genric Mouse Analyzer", Path = ["Mouse"])]
 public class GenericMouseAnalyzerPage : Base.Pages.PageBase
 {
     [Path("Mouse")]

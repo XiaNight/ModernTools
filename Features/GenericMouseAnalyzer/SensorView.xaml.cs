@@ -22,6 +22,7 @@ namespace GenericMouseAnalyzer
         }
     }
 
+    [PageInfo("Sensor View", Path = ["Mouse"])]
     public class SensorViewPage : PageBase
     {
         [Path("Mouse")]

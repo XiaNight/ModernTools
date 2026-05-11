@@ -1,4 +1,5 @@
-﻿using Base.Pages;
+﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
@@ -15,6 +16,7 @@ namespace CommonProtocol;
 /// Group B (Key 3): relay indices 0–1.
 /// Command format: [0x02, key, index, 0x00, state]  state=0x01 ON, 0x00 OFF.
 /// </summary>
+[PageInfo("Relay Control", Glyph = "\uE8C6")]
 public partial class RelayControlPage : PageBase
 {
     public override string PageName => "Relay Control";

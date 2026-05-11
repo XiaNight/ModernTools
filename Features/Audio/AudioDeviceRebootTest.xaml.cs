@@ -11,6 +11,7 @@ namespace Audio
     /// <summary>
     /// Interaction logic for AudioDeviceRebootTest.xaml
     /// </summary>
+    [PageInfo("Audio Device Reboot Test", Path = ["Audio"])]
     public partial class AudioDeviceRebootTest : PageBase
     {
         [Path("Audio")]
