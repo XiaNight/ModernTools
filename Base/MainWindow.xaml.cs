@@ -126,6 +126,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void MainWindowLoading()
     {
+        var startupSw = System.Diagnostics.Stopwatch.StartNew();
+
         LoadPluginDLLs(GetPluginsFolder());
 
 #if DEBUG
@@ -137,6 +139,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         SelectTabIndex(0);
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
+
+        startupSw.Stop();
+        LogMessage($"[Startup] Loading complete in {startupSw.Elapsed.TotalMilliseconds:0.###} ms");
 
         LoadingCover.AutoFinish((t) =>
         {
@@ -297,7 +302,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         lazyPageTabMap[t] = newTab;
                     }
 
-                    LogMessage($"[NavInit] {t.FullName} : registered (lazy)");
                     jobs[t].Finish();
                 }, DispatcherPriority.Loaded);
             }
