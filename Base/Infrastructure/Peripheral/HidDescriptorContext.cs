@@ -76,6 +76,21 @@ namespace Base.Services.Peripheral
             return NtSuccess(st);
         }
 
+        public bool TryGetValueCap(ushort usagePage, ushort usage, out HidNative.HIDP_VALUE_CAPS cap)
+        {
+            var caps = new HidNative.HIDP_VALUE_CAPS[1];
+            ushort length = 1;
+            var st = HidNative.HidP_GetSpecificValueCaps(
+                HidNative.HIDP_REPORT_TYPE.HidP_Input, usagePage, 0, usage, caps, ref length, PreparsedData);
+            if (NtSuccess(st) && length > 0)
+            {
+                cap = caps[0];
+                return true;
+            }
+            cap = default;
+            return false;
+        }
+
         public void Dispose()
         {
             if (PreparsedData != IntPtr.Zero)

@@ -64,8 +64,8 @@ namespace Gamepad
         // Report Rate
         private readonly ConcurrentQueue<long> timestamps = new();
         private float reportRateSmoothed = 0;
-        private long startTime = DateTime.Now.Ticks;
-        private long lastTimestamp = DateTime.Now.Ticks;
+        private long startTime = DateTime.UtcNow.Ticks;
+        private long lastTimestamp = DateTime.UtcNow.Ticks;
         private float reportRate = 0f;
         private float reportRateRaw = 0f;
         private float momentum = 0;
@@ -90,6 +90,8 @@ namespace Gamepad
         private bool mappingReady = false;
         private readonly List<(ushort usagePage, ushort usage, Action<int> setter)> axisMap = [];
         private bool hasHat = false;
+        private bool hidHasLT = false;
+        private bool hidHasRT = false;
 
         // Recording
         private bool isRecording = false;
@@ -424,7 +426,11 @@ namespace Gamepad
 
                 if (mappingReady)
                 {
-                    // Axes/values
+                    // Capture previous LT/RT for change detection before axis updates
+                    byte prevLT = LT;
+                    byte prevRT = RT;
+
+                    // Axes/values (may include LT/RT if HID report has Z/RZ usages)
                     foreach (var (up, u, setter) in axisMap)
                     {
                         if (ActiveInterface.TryGetUsageValue(data, up, u, out int v))
@@ -458,13 +464,11 @@ namespace Gamepad
                     for (int i = 0; i < BUTTON_COUNT; i++) ButtonStates[i] = latestButtonStates[i];
                     for (int i = 0; i < BUTTON_COUNT; i++) buttonCounter[i] += onPressed[i] ? 1 : 0;
 
-                    // Get Standalone LT RT from XInput
-                    byte left = newData.xinput_state.Gamepad.bLeftTrigger;
-                    if (left != LT)  zCounter++;
-                    LT = left;
-                    byte right = newData.xinput_state.Gamepad.bRightTrigger;
-                    if (right != RT) rZCounter++;
-                    RT = right;
+                    // LT/RT: prefer HID report (Z/RZ usages); fall back to XInput if not available
+                    if (!hidHasLT) LT = newData.xinput_state.Gamepad.bLeftTrigger;
+                    if (!hidHasRT) RT = newData.xinput_state.Gamepad.bRightTrigger;
+                    if (LT != prevLT) zCounter++;
+                    if (RT != prevRT) rZCounter++;
 
                     leftJoyStick.Update(Xf, Yf);
                     rightJoyStick.Update(RXf, RYf);
@@ -517,8 +521,8 @@ namespace Gamepad
             if (!hasData)
             {
                 _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
-                LT = xinput_state.Gamepad.bLeftTrigger;
-                RT = xinput_state.Gamepad.bRightTrigger;
+                if (!hidHasLT) LT = xinput_state.Gamepad.bLeftTrigger;
+                if (!hidHasRT) RT = xinput_state.Gamepad.bRightTrigger;
 
                 if (!isChartPaused && chartType <= ChartType.RT)
                 {
@@ -615,8 +619,10 @@ namespace Gamepad
         [AppMenuItem("Vibration/Heavy", true, 65535)]
         [AppMenuItem("Vibration/Light", true, 0, 65535)]
         [AppMenuItem("Vibration/Stop", true, 0, 0)]
-        private static async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
+        private async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
         {
+            if (lastGamepadIndex < 0) return;
+
             var vibration = new XInput.XINPUT_VIBRATION
             {
                 wLeftMotorSpeed = heavy,
@@ -624,7 +630,7 @@ namespace Gamepad
             };
 
             // Start vibration
-            _ = XInput.XInputSetState(0, ref vibration);
+            _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
 
             if (durationMs > 0)
             {
@@ -632,7 +638,7 @@ namespace Gamepad
 
                 // Stop vibration
                 var stop = new XInput.XINPUT_VIBRATION(); // both 0
-                _ = XInput.XInputSetState(0, ref stop);
+                _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
             }
         }
 
@@ -657,7 +663,11 @@ namespace Gamepad
             mappingReady = false;
             axisMap.Clear();
             hasHat = false;
+            hidHasLT = false;
+            hidHasRT = false;
             lastGamepadIndex = FindGamepadIndex();
+
+            page.IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
 
             page.ConnectedText.Text = "Yes";
             page.RecordButton.IsEnabled = true;
@@ -695,16 +705,26 @@ namespace Gamepad
 
         private int FindGamepadIndex()
         {
+            // Try to match via the IG_XX marker in the device path.
+            // XInput HID interfaces appear with IG_00/IG_01/IG_02/IG_03 in their path,
+            // where the two-digit decimal value equals the XInput slot index (0-3).
+            string devicePath = ActiveInterface?.ProductInfo?.ID ?? string.Empty;
+            if (!string.IsNullOrEmpty(devicePath))
+            {
+                int igIdx = devicePath.IndexOf("ig_", StringComparison.OrdinalIgnoreCase);
+                if (igIdx >= 0 && igIdx + 5 <= devicePath.Length)
+                {
+                    string igSlot = devicePath.Substring(igIdx + 3, 2);
+                    if (int.TryParse(igSlot, out int slot) && slot >= 0 && slot < 4)
+                        return slot;
+                }
+            }
+
+            // Fallback: scan all XInput slots and return the first active one.
             for (int i = 0; i < 4; i++)
             {
-                int result = XInput.XInputGetKeystroke(i, 0, out XInput.XINPUT_KEYSTROKE keystroke);
-                if (result != XInput.ERROR_DEVICE_NOT_CONNECTED)
-                {
-                    _ = XInput.XInputGetState(i, out XInput.XINPUT_STATE xinput_state);
-
-                    // Check input values, if none 0, return gamepad index
-                    if (xinput_state.dwPacketNumber > 0) return keystroke.UserIndex;
-                }
+                if (XInput.XInputGetState(i, out _) == XInput.ERROR_SUCCESS)
+                    return i;
             }
             return -1;
         }
@@ -713,20 +733,20 @@ namespace Gamepad
         {
             if (ActiveInterface == null) return;
 
-            // Preferred axis order: X,Y,Rx,Ry,Z,Rz,Slider,Dial
+            // Preferred axis order: X,Y,Rx,Ry,Slider,Dial  (Z/RZ handled separately with range normalization)
             var candidates = new (ushort up, ushort u, Action<int> set)[]
             {
                 (0x01, 0x30, v => X  = (ushort)v), // 48 X 
                 (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
                 (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
                 (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                //(0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
-                //(0x01, 0x35, v => RT = (byte)v), // 53 RZ
                 (0x01, 0x36, v => { /* Slider */ }), // 54
                 (0x01, 0x37, v => { /* Dial */ }), // 55
             };
 
             axisMap.Clear();
+            hidHasLT = false;
+            hidHasRT = false;
             foreach (var (up, u, set) in candidates)
             {
                 if (ActiveInterface.TryGetUsageValue(firstReport, up, u, out int v))
@@ -734,6 +754,96 @@ namespace Gamepad
                     axisMap.Add((up, u, set));
                     set(v); // seed initial value
                 }
+            }
+
+            // Z axis (LT, or combined LT+RT on some controllers)
+            if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
+            {
+                int zMin = 0, zEffMax = 255;
+                if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap))
+                {
+                    zMin = ltCap.LogicalMin;
+                    // LogicalMax may be <= LogicalMin when the firmware encodes 0xFF as a
+                    // 1-byte signed value (-1), or when the field uses a 7-bit unsigned range.
+                    // Fall back to the bit-width maximum so all cases map correctly to 0-255.
+                    if (ltCap.LogicalMax > zMin)
+                        zEffMax = ltCap.LogicalMax;
+                    else if (ltCap.BitSize > 0)
+                        zEffMax = (1 << ltCap.BitSize) - 1;
+                    else
+                        zEffMax = 255;
+                }
+
+                double zRange = zEffMax - zMin;
+                double zMid = zMin + zRange / 2.0;
+
+                // Detect combined trigger axis: when neither trigger is pressed the axis sits at
+                // the midpoint (≈127 for a 0-255 range), LT pushes toward the max and RT toward
+                // the min.  A 15% tolerance around the midpoint covers quantization and power-on
+                // drift without accidentally misclassifying a half-pressed independent trigger.
+                const double combinedAxisMidTolerance = 0.15;
+                bool isCombined = zRange > 0 && Math.Abs(ltSeed - zMid) < zRange * combinedAxisMidTolerance;
+
+                if (isCombined)
+                {
+                    // This is a combined trigger axis (single channel, LT and RT share one axis).
+                    // XInput exposes bLeftTrigger and bRightTrigger as independent bytes, which
+                    // correctly reports both triggers simultaneously.  Prefer XInput when available
+                    // (lastGamepadIndex != -1) so that pressing both triggers at the same time is
+                    // handled correctly; hidHasLT/hidHasRT are left false so the XInput fallback
+                    // path in DecodeBytes() picks up both values independently.
+                    //
+                    // Only fall back to HID axis splitting when there is no XInput slot (e.g. a
+                    // non-XInput controller that uses a combined DirectInput Z axis).
+                    if (lastGamepadIndex < 0)
+                    {
+                        double ltAxisRange = zEffMax - zMid;
+                        double rtAxisRange = zMid - zMin;
+                        axisMap.Add((0x01, 0x32, v =>
+                        {
+                            LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
+                            RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
+                        }));
+                        LT = 0;
+                        RT = 0;
+                        hidHasLT = true;
+                        hidHasRT = true;
+                    }
+                    // else: XInput is available — leave hidHasLT/hidHasRT false so XInput
+                    // provides separate LT/RT readings (simultaneous press works correctly).
+                }
+                else
+                {
+                    Action<int> ltSetter = zRange > 0
+                        ? v => LT = (byte)Math.Clamp((int)((v - zMin) * 255.0 / zRange), 0, 255)
+                        : v => LT = (byte)Math.Clamp(v, 0, 255);
+                    axisMap.Add((0x01, 0x32, ltSetter));
+                    ltSetter(ltSeed);
+                    hidHasLT = true;
+                }
+            }
+
+            // RZ axis (RT) - only register if RT is not already covered by combined Z axis
+            if (!hidHasRT && ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
+            {
+                int rtMin = 0, rtEffMax = 255;
+                if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap))
+                {
+                    rtMin = rtCap.LogicalMin;
+                    if (rtCap.LogicalMax > rtMin)
+                        rtEffMax = rtCap.LogicalMax;
+                    else if (rtCap.BitSize > 0)
+                        rtEffMax = (1 << rtCap.BitSize) - 1;
+                    else
+                        rtEffMax = 255;
+                }
+                double rtRange = rtEffMax - rtMin;
+                Action<int> rtSetter = rtRange > 0
+                    ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
+                    : v => RT = (byte)Math.Clamp(v, 0, 255);
+                axisMap.Add((0x01, 0x35, rtSetter));
+                rtSetter(rtSeed);
+                hidHasRT = true;
             }
 
             // Hat switch?
