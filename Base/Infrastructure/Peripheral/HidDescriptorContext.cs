@@ -76,6 +76,20 @@ namespace Base.Services.Peripheral
             return NtSuccess(st);
         }
 
+        public bool TryGetValueCap(ushort usagePage, ushort usage, out HidNative.HIDP_VALUE_CAPS cap)
+        {
+            foreach (var vc in ValueCaps)
+            {
+                if (vc.UsagePage != usagePage) continue;
+                bool matches = vc.IsRange == 0
+                    ? vc.NotRange.Usage == usage
+                    : (usage >= vc.Range.UsageMin && usage <= vc.Range.UsageMax);
+                if (matches) { cap = vc; return true; }
+            }
+            cap = default;
+            return false;
+        }
+
         public void Dispose()
         {
             if (PreparsedData != IntPtr.Zero)

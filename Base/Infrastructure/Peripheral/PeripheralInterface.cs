@@ -170,6 +170,15 @@ public abstract class PeripheralInterface : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Returns the HID value capabilities (including LogicalMin/LogicalMax) for the specified usage.
+    /// </summary>
+    public virtual bool TryGetValueCap(ushort usagePage, ushort usage, out HidValueCap cap)
+    {
+        cap = default;
+        return false;
+    }
+
     // Call from concrete classes when a report arrives
     protected void CacheInputReport(byte[] report)
     {

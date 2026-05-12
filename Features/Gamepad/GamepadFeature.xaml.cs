@@ -521,8 +521,8 @@ namespace Gamepad
             if (!hasData)
             {
                 _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
-                LT = xinput_state.Gamepad.bLeftTrigger;
-                RT = xinput_state.Gamepad.bRightTrigger;
+                if (!hidHasLT) LT = xinput_state.Gamepad.bLeftTrigger;
+                if (!hidHasRT) RT = xinput_state.Gamepad.bRightTrigger;
 
                 if (!isChartPaused && chartType <= ChartType.RT)
                 {
@@ -731,15 +731,13 @@ namespace Gamepad
         {
             if (ActiveInterface == null) return;
 
-            // Preferred axis order: X,Y,Rx,Ry,Z,Rz,Slider,Dial
+            // Preferred axis order: X,Y,Rx,Ry,Slider,Dial  (Z/RZ handled separately with range normalization)
             var candidates = new (ushort up, ushort u, Action<int> set)[]
             {
                 (0x01, 0x30, v => X  = (ushort)v), // 48 X 
                 (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
                 (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
                 (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                (0x01, 0x32, v => LT = (byte)v),   // 50 Z (LT on many controllers)
-                (0x01, 0x35, v => RT = (byte)v),   // 53 RZ (RT on many controllers)
                 (0x01, 0x36, v => { /* Slider */ }), // 54
                 (0x01, 0x37, v => { /* Dial */ }), // 55
             };
@@ -753,9 +751,45 @@ namespace Gamepad
                 {
                     axisMap.Add((up, u, set));
                     set(v); // seed initial value
-                    if (up == 0x01 && u == 0x32) hidHasLT = true;
-                    if (up == 0x01 && u == 0x35) hidHasRT = true;
                 }
+            }
+
+            // Z axis (LT) - normalize raw logical value to 0-255 using descriptor range
+            if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
+            {
+                Action<int> ltSetter;
+                if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap) && ltCap.LogicalMax > ltCap.LogicalMin)
+                {
+                    int ltMin = ltCap.LogicalMin;
+                    double ltRange = ltCap.LogicalMax - ltMin;
+                    ltSetter = v => LT = (byte)Math.Clamp((int)((v - ltMin) * 255.0 / ltRange), 0, 255);
+                }
+                else
+                {
+                    ltSetter = v => LT = (byte)Math.Clamp(v, 0, 255);
+                }
+                axisMap.Add((0x01, 0x32, ltSetter));
+                ltSetter(ltSeed);
+                hidHasLT = true;
+            }
+
+            // RZ axis (RT) - normalize raw logical value to 0-255 using descriptor range
+            if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
+            {
+                Action<int> rtSetter;
+                if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap) && rtCap.LogicalMax > rtCap.LogicalMin)
+                {
+                    int rtMin = rtCap.LogicalMin;
+                    double rtRange = rtCap.LogicalMax - rtMin;
+                    rtSetter = v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255);
+                }
+                else
+                {
+                    rtSetter = v => RT = (byte)Math.Clamp(v, 0, 255);
+                }
+                axisMap.Add((0x01, 0x35, rtSetter));
+                rtSetter(rtSeed);
+                hidHasRT = true;
             }
 
             // Hat switch?

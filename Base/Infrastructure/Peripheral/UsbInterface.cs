@@ -355,6 +355,26 @@ public sealed class UsbInterface : PeripheralInterface
     public override bool TryGetUsageValue(byte[] inputReport, ushort usagePage, ushort usage, out int value, ushort linkCollection = 0)
         => _descriptorContext?.TryGetUsageValue(inputReport, usagePage, usage, out value, linkCollection) ?? (value = 0) == 0 && false;
 
+    public override bool TryGetValueCap(ushort usagePage, ushort usage, out HidValueCap cap)
+    {
+        cap = default;
+        if (_descriptorContext == null || !_descriptorContext.TryGetValueCap(usagePage, usage, out var vc)) return false;
+        cap = new HidValueCap
+        {
+            UsagePage = vc.UsagePage,
+            Usage = usage,
+            LinkCollection = vc.LinkCollection,
+            ReportId = vc.ReportID,
+            LogicalMin = vc.LogicalMin,
+            LogicalMax = vc.LogicalMax,
+            BitSize = vc.BitSize,
+            ReportCount = vc.ReportCount,
+            HasNull = vc.HasNull != 0,
+            IsAbsolute = vc.IsAbsolute != 0
+        };
+        return true;
+    }
+
     protected override void CloseDevice()
     {
         try
