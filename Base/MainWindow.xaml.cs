@@ -548,7 +548,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 var closedBase = openBase.MakeGenericType(t);
                 var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                 _ = prop?.GetValue(null);
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Send);
 
             jobs[t].Finish();
         }
