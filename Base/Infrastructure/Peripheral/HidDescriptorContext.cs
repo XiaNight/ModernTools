@@ -78,13 +78,14 @@ namespace Base.Services.Peripheral
 
         public bool TryGetValueCap(ushort usagePage, ushort usage, out HidNative.HIDP_VALUE_CAPS cap)
         {
-            foreach (var vc in ValueCaps)
+            var caps = new HidNative.HIDP_VALUE_CAPS[1];
+            ushort length = 1;
+            var st = HidNative.HidP_GetSpecificValueCaps(
+                HidNative.HIDP_REPORT_TYPE.HidP_Input, usagePage, 0, usage, caps, ref length, PreparsedData);
+            if (NtSuccess(st) && length > 0)
             {
-                if (vc.UsagePage != usagePage) continue;
-                bool matches = vc.IsRange == 0
-                    ? vc.NotRange.Usage == usage
-                    : (usage >= vc.Range.UsageMin && usage <= vc.Range.UsageMax);
-                if (matches) { cap = vc; return true; }
+                cap = caps[0];
+                return true;
             }
             cap = default;
             return false;

@@ -98,6 +98,8 @@ namespace Base.Services.Peripheral.Native
             public ushort Reserved2_0;
             public ushort Reserved2_1;
             public ushort Reserved2_2;
+            public ushort Reserved2_3;
+            public ushort Reserved2_4;
 
             public uint UnitsExp;
             public uint Units;
