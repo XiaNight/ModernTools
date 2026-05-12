@@ -13,6 +13,9 @@ using TimedFloat = Audio.Receiver.AudioChannelHandler.TimedValue<float>;
 
 namespace Audio
 {
+    [PageInfo("Audio", Glyph = "\uE189", ShowDeviceSelection = false,
+        Description = "Place AudioTrigger.bat under ./Tools folder.",
+        Path = ["Audio"])]
     public partial class AudioPage : PageBase
     {
         public override string Glyph => "\uE189";

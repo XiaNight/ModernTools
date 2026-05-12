@@ -2,6 +2,7 @@
 
 namespace KeyboardHallSensor
 {
+    [PageInfo("Analog", Glyph = "\uE765", ShortName = "ANA", NavOrder = 1, Path = ["Keyboard"])]
     public class AnalogPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

@@ -2,6 +2,7 @@ using Base.Core;
 
 namespace KeyboardHallSensor
 {
+    [PageInfo("Top Base Line", ShortName = "TBL", NavOrder = 6, Path = ["Keyboard"])]
     public class BaseLineTopPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

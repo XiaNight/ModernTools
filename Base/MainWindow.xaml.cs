@@ -126,6 +126,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async void MainWindowLoading()
     {
+        var startupSw = System.Diagnostics.Stopwatch.StartNew();
+
         LoadPluginDLLs(GetPluginsFolder());
 
 #if DEBUG
@@ -137,6 +139,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         SelectTabIndex(0);
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
+
+        startupSw.Stop();
+        LogMessage($"[Startup] Loading complete in {startupSw.Elapsed.TotalMilliseconds:0.###} ms");
 
         LoadingCover.AutoFinish((t) =>
         {
@@ -222,6 +227,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     #region Page
 
     private readonly Dictionary<IPageBase, INavigationItem> navPageMap = new();
+    private readonly Dictionary<Type, INavigationItem> lazyPageTabMap = new();
+    private readonly Dictionary<Type, PageBase> lazyPageInstanceMap = new();
     private PageBase currentPage = null;
 
     private static bool IsSelfReferencingSingleton(Type t, Type openBase)
@@ -262,62 +269,146 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         foreach (Type t in allTypes)
         {
-            await Dispatcher.InvokeAsync(() =>
+            var pageInfo = t.GetCustomAttribute<PageInfoAttribute>();
+
+            if (pageInfo != null)
             {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-
-                PageBase newPage = null;
-                try
+                // Fast path: read metadata from attribute without instantiating the page.
+                await Dispatcher.InvokeAsync(() =>
                 {
-                    newPage = (PageBase)Activator.CreateInstance(t);
-                }
-                catch (FileNotFoundException fileEx)
-                {
-                    LogMessage($"[NavInit] Failed to load {t.FullName}: {fileEx.Message}");
-                    jobs[t].Finish();
-                }
-                catch (Exception ex)
-                {
-                    LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
-                }
-                if (newPage == null)
-                {
-                    jobs[t].Finish();
-                    return;
-                }
-
-                RegisterWpfObject(newPage);
-
-                if (newPage.NavOrder >= 0)
-                {
-                    string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
-                    INavigationItem newTab;
-
-                    AddButtonDelegate add = newPage.NavAlignment switch
+                    if (pageInfo.NavOrder >= 0)
                     {
-                        PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
-                        PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
-                        _ => NavTabsManager.AddTop
-                    };
+                        PageBase.NavigationAlignment alignment = pageInfo.NavAlignment == 1
+                            ? PageBase.NavigationAlignment.Back
+                            : PageBase.NavigationAlignment.Front;
 
-                    newTab = add(
-                        text: newPage.PageName,
-                        path: path,
-                        glyph: newPage.Glyph,
-                        secondaryGlyph: newPage.SecondaryGlyph,
-                        secondaryText: newPage.ShortName,
-                        order: newPage.NavOrder);
+                        AddButtonDelegate add = alignment switch
+                        {
+                            PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+                            PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+                            _ => NavTabsManager.AddTop
+                        };
 
-                    newTab.OnClick += () => SelectPage(newPage);
-                    navPageMap.Add(newPage, newTab);
-                }
+                        INavigationItem newTab = add(
+                            text: pageInfo.PageName,
+                            path: pageInfo.Path,
+                            glyph: pageInfo.Glyph,
+                            secondaryGlyph: pageInfo.SecondaryGlyph,
+                            secondaryText: pageInfo.ShortName,
+                            order: pageInfo.NavOrder);
 
-                sw.Stop();
-                LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
-                sw = null;
-                jobs[t].Finish();
-            }, DispatcherPriority.Loaded);
+                        Type capturedType = t;
+                        newTab.OnClick += () => SelectPageLazy(capturedType);
+                        lazyPageTabMap[t] = newTab;
+                    }
+
+                    jobs[t].Finish();
+                }, DispatcherPriority.Loaded);
+            }
+            else
+            {
+                // Legacy path: instantiate immediately (for pages without PageInfoAttribute).
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+
+                    PageBase newPage = null;
+                    try
+                    {
+                        newPage = (PageBase)Activator.CreateInstance(t);
+                    }
+                    catch (FileNotFoundException fileEx)
+                    {
+                        LogMessage($"[NavInit] Failed to load {t.FullName}: {fileEx.Message}");
+                        jobs[t].Finish();
+                    }
+                    catch (Exception ex)
+                    {
+                        LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
+                    }
+                    if (newPage == null)
+                    {
+                        jobs[t].Finish();
+                        return;
+                    }
+
+                    RegisterWpfObject(newPage);
+
+                    if (newPage.NavOrder >= 0)
+                    {
+                        string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
+                        INavigationItem newTab;
+
+                        AddButtonDelegate add = newPage.NavAlignment switch
+                        {
+                            PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+                            PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+                            _ => NavTabsManager.AddTop
+                        };
+
+                        newTab = add(
+                            text: newPage.PageName,
+                            path: path,
+                            glyph: newPage.Glyph,
+                            secondaryGlyph: newPage.SecondaryGlyph,
+                            secondaryText: newPage.ShortName,
+                            order: newPage.NavOrder);
+
+                        newTab.OnClick += () => SelectPage(newPage);
+                        navPageMap.Add(newPage, newTab);
+                    }
+
+                    sw.Stop();
+                    LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
+                    sw = null;
+                    jobs[t].Finish();
+                }, DispatcherPriority.Loaded);
+            }
         }
+    }
+
+    /// <summary>
+    /// Instantiates a lazy page on first access and then navigates to it.
+    /// Subsequent calls reuse the already-created instance.
+    /// </summary>
+    private void SelectPageLazy(Type pageType)
+    {
+        if (lazyPageInstanceMap.TryGetValue(pageType, out PageBase existingPage))
+        {
+            SelectPage(existingPage);
+            return;
+        }
+
+        if (!lazyPageTabMap.TryGetValue(pageType, out INavigationItem tab))
+            return;
+
+        PageBase newPage = null;
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            newPage = (PageBase)Activator.CreateInstance(pageType);
+            sw.Stop();
+            LogMessage($"[NavInit] {pageType.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms (lazy)");
+        }
+        catch (FileNotFoundException fileEx)
+        {
+            LogMessage($"[NavInit] Failed to load {pageType.FullName}: {fileEx.Message}");
+        }
+        catch (Exception ex)
+        {
+            LogMessage($"[NavInit] Failed to load {pageType.FullName}: {ex.Message}");
+        }
+
+        if (newPage == null)
+            return;
+
+        RegisterWpfObject(newPage);
+        navPageMap[newPage] = tab;
+        lazyPageInstanceMap[pageType] = newPage;
+
+        // Awake() is dispatched at Normal priority by RegisterWpfObject.
+        // Dispatching SelectPage at Loaded (lower priority) ensures Awake runs first.
+        Dispatcher.InvokeAsync(() => SelectPage(newPage), DispatcherPriority.Loaded);
     }
 
     public void SelectPage<T>() where T : PageBase
@@ -457,7 +548,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 var closedBase = openBase.MakeGenericType(t);
                 var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                 _ = prop?.GetValue(null);
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Send);
 
             jobs[t].Finish();
         }

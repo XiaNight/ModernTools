@@ -4,6 +4,8 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
+    [PageInfo("Segment", ShortName = "SEG", NavOrder = 2, Path = ["Keyboard"],
+        Description = "If data isn't showing properly, try to change packet size to match the responding data. i.e. M705: 2")]
     public class SegmentPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

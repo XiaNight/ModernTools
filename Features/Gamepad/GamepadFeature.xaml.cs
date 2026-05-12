@@ -22,6 +22,8 @@ namespace Gamepad
         public GamepadFeature() { InitializeComponent(); }
     }
 
+    [PageInfo("Gamepad", Glyph = "\uE7FC", NavOrder = 0,
+        Description = "Windows HID over GATT does not reflect the true BLE report rate, as the platform abstracts or fakes updates.")]
     public class GamepadPage : PageBase
     {
         public override string PageName => "Gamepad";

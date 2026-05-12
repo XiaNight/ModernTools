@@ -14,6 +14,7 @@ namespace CommonProtocol
     /// <summary>
     /// Interaction logic for DeviceLogPage.xaml
     /// </summary>
+    [PageInfo("Device Log", Glyph = "\uF714", Description = "View the log of the active device.")]
     public partial class DeviceLogPage : PageBase
     {
         public override string PageName => "Device Log";

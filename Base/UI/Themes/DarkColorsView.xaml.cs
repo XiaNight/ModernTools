@@ -13,9 +13,11 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Xml;
 using System.Xml.Linq;
+using Base.Core;
 
 namespace Base.Helpers
 {
+    [PageInfo("Dark Colors", NavOrder = 0)]
     public partial class DarkColorsView : Pages.PageBase
     {
         public override string PageName => "Dark Colors";

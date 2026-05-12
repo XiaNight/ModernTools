@@ -1,4 +1,5 @@
-﻿using Base.Pages;
+﻿using Base.Core;
+using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
 using System.Diagnostics;
@@ -9,6 +10,7 @@ using System.Windows;
 
 namespace ArmouryProtocol;
 
+[PageInfo("Armoury Lighting")]
 public partial class LightingEffectPage : PageBase
 {
     public override string PageName => "Armoury Lighting";

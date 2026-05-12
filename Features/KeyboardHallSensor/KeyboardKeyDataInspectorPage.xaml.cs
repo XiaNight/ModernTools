@@ -7,6 +7,7 @@ namespace KeyboardHallSensor
     /// <summary>
     /// Interaction logic for KeyboardKeyDataInspectorPage.xaml
     /// </summary>
+    [PageInfo("Key Data", Path = ["Keyboard"])]
     public partial class KeyboardKeyDataInspectorPage : KeyboardPageBase
     {
         [Path("Keyboard")]
