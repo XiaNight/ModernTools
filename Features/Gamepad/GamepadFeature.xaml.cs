@@ -64,8 +64,8 @@ namespace Gamepad
         // Report Rate
         private readonly ConcurrentQueue<long> timestamps = new();
         private float reportRateSmoothed = 0;
-        private long startTime = DateTime.Now.Ticks;
-        private long lastTimestamp = DateTime.Now.Ticks;
+        private long startTime = DateTime.UtcNow.Ticks;
+        private long lastTimestamp = DateTime.UtcNow.Ticks;
         private float reportRate = 0f;
         private float reportRateRaw = 0f;
         private float momentum = 0;
@@ -90,6 +90,8 @@ namespace Gamepad
         private bool mappingReady = false;
         private readonly List<(ushort usagePage, ushort usage, Action<int> setter)> axisMap = [];
         private bool hasHat = false;
+        private bool hidHasLT = false;
+        private bool hidHasRT = false;
 
         // Recording
         private bool isRecording = false;
@@ -424,7 +426,11 @@ namespace Gamepad
 
                 if (mappingReady)
                 {
-                    // Axes/values
+                    // Capture previous LT/RT for change detection before axis updates
+                    byte prevLT = LT;
+                    byte prevRT = RT;
+
+                    // Axes/values (may include LT/RT if HID report has Z/RZ usages)
                     foreach (var (up, u, setter) in axisMap)
                     {
                         if (ActiveInterface.TryGetUsageValue(data, up, u, out int v))
@@ -458,13 +464,11 @@ namespace Gamepad
                     for (int i = 0; i < BUTTON_COUNT; i++) ButtonStates[i] = latestButtonStates[i];
                     for (int i = 0; i < BUTTON_COUNT; i++) buttonCounter[i] += onPressed[i] ? 1 : 0;
 
-                    // Get Standalone LT RT from XInput
-                    byte left = newData.xinput_state.Gamepad.bLeftTrigger;
-                    if (left != LT)  zCounter++;
-                    LT = left;
-                    byte right = newData.xinput_state.Gamepad.bRightTrigger;
-                    if (right != RT) rZCounter++;
-                    RT = right;
+                    // LT/RT: prefer HID report (Z/RZ usages); fall back to XInput if not available
+                    if (!hidHasLT) LT = newData.xinput_state.Gamepad.bLeftTrigger;
+                    if (!hidHasRT) RT = newData.xinput_state.Gamepad.bRightTrigger;
+                    if (LT != prevLT) zCounter++;
+                    if (RT != prevRT) rZCounter++;
 
                     leftJoyStick.Update(Xf, Yf);
                     rightJoyStick.Update(RXf, RYf);
@@ -657,7 +661,11 @@ namespace Gamepad
             mappingReady = false;
             axisMap.Clear();
             hasHat = false;
+            hidHasLT = false;
+            hidHasRT = false;
             lastGamepadIndex = FindGamepadIndex();
+
+            page.IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
 
             page.ConnectedText.Text = "Yes";
             page.RecordButton.IsEnabled = true;
@@ -695,16 +703,26 @@ namespace Gamepad
 
         private int FindGamepadIndex()
         {
+            // Try to match via the IG_XX marker in the device path.
+            // XInput HID interfaces appear with IG_00/IG_01/IG_02/IG_03 in their path,
+            // where the two-digit decimal value equals the XInput slot index (0-3).
+            string devicePath = ActiveInterface?.ProductInfo?.ID ?? string.Empty;
+            if (!string.IsNullOrEmpty(devicePath))
+            {
+                int igIdx = devicePath.IndexOf("ig_", StringComparison.OrdinalIgnoreCase);
+                if (igIdx >= 0 && igIdx + 5 <= devicePath.Length)
+                {
+                    string igSlot = devicePath.Substring(igIdx + 3, 2);
+                    if (int.TryParse(igSlot, out int slot) && slot >= 0 && slot < 4)
+                        return slot;
+                }
+            }
+
+            // Fallback: scan all XInput slots and return the first active one.
             for (int i = 0; i < 4; i++)
             {
-                int result = XInput.XInputGetKeystroke(i, 0, out XInput.XINPUT_KEYSTROKE keystroke);
-                if (result != XInput.ERROR_DEVICE_NOT_CONNECTED)
-                {
-                    _ = XInput.XInputGetState(i, out XInput.XINPUT_STATE xinput_state);
-
-                    // Check input values, if none 0, return gamepad index
-                    if (xinput_state.dwPacketNumber > 0) return keystroke.UserIndex;
-                }
+                if (XInput.XInputGetState(i, out _) == XInput.ERROR_SUCCESS)
+                    return i;
             }
             return -1;
         }
@@ -720,19 +738,23 @@ namespace Gamepad
                 (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
                 (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
                 (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                //(0x01, 0x32, v => LT = (byte)v), // 50 Z (or LT/RT depending on device)
-                //(0x01, 0x35, v => RT = (byte)v), // 53 RZ
+                (0x01, 0x32, v => LT = (byte)v),   // 50 Z (LT on many controllers)
+                (0x01, 0x35, v => RT = (byte)v),   // 53 RZ (RT on many controllers)
                 (0x01, 0x36, v => { /* Slider */ }), // 54
                 (0x01, 0x37, v => { /* Dial */ }), // 55
             };
 
             axisMap.Clear();
+            hidHasLT = false;
+            hidHasRT = false;
             foreach (var (up, u, set) in candidates)
             {
                 if (ActiveInterface.TryGetUsageValue(firstReport, up, u, out int v))
                 {
                     axisMap.Add((up, u, set));
                     set(v); // seed initial value
+                    if (up == 0x01 && u == 0x32) hidHasLT = true;
+                    if (up == 0x01 && u == 0x35) hidHasRT = true;
                 }
             }
 
