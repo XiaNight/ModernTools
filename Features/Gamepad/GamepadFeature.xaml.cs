@@ -758,11 +758,24 @@ namespace Gamepad
             if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
             {
                 Action<int> ltSetter;
-                if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap) && ltCap.LogicalMax > ltCap.LogicalMin)
+                if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap))
                 {
                     int ltMin = ltCap.LogicalMin;
-                    double ltRange = ltCap.LogicalMax - ltMin;
-                    ltSetter = v => LT = (byte)Math.Clamp((int)((v - ltMin) * 255.0 / ltRange), 0, 255);
+                    // LogicalMax may be <= LogicalMin when the firmware encodes 0xFF as a
+                    // 1-byte signed value (-1) instead of a 2-byte positive 255, or when the
+                    // field uses a 7-bit unsigned range (0-127).  Fall back to the bit-width
+                    // maximum so all cases are stretched to the full 0-255 output range.
+                    int effectiveMax;
+                    if (ltCap.LogicalMax > ltMin)
+                        effectiveMax = ltCap.LogicalMax;
+                    else if (ltCap.BitSize > 0)
+                        effectiveMax = (1 << ltCap.BitSize) - 1;
+                    else
+                        effectiveMax = 255;
+                    double ltRange = effectiveMax - ltMin;
+                    ltSetter = ltRange > 0
+                        ? v => LT = (byte)Math.Clamp((int)((v - ltMin) * 255.0 / ltRange), 0, 255)
+                        : v => LT = (byte)Math.Clamp(v, 0, 255);
                 }
                 else
                 {
@@ -777,11 +790,20 @@ namespace Gamepad
             if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
             {
                 Action<int> rtSetter;
-                if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap) && rtCap.LogicalMax > rtCap.LogicalMin)
+                if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap))
                 {
                     int rtMin = rtCap.LogicalMin;
-                    double rtRange = rtCap.LogicalMax - rtMin;
-                    rtSetter = v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255);
+                    int effectiveMax;
+                    if (rtCap.LogicalMax > rtMin)
+                        effectiveMax = rtCap.LogicalMax;
+                    else if (rtCap.BitSize > 0)
+                        effectiveMax = (1 << rtCap.BitSize) - 1;
+                    else
+                        effectiveMax = 255;
+                    double rtRange = effectiveMax - rtMin;
+                    rtSetter = rtRange > 0
+                        ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
+                        : v => RT = (byte)Math.Clamp(v, 0, 255);
                 }
                 else
                 {
