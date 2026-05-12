@@ -784,21 +784,31 @@ namespace Gamepad
 
                 if (isCombined)
                 {
-                    // Split the single Z axis into separate LT and RT values:
-                    //   LT = how far the axis is above midpoint  (0 when at or below mid)
-                    //   RT = how far the axis is below midpoint  (0 when at or above mid)
-                    double ltAxisRange = zEffMax - zMid;
-                    double rtAxisRange = zMid - zMin;
-                    axisMap.Add((0x01, 0x32, v =>
+                    // This is a combined trigger axis (single channel, LT and RT share one axis).
+                    // XInput exposes bLeftTrigger and bRightTrigger as independent bytes, which
+                    // correctly reports both triggers simultaneously.  Prefer XInput when available
+                    // (lastGamepadIndex != -1) so that pressing both triggers at the same time is
+                    // handled correctly; hidHasLT/hidHasRT are left false so the XInput fallback
+                    // path in DecodeBytes() picks up both values independently.
+                    //
+                    // Only fall back to HID axis splitting when there is no XInput slot (e.g. a
+                    // non-XInput controller that uses a combined DirectInput Z axis).
+                    if (lastGamepadIndex < 0)
                     {
-                        LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
-                        RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
-                    }));
-                    // Seed initial values
-                    LT = 0;
-                    RT = 0;
-                    hidHasLT = true;
-                    hidHasRT = true;
+                        double ltAxisRange = zEffMax - zMid;
+                        double rtAxisRange = zMid - zMin;
+                        axisMap.Add((0x01, 0x32, v =>
+                        {
+                            LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
+                            RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
+                        }));
+                        LT = 0;
+                        RT = 0;
+                        hidHasLT = true;
+                        hidHasRT = true;
+                    }
+                    // else: XInput is available — leave hidHasLT/hidHasRT false so XInput
+                    // provides separate LT/RT readings (simultaneous press works correctly).
                 }
                 else
                 {
