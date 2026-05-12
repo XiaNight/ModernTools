@@ -735,7 +735,8 @@ namespace Gamepad
 
             page.IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
 
-            page.ConnectedText.Text = "Yes";
+            page.IndexPanel.Visibility = Visibility.Visible;
+            page.ConnectedPanel.Visibility = Visibility.Collapsed;
             page.RecordButton.IsEnabled = true;
             page.HeavyVibrationButton.IsEnabled = true;
             page.LightVibrationButton.IsEnabled = true;
@@ -748,7 +749,8 @@ namespace Gamepad
             ActiveInterface.OnDataReceived -= Parse;
             ActiveInterface = null;
 
-            page.ConnectedText.Text = "No";
+            page.IndexPanel.Visibility = Visibility.Collapsed;
+            page.ConnectedPanel.Visibility = Visibility.Visible;
             page.RecordButton.IsEnabled = false;
             page.HeavyVibrationButton.IsEnabled = false;
             page.LightVibrationButton.IsEnabled = false;
