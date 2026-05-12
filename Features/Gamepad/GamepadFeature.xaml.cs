@@ -619,8 +619,10 @@ namespace Gamepad
         [AppMenuItem("Vibration/Heavy", true, 65535)]
         [AppMenuItem("Vibration/Light", true, 0, 65535)]
         [AppMenuItem("Vibration/Stop", true, 0, 0)]
-        private static async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
+        private async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
         {
+            if (lastGamepadIndex < 0) return;
+
             var vibration = new XInput.XINPUT_VIBRATION
             {
                 wLeftMotorSpeed = heavy,
@@ -628,7 +630,7 @@ namespace Gamepad
             };
 
             // Start vibration
-            _ = XInput.XInputSetState(0, ref vibration);
+            _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
 
             if (durationMs > 0)
             {
@@ -636,7 +638,7 @@ namespace Gamepad
 
                 // Stop vibration
                 var stop = new XInput.XINPUT_VIBRATION(); // both 0
-                _ = XInput.XInputSetState(0, ref stop);
+                _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
             }
         }
 
