@@ -89,7 +89,7 @@ namespace Gamepad
 
             double circularity = CalculateCircularity();
             CircularityText.Text = circularity.ToString("P2");
-            MagnitudeText.Text = Math.Clamp(mag, 0.0, 1.0).ToString("P2");
+            MagnitudeText.Text = mag.ToString("P2");
 
             UpdateCircularityLine();
         }
