@@ -754,61 +754,81 @@ namespace Gamepad
                 }
             }
 
-            // Z axis (LT) - normalize raw logical value to 0-255 using descriptor range
+            // Z axis (LT, or combined LT+RT on some controllers)
             if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
             {
-                Action<int> ltSetter;
+                int zMin = 0, zEffMax = 255;
                 if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap))
                 {
-                    int ltMin = ltCap.LogicalMin;
+                    zMin = ltCap.LogicalMin;
                     // LogicalMax may be <= LogicalMin when the firmware encodes 0xFF as a
-                    // 1-byte signed value (-1) instead of a 2-byte positive 255, or when the
-                    // field uses a 7-bit unsigned range (0-127).  Fall back to the bit-width
-                    // maximum so all cases are stretched to the full 0-255 output range.
-                    int effectiveMax;
-                    if (ltCap.LogicalMax > ltMin)
-                        effectiveMax = ltCap.LogicalMax;
+                    // 1-byte signed value (-1), or when the field uses a 7-bit unsigned range.
+                    // Fall back to the bit-width maximum so all cases map correctly to 0-255.
+                    if (ltCap.LogicalMax > zMin)
+                        zEffMax = ltCap.LogicalMax;
                     else if (ltCap.BitSize > 0)
-                        effectiveMax = (1 << ltCap.BitSize) - 1;
+                        zEffMax = (1 << ltCap.BitSize) - 1;
                     else
-                        effectiveMax = 255;
-                    double ltRange = effectiveMax - ltMin;
-                    ltSetter = ltRange > 0
-                        ? v => LT = (byte)Math.Clamp((int)((v - ltMin) * 255.0 / ltRange), 0, 255)
-                        : v => LT = (byte)Math.Clamp(v, 0, 255);
+                        zEffMax = 255;
+                }
+
+                double zRange = zEffMax - zMin;
+                double zMid = zMin + zRange / 2.0;
+
+                // Detect combined trigger axis: when neither trigger is pressed the axis sits at
+                // the midpoint (≈127 for a 0-255 range), LT pushes toward the max and RT toward
+                // the min.  A 15% tolerance around the midpoint covers quantization and power-on
+                // drift without accidentally misclassifying a half-pressed independent trigger.
+                const double combinedAxisMidTolerance = 0.15;
+                bool isCombined = zRange > 0 && Math.Abs(ltSeed - zMid) < zRange * combinedAxisMidTolerance;
+
+                if (isCombined)
+                {
+                    // Split the single Z axis into separate LT and RT values:
+                    //   LT = how far the axis is above midpoint  (0 when at or below mid)
+                    //   RT = how far the axis is below midpoint  (0 when at or above mid)
+                    double ltAxisRange = zEffMax - zMid;
+                    double rtAxisRange = zMid - zMin;
+                    axisMap.Add((0x01, 0x32, v =>
+                    {
+                        LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
+                        RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
+                    }));
+                    // Seed initial values
+                    LT = 0;
+                    RT = 0;
+                    hidHasLT = true;
+                    hidHasRT = true;
                 }
                 else
                 {
-                    ltSetter = v => LT = (byte)Math.Clamp(v, 0, 255);
+                    Action<int> ltSetter = zRange > 0
+                        ? v => LT = (byte)Math.Clamp((int)((v - zMin) * 255.0 / zRange), 0, 255)
+                        : v => LT = (byte)Math.Clamp(v, 0, 255);
+                    axisMap.Add((0x01, 0x32, ltSetter));
+                    ltSetter(ltSeed);
+                    hidHasLT = true;
                 }
-                axisMap.Add((0x01, 0x32, ltSetter));
-                ltSetter(ltSeed);
-                hidHasLT = true;
             }
 
-            // RZ axis (RT) - normalize raw logical value to 0-255 using descriptor range
-            if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
+            // RZ axis (RT) - only register if RT is not already covered by combined Z axis
+            if (!hidHasRT && ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
             {
-                Action<int> rtSetter;
+                int rtMin = 0, rtEffMax = 255;
                 if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap))
                 {
-                    int rtMin = rtCap.LogicalMin;
-                    int effectiveMax;
+                    rtMin = rtCap.LogicalMin;
                     if (rtCap.LogicalMax > rtMin)
-                        effectiveMax = rtCap.LogicalMax;
+                        rtEffMax = rtCap.LogicalMax;
                     else if (rtCap.BitSize > 0)
-                        effectiveMax = (1 << rtCap.BitSize) - 1;
+                        rtEffMax = (1 << rtCap.BitSize) - 1;
                     else
-                        effectiveMax = 255;
-                    double rtRange = effectiveMax - rtMin;
-                    rtSetter = rtRange > 0
-                        ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
-                        : v => RT = (byte)Math.Clamp(v, 0, 255);
+                        rtEffMax = 255;
                 }
-                else
-                {
-                    rtSetter = v => RT = (byte)Math.Clamp(v, 0, 255);
-                }
+                double rtRange = rtEffMax - rtMin;
+                Action<int> rtSetter = rtRange > 0
+                    ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
+                    : v => RT = (byte)Math.Clamp(v, 0, 255);
                 axisMap.Add((0x01, 0x35, rtSetter));
                 rtSetter(rtSeed);
                 hidHasRT = true;
