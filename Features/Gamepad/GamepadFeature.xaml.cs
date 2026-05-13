@@ -746,6 +746,12 @@ namespace Gamepad
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
+
+            if (isTriggerVibrationMode)
+            {
+                StopVibration();
+            }
+
             ActiveInterface.OnDataReceived -= Parse;
             ActiveInterface = null;
 
