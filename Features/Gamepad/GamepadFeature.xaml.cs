@@ -93,6 +93,11 @@ namespace Gamepad
         private bool hidHasLT = false;
         private bool hidHasRT = false;
 
+        // Trigger Vibration Mode
+        private bool isTriggerVibrationMode = false;
+        private byte prevVibLT = 0;
+        private byte prevVibRT = 0;
+
         // Recording
         private bool isRecording = false;
         private delegate string AddRecordDataDelegate(DateTime time);
@@ -164,6 +169,15 @@ namespace Gamepad
             page.LightVibrationButton.Click += (_, _) =>
             {
                 SetToVibrate(0, 65535, 1000);
+            };
+
+            page.TriggerVibrationButton.Click += (_, _) =>
+            {
+                isTriggerVibrationMode = page.TriggerVibrationButton.IsChecked ?? false;
+                if (!isTriggerVibrationMode)
+                {
+                    StopVibration();
+                }
             };
 
             page.RenderModeButton.Click += (_, _) =>
@@ -298,6 +312,12 @@ namespace Gamepad
             base.OnDisable();
 
             if (isRecording) StopRecording();
+            if (isTriggerVibrationMode)
+            {
+                StopVibration();
+                isTriggerVibrationMode = false;
+                page.TriggerVibrationButton.IsChecked = false;
+            }
         }
 
         protected override void Update()
@@ -320,6 +340,11 @@ namespace Gamepad
                 if (ButtonStates[(int)ButtonMap.Menu] && ButtonStates[(int)ButtonMap.Start])
                 {
                     Clear();
+                }
+
+                if (isTriggerVibrationMode && lastGamepadIndex >= 0)
+                {
+                    ApplyTriggerVibration();
                 }
             }
         }
@@ -642,6 +667,47 @@ namespace Gamepad
             }
         }
 
+        [AppMenuItem("Vibration/Trigger Mode")]
+        private void ToggleTriggerVibrationMode()
+        {
+            isTriggerVibrationMode = !isTriggerVibrationMode;
+            page.TriggerVibrationButton.IsChecked = isTriggerVibrationMode;
+            if (!isTriggerVibrationMode)
+            {
+                StopVibration();
+            }
+        }
+
+        private void ApplyTriggerVibration()
+        {
+            // Only update when LT or RT values have changed to avoid redundant XInput calls
+            if (LT == prevVibLT && RT == prevVibRT) return;
+
+            prevVibLT = LT;
+            prevVibRT = RT;
+
+            // LT → light motor (right motor), RT → heavy motor (left motor)
+            // Scale from 0-255 to 0-65535 using bit-shift: x * 257 == (x << 8) | x
+            ushort heavy = (ushort)((RT << 8) | RT);
+            ushort light = (ushort)((LT << 8) | LT);
+
+            var vibration = new XInput.XINPUT_VIBRATION
+            {
+                wLeftMotorSpeed = heavy,
+                wRightMotorSpeed = light
+            };
+            _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
+        }
+
+        private void StopVibration()
+        {
+            if (lastGamepadIndex < 0) return;
+            var stop = new XInput.XINPUT_VIBRATION(); // both 0
+            _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
+            prevVibLT = 0;
+            prevVibRT = 0;
+        }
+
         private void ConnectToInterface()
         {
             DisconnectInterface();
@@ -669,22 +735,34 @@ namespace Gamepad
 
             page.IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
 
-            page.ConnectedText.Text = "Yes";
+            page.IndexPanel.Visibility = Visibility.Visible;
+            page.ConnectedPanel.Visibility = Visibility.Collapsed;
             page.RecordButton.IsEnabled = true;
             page.HeavyVibrationButton.IsEnabled = true;
             page.LightVibrationButton.IsEnabled = true;
+            page.TriggerVibrationButton.IsEnabled = true;
         }
 
         private void DisconnectInterface()
         {
             if (ActiveInterface == null) return;
+
+            if (isTriggerVibrationMode)
+            {
+                StopVibration();
+            }
+
             ActiveInterface.OnDataReceived -= Parse;
             ActiveInterface = null;
 
-            page.ConnectedText.Text = "No";
+            page.IndexPanel.Visibility = Visibility.Collapsed;
+            page.ConnectedPanel.Visibility = Visibility.Visible;
             page.RecordButton.IsEnabled = false;
             page.HeavyVibrationButton.IsEnabled = false;
             page.LightVibrationButton.IsEnabled = false;
+            page.TriggerVibrationButton.IsEnabled = false;
+            page.TriggerVibrationButton.IsChecked = false;
+            isTriggerVibrationMode = false;
         }
 
         private void Parse(ReadOnlyMemory<byte> data, DateTime time)
