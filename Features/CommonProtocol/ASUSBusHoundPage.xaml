@@ -89,37 +89,65 @@
 
                     <!-- Toolbar -->
                     <Grid Grid.Row="0" Margin="0,0,0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="QuickActionImportBtn"
-                                Grid.Column="0" Height="32"
-                                Padding="8,4" Margin="6 4" ToolTip="Import from bin or txt file">
-                            <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
-                                <ui:FontIcon Glyph="&#xE8B5;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
-                                <TextBlock Text="Import" FontSize="14" VerticalAlignment="Center"/>
-                            </ui:SimpleStackPanel>
-                        </Button>
-                        <Button x:Name="QuickActionAddBtn"
-                                Grid.Column="1" Height="32"
-                                Padding="8,4" Margin="6 4" ToolTip="Add a new empty entry">
-                            <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
-                                <ui:FontIcon Glyph="&#xE710;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
-                                <TextBlock Text="Add" FontSize="14" VerticalAlignment="Center"/>
-                            </ui:SimpleStackPanel>
-                        </Button>
-                        <Button x:Name="QuickActionCloseBtn"
-                                Grid.Column="3" Height="32"
-                                Padding="8,4" Margin="6 4" ToolTip="Close panel"
-                                HorizontalAlignment="Right">
-                            <ui:FontIcon Glyph="&#xE8BB;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
-                        </Button>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Button row -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="QuickActionImportBtn"
+                                    Grid.Column="0" Height="32"
+                                    Padding="8,4" Margin="6,4" ToolTip="Import folder from JSON, or entry from bin/txt file">
+                                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                                    <ui:FontIcon Glyph="&#xE8B5;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                                    <TextBlock Text="Import" FontSize="14" VerticalAlignment="Center"/>
+                                </ui:SimpleStackPanel>
+                            </Button>
+                            <Button x:Name="QuickActionAddBtn"
+                                    Grid.Column="1" Height="32"
+                                    Padding="8,4" Margin="6,4" ToolTip="Add a new folder">
+                                <ui:SimpleStackPanel Orientation="Horizontal" Spacing="8">
+                                    <ui:FontIcon Glyph="&#xED41;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                                    <TextBlock Text="Add Folder" FontSize="14" VerticalAlignment="Center"/>
+                                </ui:SimpleStackPanel>
+                            </Button>
+                            <Button x:Name="QuickActionCloseBtn"
+                                    Grid.Column="3" Height="32"
+                                    Padding="8,4" Margin="6,4" ToolTip="Close panel"
+                                    HorizontalAlignment="Right">
+                                <ui:FontIcon Glyph="&#xE8BB;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                            </Button>
+                        </Grid>
+
+                        <!-- Search row -->
+                        <Grid Grid.Row="1" Margin="6,0,6,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ui:FontIcon Grid.Column="0"
+                                         Glyph="&#xE721;"
+                                         FontSize="14"
+                                         FontFamily="Segoe Fluent Icons"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0"
+                                         Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                            <TextBox x:Name="QuickActionSearchBox"
+                                     Grid.Column="1"
+                                     Height="30"
+                                     VerticalContentAlignment="Center"
+                                     ui:ControlHelper.PlaceholderText="Search by name or command…"/>
+                        </Grid>
                     </Grid>
 
-                    <!-- Scrollable entry list -->
+                    <!-- Scrollable folder list -->
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="QuickActionEntriesPanel" Orientation="Vertical"/>
                     </ScrollViewer>
