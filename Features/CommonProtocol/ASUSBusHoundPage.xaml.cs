@@ -582,7 +582,8 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         QuickActionFolderData folder;
         try
         {
-            folder = JsonSerializer.Deserialize<QuickActionFolderData>(json);
+            folder = JsonSerializer.Deserialize<QuickActionFolderData>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
         catch (JsonException ex)
         {
