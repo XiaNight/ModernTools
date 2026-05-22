@@ -16,6 +16,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -577,7 +578,18 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     private void ImportJsonFolder(string path)
     {
         string json = File.ReadAllText(path, Encoding.UTF8);
-        var folder = System.Text.Json.JsonSerializer.Deserialize<QuickActionFolderData>(json);
+
+        QuickActionFolderData folder;
+        try
+        {
+            folder = JsonSerializer.Deserialize<QuickActionFolderData>(json);
+        }
+        catch (JsonException ex)
+        {
+            MessageBox.Show($"The JSON file is not a valid folder export:\n{ex.Message}", "Import Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
 
         if (folder is null)
         {
