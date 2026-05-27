@@ -29,64 +29,59 @@
                 <!-- Expand / Collapse chevron -->
                 <Button x:Name="ExpandButton"
                         Grid.Column="0"
-                        Padding="4,2"
-                        Margin="0,0,4,0"
-                        VerticalAlignment="Center"
+                        Padding="6 6"
+                        Margin="0 0 4 0"
+                        VerticalAlignment="Stretch"
+                        Background="Transparent"
                         ToolTip="Expand / Collapse">
                     <ui:FontIcon x:Name="ExpandChevron"
                                  Glyph="&#xE70D;"
-                                 FontSize="12"
+                                 FontSize="18"
                                  FontFamily="Segoe Fluent Icons"/>
                 </Button>
-
-                <!-- Folder icon -->
-                <ui:FontIcon Grid.Column="1"
-                             Glyph="&#xED41;"
-                             FontSize="16"
-                             FontFamily="Segoe Fluent Icons"
-                             VerticalAlignment="Center"
-                             Margin="0,0,6,0"/>
 
                 <!-- Folder name text box -->
                 <TextBox x:Name="FolderNameBox"
                          Grid.Column="2"
                          FontSize="13"
                          FontWeight="SemiBold"
-                         VerticalContentAlignment="Center"
-                         Margin="0,0,4,0"/>
+                         Padding="8 6"
+                         Margin="0 0 4 0"
+                         VerticalAlignment="Stretch"
+                         VerticalContentAlignment="Stretch"/>
 
                 <!-- Export folder button -->
                 <Button x:Name="ExportButton"
                         Grid.Column="3"
-                        Padding="6,4"
-                        Margin="0,0,4,0"
-                        VerticalAlignment="Center"
+                        Padding="8 6"
+                        Margin="0 0 4 0"
+                        VerticalAlignment="Stretch"
                         ToolTip="Export folder to JSON">
-                    <ui:FontIcon Glyph="&#xEDE1;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                    <ui:FontIcon Glyph="&#xEDE1;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
                 </Button>
 
                 <!-- Add entry button -->
                 <Button x:Name="AddEntryButton"
                         Grid.Column="4"
-                        Padding="6,4"
-                        Margin="0,0,4,0"
-                        VerticalAlignment="Center"
+                        Padding="8 6"
+                        Margin="0 0 4 0"
+                        VerticalAlignment="Stretch"
                         ToolTip="Add new entry to this folder">
-                    <ui:FontIcon Glyph="&#xE710;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                    <ui:FontIcon Glyph="&#xE710;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
                 </Button>
 
                 <!-- Delete folder button -->
                 <Button x:Name="DeleteFolderButton"
                         Grid.Column="5"
-                        Padding="6,4"
-                        VerticalAlignment="Center"
+                        Padding="8 6"
+                        VerticalAlignment="Stretch"
                         ToolTip="Delete this folder">
-                    <ui:FontIcon Glyph="&#xE74D;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+                    <ui:FontIcon Glyph="&#xE74D;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
                 </Button>
             </Grid>
 
             <!-- Entries panel (shown/hidden based on IsExpanded) -->
-            <StackPanel x:Name="FolderEntriesPanel" Margin="20,4,0,2"/>
+            <StackPanel x:Name="FolderEntriesPanel" Margin="0,4,0,0"/>
 
         </StackPanel>
     </Border>
