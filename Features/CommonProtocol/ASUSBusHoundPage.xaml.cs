@@ -16,6 +16,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -62,8 +63,9 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     private readonly Dictionary<PeripheralInterface, Action<ReadOnlyMemory<byte>, DateTime>> dataSentHandlers = new();
 
     // ── Quick Action ──
-    private const string QuickActionStoreKey = "BusHound_QuickActions";
-    private List<QuickActionEntryData> quickActionEntries = new();
+    private const string QuickActionStoreKey = "BusHound_QuickActions";        // legacy flat-list key
+    private const string QuickActionFolderStoreKey = "BusHound_QuickActionFolders"; // new folder-based key
+    private List<QuickActionFolderData> quickActionFolders = new();
     private bool isQuickActionPanelOpen = false;
 
     // Debug
@@ -86,8 +88,9 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         // Quick Action buttons
         QuickActionBtn.Click += (_, _) => ToggleQuickActionPanel();
         QuickActionCloseBtn.Click += (_, _) => SetQuickActionPanelOpen(false);
-        QuickActionAddBtn.Click += (_, _) => AddNewQuickActionEntry();
+        QuickActionAddBtn.Click += (_, _) => AddNewFolder();
         QuickActionImportBtn.Click += (_, _) => ImportQuickActionFile();
+        QuickActionSearchBox.TextChanged += (_, _) => FilterQuickActions(QuickActionSearchBox.Text);
 
         //USBPCapHandler usbpcap = new();
         //usbpcap.DebugPrintDeviceTree(8);
@@ -376,12 +379,33 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         try
         {
-            var stored = LocalAppDataStore.Instance.Get<List<QuickActionEntryData>>(QuickActionStoreKey);
-            quickActionEntries = stored ?? new List<QuickActionEntryData>();
+            // Try new folder-based format first
+            var storedFolders = LocalAppDataStore.Instance.Get<List<QuickActionFolderData>>(QuickActionFolderStoreKey);
+            if (storedFolders != null)
+            {
+                quickActionFolders = storedFolders;
+            }
+            else
+            {
+                // Migrate legacy flat-list format into a "Default" folder
+                var legacy = LocalAppDataStore.Instance.Get<List<QuickActionEntryData>>(QuickActionStoreKey);
+                if (legacy != null && legacy.Count > 0)
+                {
+                    quickActionFolders = new List<QuickActionFolderData>
+                    {
+                        new QuickActionFolderData { Name = "Default", Entries = legacy }
+                    };
+                    SaveQuickActionEntries();
+                }
+                else
+                {
+                    quickActionFolders = new List<QuickActionFolderData>();
+                }
+            }
         }
         catch
         {
-            quickActionEntries = new List<QuickActionEntryData>();
+            quickActionFolders = new List<QuickActionFolderData>();
         }
 
         RebuildQuickActionUI();
@@ -391,7 +415,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         try
         {
-            LocalAppDataStore.Instance.Set(QuickActionStoreKey, quickActionEntries);
+            LocalAppDataStore.Instance.Set(QuickActionFolderStoreKey, quickActionFolders);
         }
         catch
         {
@@ -403,44 +427,53 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         QuickActionEntriesPanel.Children.Clear();
 
-        foreach (var entryData in quickActionEntries)
+        foreach (var folderData in quickActionFolders)
         {
-            var control = CreateEntryControl(entryData);
+            var control = CreateFolderControl(folderData);
             QuickActionEntriesPanel.Children.Add(control);
         }
     }
 
-    private QuickActionEntryControl CreateEntryControl(QuickActionEntryData entryData)
+    private QuickActionFolderControl CreateFolderControl(QuickActionFolderData folderData)
     {
-        var control = new QuickActionEntryControl(entryData);
+        var control = new QuickActionFolderControl(folderData);
         control.DataChanged += SaveQuickActionEntries;
+        control.DeleteRequested += OnQuickActionFolderDeleteRequested;
         control.SendRequested += OnQuickActionSendRequested;
-        control.DeleteRequested += OnQuickActionDeleteRequested;
         return control;
     }
 
-    private void AddNewQuickActionEntry()
+    private void AddNewFolder()
     {
-        var newEntry = new QuickActionEntryData();
-        quickActionEntries.Add(newEntry);
-        var control = CreateEntryControl(newEntry);
+        var newFolder = new QuickActionFolderData();
+        quickActionFolders.Add(newFolder);
+        var control = CreateFolderControl(newFolder);
         QuickActionEntriesPanel.Children.Add(control);
         SaveQuickActionEntries();
+
+        if (!isQuickActionPanelOpen)
+            SetQuickActionPanelOpen(true);
     }
 
-    private void OnQuickActionDeleteRequested(QuickActionEntryControl control)
+    private void OnQuickActionFolderDeleteRequested(QuickActionFolderControl control)
     {
         var result = MessageBox.Show(
-            $"Delete quick action \"{control.EntryData.Name}\"?",
+            $"Delete folder \"{control.FolderData.Name}\" and all its entries?",
             "Confirm Delete",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
 
         if (result != MessageBoxResult.Yes) return;
 
-        quickActionEntries.Remove(control.EntryData);
+        quickActionFolders.Remove(control.FolderData);
         QuickActionEntriesPanel.Children.Remove(control);
         SaveQuickActionEntries();
+    }
+
+    private void FilterQuickActions(string searchText)
+    {
+        foreach (QuickActionFolderControl ctrl in QuickActionEntriesPanel.Children)
+            ctrl.Filter(searchText);
     }
 
     private async void OnQuickActionSendRequested(QuickActionEntryData entry)
@@ -486,8 +519,8 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Import Quick Action Commands",
-            Filter = "All supported|*.bin;*.txt|Binary files (*.bin)|*.bin|Text files (*.txt)|*.txt",
+            Title = "Import Quick Action",
+            Filter = "All supported|*.json;*.bin;*.txt|JSON folder (*.json)|*.json|Binary files (*.bin)|*.bin|Text files (*.txt)|*.txt",
             Multiselect = false
         };
 
@@ -498,24 +531,38 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
         try
         {
-            QuickActionEntryData imported = ext switch
+            if (ext == ".json")
             {
-                ".bin" => ImportBinFile(path),
-                ".txt" => ImportTxtFile(path),
-                _ => throw new NotSupportedException($"Unsupported file type: {ext}")
-            };
-
-            if (imported.Commands.Count == 0)
-            {
-                MessageBox.Show("No valid commands found in the file.", "Import Result",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                ImportJsonFolder(path);
             }
+            else
+            {
+                QuickActionEntryData imported = ext switch
+                {
+                    ".bin" => ImportBinFile(path),
+                    ".txt" => ImportTxtFile(path),
+                    _ => throw new NotSupportedException($"Unsupported file type: {ext}")
+                };
 
-            quickActionEntries.Add(imported);
-            var control = CreateEntryControl(imported);
-            QuickActionEntriesPanel.Children.Add(control);
-            SaveQuickActionEntries();
+                if (imported.Commands.Count == 0)
+                {
+                    MessageBox.Show("No valid commands found in the file.", "Import Result",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                // Wrap the single entry in a new folder named after the file
+                var folder = new QuickActionFolderData
+                {
+                    Name = Path.GetFileNameWithoutExtension(path),
+                    Entries = new List<QuickActionEntryData> { imported }
+                };
+
+                quickActionFolders.Add(folder);
+                var folderControl = CreateFolderControl(folder);
+                QuickActionEntriesPanel.Children.Add(folderControl);
+                SaveQuickActionEntries();
+            }
 
             // Auto-open the panel if it's hidden
             if (!isQuickActionPanelOpen)
@@ -526,6 +573,39 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
             MessageBox.Show($"Failed to import file:\n{ex.Message}", "Import Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void ImportJsonFolder(string path)
+    {
+        string json = File.ReadAllText(path, Encoding.UTF8);
+
+        QuickActionFolderData folder;
+        try
+        {
+            folder = JsonSerializer.Deserialize<QuickActionFolderData>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException ex)
+        {
+            MessageBox.Show($"The JSON file is not a valid folder export:\n{ex.Message}", "Import Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (folder is null)
+        {
+            MessageBox.Show("The JSON file does not contain a valid folder.", "Import Result",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Assign a fresh id so it doesn't collide with an existing folder
+        folder.Id = Guid.NewGuid().ToString("N");
+
+        quickActionFolders.Add(folder);
+        var control = CreateFolderControl(folder);
+        QuickActionEntriesPanel.Children.Add(control);
+        SaveQuickActionEntries();
     }
 
     /// <summary>

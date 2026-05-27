@@ -9,9 +9,9 @@
 
     <!-- Outer border -->
     <Border CornerRadius="4"
-            Padding="6,4,6,4"
-            Margin="0,0,0,4"
-            BorderThickness="1"
+            Padding="5,4,4,4"
+            Margin="-5,2,-5,2"
+            BorderThickness="0"
             BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
             Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
 
@@ -60,7 +60,7 @@
             <!-- Edit button -->
             <Button x:Name="EditButton"
                     Grid.Column="2" Grid.Row="0"
-                    Padding="6 4"
+                    Padding="8 6"
                     Margin="0 0 4 0"
                     VerticalAlignment="Stretch"
                     ToolTip="Edit commands">
