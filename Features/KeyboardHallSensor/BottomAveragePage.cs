@@ -2,7 +2,7 @@ using Base.Core;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Bottom Average", ShortName = "BMA", NavOrder = 4, Path = ["Keyboard"])]
+    [PageInfo("Bottom Average", ShortName = "BMA", NavOrder = 4, Path = ["Keyboard", "Hall Effect"])]
     public class BottomAveragePage : MFGKeyboardBasePage
     {
         [Path("Keyboard")]

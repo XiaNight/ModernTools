@@ -1,8 +1,10 @@
 ﻿using System.Reflection;
+using Windows.Foundation.Metadata;
 
 namespace Base.Core
 {
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+    [Deprecated("Use PageInfo attribute on Page instead.", DeprecationType.Deprecate, 1)]
     public class PathAttribute(params string[] path) : Attribute
     {
         public string[] Path { get; } = path ?? [];

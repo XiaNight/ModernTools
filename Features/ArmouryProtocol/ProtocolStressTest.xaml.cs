@@ -90,7 +90,7 @@ public sealed class StressTestResult
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
-[PageInfo("Protocol Stress Test")]
+[PageInfo("Protocol Stress Test", Path = ["ATE"])]
 public partial class ProtocolStressTest : PageBase
 {
     public override string PageName => "Protocol Stress Test";

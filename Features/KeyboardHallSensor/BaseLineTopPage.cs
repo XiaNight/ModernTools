@@ -2,7 +2,7 @@ using Base.Core;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Top Base Line", ShortName = "TBL", NavOrder = 6, Path = ["Keyboard"])]
+    [PageInfo("Top Base Line", ShortName = "TBL", NavOrder = 6, Path = ["Keyboard", "Hall Effect"])]
     public class BaseLineTopPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

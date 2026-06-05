@@ -5,7 +5,7 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Customized Segment", ShortName = "CSG", Path = ["Keyboard"])]
+    [PageInfo("Customized Segment", ShortName = "CSG", Path = ["Keyboard", "Hall Effect"])]
     internal class CustomizedSegmentPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

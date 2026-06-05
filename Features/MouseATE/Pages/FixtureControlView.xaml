@@ -1,0 +1,166 @@
+<UserControl x:Class="MouseATE.Pages.FixtureControlView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="900"
+             FontFamily="Consolas"
+             Padding="16">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Orientation="Vertical">
+
+            <!-- ── Connection Settings ──────────────────────────────── -->
+            <GroupBox Header="Connection Settings" Margin="0 0 0 12">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="140"/>
+                        <ColumnDefinition Width="160"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="Auto" MinWidth="140"/>
+                        <ColumnDefinition Width="160"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Machine Type -->
+                    <TextBlock Text="Machine Type:" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <ComboBox x:Name="MachineTypeCombo" Grid.Row="0" Grid.Column="1" Margin="4 4 0 4">
+                        <ComboBoxItem Content="JTB500 + TC100 (Primary)" IsSelected="True"/>
+                        <ComboBoxItem Content="JTHS300 (All-in-One)"/>
+                    </ComboBox>
+
+                    <!-- JTB500 / JTHS300 IP -->
+                    <TextBlock Text="Robot IP:" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="RobotIpBox" Grid.Row="1" Grid.Column="1" Text="192.168.0.100" Margin="4 4 0 4"/>
+
+                    <TextBlock Text="Robot Port:" Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="RobotPortBox" Grid.Row="2" Grid.Column="1" Text="5000" Margin="4 4 0 4"/>
+
+                    <!-- TC100 Serial -->
+                    <TextBlock Text="TC100 COM Port:" Grid.Row="1" Grid.Column="3" VerticalAlignment="Center" Margin="16 4 0 4"/>
+                    <TextBox x:Name="TC100PortBox" Grid.Row="1" Grid.Column="4" Text="COM3" Margin="4 4 0 4"/>
+
+                    <TextBlock Text="TC100 Baud Rate:" Grid.Row="2" Grid.Column="3" VerticalAlignment="Center" Margin="16 4 0 4"/>
+                    <TextBox x:Name="TC100BaudBox" Grid.Row="2" Grid.Column="4" Text="19200" Margin="4 4 0 4"/>
+
+                    <!-- HF10 Serial -->
+                    <TextBlock Text="HF10 COM Port:" Grid.Row="3" Grid.Column="3" VerticalAlignment="Center" Margin="16 4 0 4"/>
+                    <TextBox x:Name="HF10PortBox" Grid.Row="3" Grid.Column="4" Text="COM5" Margin="4 4 0 4"/>
+
+                    <!-- Connect / Disconnect -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="5" Margin="0 8 0 0">
+                        <Button x:Name="ConnectBtn" Content="Connect" Width="120" Click="ConnectBtn_Click" Margin="0 0 8 0"/>
+                        <Button x:Name="DisconnectBtn" Content="Disconnect" Width="120" Click="DisconnectBtn_Click" Margin="0 0 16 0" IsEnabled="False"/>
+                        <TextBlock x:Name="ConnectionStatus" Text="● Disconnected" VerticalAlignment="Center" Foreground="Red"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- ── Initialize ─────────────────────────────────────── -->
+            <GroupBox Header="Initialize / Home" Margin="0 0 0 12">
+                <StackPanel Orientation="Horizontal" Margin="8">
+                    <Button x:Name="InitBtn" Content="Initialize (Home All Axes)" Width="200"
+                            Click="InitBtn_Click" IsEnabled="False" Margin="0 0 16 0"/>
+                    <TextBlock x:Name="InitStatus" Text="" VerticalAlignment="Center" Foreground="Orange"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- ── Manual XY Jog ──────────────────────────────────── -->
+            <GroupBox Header="Manual XY Control" Margin="0 0 0 12">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Absolute XY -->
+                    <TextBlock Text="X (mm):" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="AbsXBox" Grid.Row="0" Grid.Column="1" Text="100" Margin="4 4 0 4"/>
+
+                    <TextBlock Text="Y (mm):" Grid.Row="0" Grid.Column="3" VerticalAlignment="Center" Margin="16 4 0 4"/>
+                    <TextBox x:Name="AbsYBox" Grid.Row="0" Grid.Column="4" Text="100" Margin="4 4 0 4"/>
+
+                    <Button x:Name="MoveXYAbsBtn" Content="Move Abs XY" Grid.Row="0" Grid.Column="6"
+                            Width="130" Click="MoveXYAbsBtn_Click" IsEnabled="False" Margin="8 4 0 4"/>
+
+                    <!-- Jog Step -->
+                    <TextBlock Text="Jog Step (mm):" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="JogStepBox" Grid.Row="1" Grid.Column="1" Text="10" Margin="4 4 0 4"/>
+
+                    <TextBlock Text="Speed (0–800):" Grid.Row="1" Grid.Column="3" VerticalAlignment="Center" Margin="16 4 0 4"/>
+                    <TextBox x:Name="SpeedBox" Grid.Row="1" Grid.Column="4" Text="100" Margin="4 4 0 4"/>
+
+                    <!-- Jog Buttons -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="7" Margin="0 8">
+                        <Button x:Name="JogXPlusBtn"  Content="X +"  Width="70" Click="JogXPlus_Click"  IsEnabled="False" Margin="0 0 4 0"/>
+                        <Button x:Name="JogXMinusBtn" Content="X -"  Width="70" Click="JogXMinus_Click" IsEnabled="False" Margin="0 0 12 0"/>
+                        <Button x:Name="JogYPlusBtn"  Content="Y +"  Width="70" Click="JogYPlus_Click"  IsEnabled="False" Margin="0 0 4 0"/>
+                        <Button x:Name="JogYMinusBtn" Content="Y -"  Width="70" Click="JogYMinus_Click" IsEnabled="False" Margin="0 0 0 0"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- ── Manual Z Control ───────────────────────────────── -->
+            <GroupBox Header="Manual Z Control" Margin="0 0 0 12">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" MinWidth="120"/>
+                        <ColumnDefinition Width="120"/>
+                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Z Abs (mm):" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="AbsZBox" Grid.Row="0" Grid.Column="1" Text="30" Margin="4 4 0 4"/>
+                    <Button x:Name="MoveZAbsBtn" Content="Move Abs Z" Grid.Row="0" Grid.Column="3"
+                            Width="130" Click="MoveZAbsBtn_Click" IsEnabled="False" Margin="8 4 0 4"/>
+
+                    <TextBlock Text="Z Jog Step (mm):" Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0 4"/>
+                    <TextBox x:Name="ZJogStepBox" Grid.Row="1" Grid.Column="1" Text="1" Margin="4 4 0 4"/>
+
+                    <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Margin="0 8">
+                        <Button x:Name="JogZUpBtn"   Content="Z Up"   Width="80" Click="JogZUp_Click"   IsEnabled="False" Margin="0 0 4 0"/>
+                        <Button x:Name="JogZDownBtn" Content="Z Down" Width="80" Click="JogZDown_Click" IsEnabled="False" Margin="0 0 0 0"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <!-- ── Auto Mode ──────────────────────────────────────── -->
+            <GroupBox Header="Auto Mode" Margin="0 0 0 12">
+                <StackPanel Orientation="Horizontal" Margin="8">
+                    <TextBlock Text="Procedure Index:" VerticalAlignment="Center" Margin="0 0 8 0"/>
+                    <TextBox x:Name="AutoProcBox" Text="1" Width="60" Margin="0 0 12 0"/>
+                    <Button x:Name="AutoRunBtn" Content="Run Auto" Width="120"
+                            Click="AutoRunBtn_Click" IsEnabled="False" Margin="0 0 8 0"/>
+                    <TextBlock x:Name="AutoStatus" Text="" VerticalAlignment="Center"/>
+                </StackPanel>
+            </GroupBox>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -10,7 +10,7 @@ using System.Windows;
 
 namespace ArmouryProtocol;
 
-[PageInfo("Armoury Lighting")]
+[PageInfo("Armoury Lighting", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
     public override string PageName => "Armoury Lighting";

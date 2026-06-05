@@ -4,7 +4,7 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Bottom Base Line", ShortName = "BBL", NavOrder = 5, Path = ["Keyboard"])]
+    [PageInfo("Bottom Base Line", ShortName = "BBL", NavOrder = 5, Path = ["Keyboard", "Hall Effect"])]
     public class BaseLineBottomPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

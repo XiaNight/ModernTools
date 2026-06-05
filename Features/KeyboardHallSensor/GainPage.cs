@@ -3,7 +3,7 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Gain", ShortName = "GAN", NavOrder = 3, Path = ["Keyboard"])]
+    [PageInfo("Gain", ShortName = "GAN", NavOrder = 3, Path = ["Keyboard", "Hall Effect"])]
     public class GainPage : MFGKeyboardBasePage
     {
         [Path("Keyboard")]
