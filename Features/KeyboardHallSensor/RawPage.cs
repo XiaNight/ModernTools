@@ -4,7 +4,7 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Raw", ShortName = "RAW", NavOrder = 0, Path = ["Keyboard"])]
+    [PageInfo("Raw", ShortName = "RAW", NavOrder = 0, Path = ["Keyboard", "Hall Effect"])]
     public class RawPage : MFGKeyboardStreamingPage
     {
         [Path("Keyboard")]

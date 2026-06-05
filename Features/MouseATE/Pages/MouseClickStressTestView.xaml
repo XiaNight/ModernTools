@@ -1,0 +1,193 @@
+<UserControl x:Class="MouseATE.Pages.MouseClickStressTestView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             FontFamily="Consolas"
+             Padding="16"
+             Loaded="UserControl_Loaded">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ── LEFT: Configuration ───────────────────────────────────────── -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!-- Relay API status -->
+                <GroupBox Header="Relay Board" Margin="0 0 0 10">
+                    <StackPanel Margin="6 4">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="Gray" Margin="0 0 0 6">
+                            Uses CommonProtocol → Relay Control page.
+                            Connect the relay board there first.
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="CheckApiBtn" Content="Check API" Padding="10 4"
+                                    Click="CheckApiBtn_Click"/>
+                            <TextBlock x:Name="ApiStatusText" Text="Unknown"
+                                       VerticalAlignment="Center" Margin="8 0 0 0" FontSize="11"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Buttons to Test -->
+                <GroupBox Header="Buttons to Test" Margin="0 0 0 10">
+                    <Grid Margin="6 4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="70"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <CheckBox x:Name="TestLeftChk"  Content="Left Button"  Grid.Row="0" Grid.Column="0"
+                                  IsChecked="True" Margin="0 4" VerticalAlignment="Center"/>
+                        <TextBlock Text="Relay:" Grid.Row="0" Grid.Column="1" VerticalAlignment="Center" Margin="8 4 4 4"/>
+                        <ComboBox  x:Name="LeftRelayCombo" Grid.Row="0" Grid.Column="2" Margin="0 4"/>
+
+                        <CheckBox x:Name="TestRightChk" Content="Right Button" Grid.Row="1" Grid.Column="0"
+                                  IsChecked="True" Margin="0 4" VerticalAlignment="Center"/>
+                        <TextBlock Text="Relay:" Grid.Row="1" Grid.Column="1" VerticalAlignment="Center" Margin="8 4 4 4"/>
+                        <ComboBox  x:Name="RightRelayCombo" Grid.Row="1" Grid.Column="2" Margin="0 4"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Test Parameters -->
+                <GroupBox Header="Test Parameters" Margin="0 0 0 10">
+                    <Grid Margin="6 4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="110"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Cycles:"       Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0 3"/>
+                        <TextBox   x:Name="CyclesBox"   Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2" Margin="4 3 0 3"/>
+
+                        <TextBlock Text="Solenoid ON:"  Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0 3"/>
+                        <TextBox   x:Name="SolenoidOnBox" Grid.Row="1" Grid.Column="1" Margin="4 3 0 3"/>
+                        <TextBlock Text="ms"            Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Margin="4 3 0 3"/>
+
+                        <TextBlock Text="Det. Window:"  Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="0 3"/>
+                        <TextBox   x:Name="WindowBox"   Grid.Row="2" Grid.Column="1" Margin="4 3 0 3"/>
+                        <TextBlock Text="ms"            Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" Margin="4 3 0 3"/>
+
+                        <TextBlock Text="Cooldown:"     Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Margin="0 3"/>
+                        <TextBox   x:Name="CooldownBox" Grid.Row="3" Grid.Column="1" Margin="4 3 0 3"/>
+                        <TextBlock Text="ms"            Grid.Row="3" Grid.Column="2" VerticalAlignment="Center" Margin="4 3 0 3"/>
+
+                        <TextBlock x:Name="EstimateText" Grid.Row="4" Grid.ColumnSpan="3"
+                                   FontSize="11" Foreground="Gray" Margin="0 6 0 2"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Output folder -->
+                <GroupBox Header="Output" Margin="0 0 0 10">
+                    <Grid Margin="6 4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox   x:Name="OutputFolderBox" Grid.Column="0" Margin="0 0 4 0"/>
+                        <Button    Content="..." Grid.Column="1" Padding="8 4" Click="BrowseBtn_Click"/>
+                    </Grid>
+                </GroupBox>
+
+                <!-- Action buttons -->
+                <Grid Margin="0 4 0 0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="StartBtn" Grid.Column="0" Content="Start Test"
+                            Padding="0 8" Click="StartBtn_Click"/>
+                    <Button x:Name="StopBtn"  Grid.Column="2" Content="Stop"
+                            Padding="0 8" IsEnabled="False" Click="StopBtn_Click"/>
+                </Grid>
+
+                <Button x:Name="ExportCsvBtn" Content="Export CSV" Padding="0 6" Margin="0 6 0 0"
+                        IsEnabled="False" Click="ExportCsvBtn_Click"/>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ── RIGHT: Results ──────────────────────────────────────────────── -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Stats table -->
+            <GroupBox Header="Click Test Results" Grid.Row="0" Margin="0 0 0 10">
+                <Grid Margin="6 4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="Left Button"  FontWeight="Bold" HorizontalAlignment="Center" Margin="0 2 0 6"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Right Button" FontWeight="Bold" HorizontalAlignment="Center" Margin="0 2 0 6"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Tested"  VerticalAlignment="Center" Margin="0 3" FontSize="12" Foreground="Gray"/>
+                    <TextBlock x:Name="LeftTestedText"  Grid.Row="1" Grid.Column="1" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="RightTestedText" Grid.Row="1" Grid.Column="2" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Pass"    VerticalAlignment="Center" Margin="0 3" FontSize="12" Foreground="Gray"/>
+                    <TextBlock x:Name="LeftPassText"    Grid.Row="2" Grid.Column="1" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#00D264"/>
+                    <TextBlock x:Name="RightPassText"   Grid.Row="2" Grid.Column="2" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#00D264"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Miss"    VerticalAlignment="Center" Margin="0 3" FontSize="12" Foreground="Gray"/>
+                    <TextBlock x:Name="LeftMissText"    Grid.Row="3" Grid.Column="1" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="RightMissText"   Grid.Row="3" Grid.Column="2" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Extra"   VerticalAlignment="Center" Margin="0 3" FontSize="12" Foreground="Gray"/>
+                    <TextBlock x:Name="LeftExtraText"   Grid.Row="4" Grid.Column="1" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="RightExtraText"  Grid.Row="4" Grid.Column="2" Text="—" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Pass %"  VerticalAlignment="Center" Margin="0 3" FontSize="12" Foreground="Gray"/>
+                    <TextBlock x:Name="LeftPassPctText"  Grid.Row="5" Grid.Column="1" Text="—" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="RightPassPctText" Grid.Row="5" Grid.Column="2" Text="—" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- Progress -->
+            <GroupBox Header="Progress" Grid.Row="1" Margin="0 0 0 10">
+                <StackPanel Margin="6 4">
+                    <ProgressBar x:Name="Progress" Height="16" Minimum="0" Maximum="100" Margin="0 0 0 4"/>
+                    <TextBlock   x:Name="ProgressText" Text="Ready" HorizontalAlignment="Center" FontSize="11" Foreground="Gray"/>
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Overall result banner -->
+            <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1" CornerRadius="4">
+                <TextBlock x:Name="OverallResultText" Text="Ready"
+                           FontSize="32" FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
