@@ -19,8 +19,6 @@ namespace CommonProtocol;
 [PageInfo("Relay Control", Glyph = "\uE8C6", Path = ["ATE"])]
 public partial class RelayControlPage : PageBase
 {
-    public override string PageName => "Relay Control";
-    public override string Glyph => "\uE8C6";
 
     // ── Command constants ───────────────────────────────────────────────────
     private const byte CmdByte = 0x02;

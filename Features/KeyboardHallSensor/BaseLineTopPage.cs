@@ -2,13 +2,9 @@ using Base.Core;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Top Base Line", ShortName = "TBL", NavOrder = 6, Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Top Base Line", Glyph = "\uE765", ShortName = "TBL", NavOrder = 6, Path = ["Keyboard", "Hall Effect"])]
     public class BaseLineTopPage : MFGKeyboardStreamingPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Top Base Line";
-        public override string ShortName => "TBL";
-        public override int NavOrder => 6;
         protected override string MfgCmdName => "hall_baseline_top";
         protected override byte MfdCmdCode => 0x0D;
         protected override int MfgCmdPackageSize => 3;

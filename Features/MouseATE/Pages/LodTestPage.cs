@@ -11,8 +11,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = false)]
 public class LodTestPage : PageBase
 {
-    [Path("ATE", "Mouse")]
-    public override string PageName => "LOD Test";
 
     private LodTestView _view;
     private Tests.RawInputCapture _capture;

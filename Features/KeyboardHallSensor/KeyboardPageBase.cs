@@ -20,7 +20,6 @@ namespace KeyboardHallSensor
     /// <typeparam name="T">The type of the page that inherits from KeyboardPageBase for instance management.</typeparam>
     public abstract class KeyboardPageBase : PageBase, IKeyboardPage
     {
-        public override string Glyph => "\uE765";
         protected ConcurrentDictionary<byte, KeyDisplay> KeyDisplays { get; private set; } = new();
         private ConcurrentStack<KeyDisplay> spawnedKeys = new();
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;

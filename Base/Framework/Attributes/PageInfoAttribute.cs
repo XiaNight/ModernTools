@@ -11,7 +11,10 @@ namespace Base.Core
         /// <summary>Name shown in the navigation sidebar.</summary>
         public string PageName { get; }
 
-        /// <summary>Segoe MDL2 / Fluent icon glyph (default matches <see cref="Base.Pages.PageBase.Glyph"/>).</summary>
+        /// <summary>
+        /// Segoe MDL2 / Fluent icon glyph (default matches <see cref="Base.Pages.PageBase.Glyph"/>).<br/>
+        /// Icon Library: <a href="https://learn.microsoft.com/en-us/windows/apps/design/iconography/segoe-ui-symbol-font">Segoe Fluent Icons</a>
+        /// </summary>
         public string Glyph { get; init; } = "\uE878";
 
         /// <summary>Optional secondary glyph overlaid on the icon.</summary>
@@ -38,7 +41,7 @@ namespace Base.Core
         /// <summary>Whether the device-selection control is shown when this page is active.</summary>
         public bool ShowDeviceSelection { get; init; } = true;
 
-        /// <summary>Optional sub-path for nested navigation grouping (mirrors <see cref="Base.Core.PathAttribute"/>).</summary>
+        /// <summary>Optional sub-path for nested navigation grouping (e.g. ["Keyboard", "Hall Effect"]).</summary>
         public string[] Path { get; init; } = [];
 
         public PageInfoAttribute(string pageName)

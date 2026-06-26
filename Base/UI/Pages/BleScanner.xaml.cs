@@ -140,11 +140,9 @@ namespace Base.Pages
         }
     }
 
+    [PageInfo("BLE Scanner", NavOrder = -1)]
     public class BleScannerPage : PageBase
     {
-        public override string PageName => "BLE Scanner";
-        public override int NavOrder => -1;
-
         private BleScanner page;
         private BluetoothLEAdvertisementWatcher watcher;
 

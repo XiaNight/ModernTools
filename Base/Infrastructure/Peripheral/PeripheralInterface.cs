@@ -201,7 +201,7 @@ public abstract class PeripheralInterface : IDisposable
         return lastReports.TryGetValue(reportId, out report);
     }
 
-    public virtual Task Write(byte[] data) => WriteAsync(data, CancellationToken.None);
+    public virtual Task<bool> Write(byte[] data) => WriteAsync(data, CancellationToken.None);
 
     /// <summary>
     /// Wait for the next received report (from InvokeDataReceived) without polling.

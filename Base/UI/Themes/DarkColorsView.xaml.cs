@@ -17,11 +17,9 @@ using Base.Core;
 
 namespace Base.Helpers
 {
-    [PageInfo("Dark Colors", NavOrder = 0)]
+    [PageInfo("Dark Colors", NavOrder = -1)]
     public partial class DarkColorsView : Pages.PageBase
     {
-        public override string PageName => "Dark Colors";
-        public override int NavOrder => 0;
 
         private readonly ObservableCollection<ColorKeyItem> _items = new();
         private ICollectionView? _view;

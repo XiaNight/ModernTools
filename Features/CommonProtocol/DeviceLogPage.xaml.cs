@@ -17,9 +17,6 @@ namespace CommonProtocol
     [PageInfo("Device Log", Glyph = "\uF714", Description = "View the log of the active device.")]
     public partial class DeviceLogPage : PageBase
     {
-        public override string PageName => "Device Log";
-        public override string Glyph => "\uF714";
-        public override string Description => "View the log of the active device.";
 
         private PeripheralInterface activeInterface;
 

@@ -284,7 +284,7 @@ public sealed class UsbInterface : PeripheralInterface
             packet[0] = GetReportId();
             Array.Copy(data, 0, packet, 1, data.Length);
 
-            await _fsWrite.WriteAsync(packet.AsMemory(0, packet.Length), cancellationToken).ConfigureAwait(false);
+            await _fsWrite.WriteAsync(packet, 0, packet.Length,cancellationToken).ConfigureAwait(false);
 
             InvokeDataSent(data);
             return true;
@@ -294,8 +294,22 @@ public sealed class UsbInterface : PeripheralInterface
             // Preserve cancellation semantics
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            Debug.Log($"[HID] Failed to send data: {ex.Message}");
+            var hr = unchecked((uint)ex.HResult);
+            var win32 = (hr & 0xFFFF0000) == 0x80070000
+                ? (int)(hr & 0xFFFF)
+                : ex.HResult;
+
+            Debug.Log($"Type: {ex.GetType().FullName}");
+            Debug.Log($"Message: {ex.Message}");
+            Debug.Log($"HResult: 0x{hr:X8}");
+            Debug.Log($"Win32: {win32}");
+            Debug.Log($"CanSeek: {_fsWrite.CanSeek}");
+            Debug.Log($"CanWrite: {_fsWrite.CanWrite}");
+            Debug.Log($"IsAsync: {(_fsWrite is FileStream fs ? fs.IsAsync : null)}");
+
             return false;
         }
         finally
@@ -345,7 +359,13 @@ public sealed class UsbInterface : PeripheralInterface
                 0x1AD3 => 0xCC,
                 0x1AFA => 0xCC,
                 0x1C65 => 0x04,
-                _ => 0x00
+                _ => (byte)(ProductInfo.UsagePage switch
+                    {
+                        0xFF01 => 0x01,
+                        0xFF02 => 0x02,
+                        0xFF03 => 0x03,
+                        _ => 0x00
+                    })
             });
     }
 

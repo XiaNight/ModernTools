@@ -21,11 +21,9 @@ public partial class GenericMouseAnalyzer : UserControl
     }
 }
 
-[PageInfo("Genric Mouse Analyzer", Path = ["Mouse"])]
+[PageInfo("Generic Mouse Analyzer", Path = ["Mouse"])]
 public class GenericMouseAnalyzerPage : Base.Pages.PageBase
 {
-    [Path("Mouse")]
-    public override string PageName => "Genric Mouse Analyzer";
 
     protected GenericMouseAnalyzer page;
     protected PeripheralInterface ActiveInterface { get; private set; }

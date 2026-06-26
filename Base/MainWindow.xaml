@@ -8,7 +8,8 @@
         xmlns:ui="http://schemas.modernwpf.com/2019"
         ui:WindowHelper.UseModernWindowStyle="True"
         mc:Ignorable="d"
-        Title="ModernTools - Developer Base Plate" 
+        Title="ModernTools - Developer Base Plate"
+        Cursor="Arrow"
         WindowStartupLocation="CenterScreen"
         Height="720" Width="1440"
         MinHeight="360" MinWidth="480"
@@ -18,6 +19,7 @@
         ui:TitleBar.Background="{DynamicResource SystemControlBackgroundChromeLowBrush}"
         ui:TitleBar.IsBackButtonVisible="False"
         WindowStyle="None"
+        Background="{DynamicResource ApplicationPageBackgroundThemeBrush}"
         d:Height="480" d:Width="960">
     <Window.Resources>
         <!-- Icon Styles -->

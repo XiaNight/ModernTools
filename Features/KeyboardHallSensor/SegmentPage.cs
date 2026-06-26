@@ -4,16 +4,11 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Segment", ShortName = "SEG", NavOrder = 2, Path = ["Keyboard", "Hall Effect"],
+    [PageInfo("Segment", Glyph = "\uE765", ShortName = "SEG", NavOrder = 2, Path = ["Keyboard", "Hall Effect"],
         Description = "If data isn't showing properly, try to change packet size to match the responding data. i.e. M705: 2")]
     public class SegmentPage : MFGKeyboardStreamingPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Segment";
-        public override string ShortName => "SEG";
-        public override int NavOrder => 2;
         protected override string MfgCmdName => "hall_segment";
-        public override string Description => "If data isn't showing properly, try to change packet size to match the responding data. i.e. M705: 2";
         protected override byte MfdCmdCode => 0x01;
         protected override int MfgCmdPackageSize => dynamicPackageSize;
         protected override int MaxValue { get; set; } = 350;

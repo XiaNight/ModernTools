@@ -25,8 +25,6 @@ namespace GenericMouseAnalyzer
     [PageInfo("Sensor View", Path = ["Mouse"])]
     public class SensorViewPage : PageBase
     {
-        [Path("Mouse")]
-        public override string PageName => "Sensor View";
         private SensorView page;
         protected PeripheralInterface ActiveInterface { get; private set; }
 

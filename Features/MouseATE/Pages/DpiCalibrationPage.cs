@@ -13,8 +13,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = true)]
 public class DpiCalibrationPage : PageBase
 {
-    [Path("ATE", "Mouse")]
-    public override string PageName => "DPI Calibration";
 
     private DpiCalibrationView _view;
     private Tests.RawInputCapture _capture;
