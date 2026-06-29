@@ -348,6 +348,24 @@ namespace Base.Services.Peripheral.Native
         [DllImport(SETUPAPI, SetLastError = true)]
         internal static extern bool SetupDiDestroyDeviceInfoList(IntPtr DeviceInfoSet);
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DEVPROPKEY
+        {
+            public Guid fmtid;
+            public uint pid;
+        }
+
+        [DllImport(SETUPAPI, SetLastError = true)]
+        internal static extern bool SetupDiGetDeviceProperty(
+            IntPtr DeviceInfoSet,
+            ref SP_DEVINFO_DATA DeviceInfoData,
+            ref DEVPROPKEY PropertyKey,
+            out uint PropertyType,
+            byte[] PropertyBuffer,
+            uint PropertyBufferSize,
+            out uint RequiredSize,
+            uint Flags);
+
         // ========= kernel32.dll =========
 
         [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]

@@ -24,6 +24,8 @@ namespace Base.Services.Peripheral
             PortName = portName ?? string.Empty;
         }
 
+        public override ConnectionType ConnectionType => ConnectionType.BT;
+
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false) => new BTInterface(this, useAsyncRead);
     }
 

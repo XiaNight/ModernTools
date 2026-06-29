@@ -24,11 +24,13 @@ namespace Base.Services.Peripheral
             string id = "",
             ushort versionNumber = 0,
             ushort usage = 0,
-            ushort usagePage = 0)
-            : base(pid, (ushort)vid, product, manufacturer, id, versionNumber, usage, usagePage)
+            ushort usagePage = 0,
+            string containerId = "")
+            : base(pid, (ushort)vid, product, manufacturer, id, versionNumber, usage, usagePage, containerId)
         {
-            
         }
+
+        public override ConnectionType ConnectionType => ConnectionType.HID;
 
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
@@ -107,11 +109,12 @@ namespace Base.Services.Peripheral
         {
             var selector = HidDevice.GetDeviceSelector(usagepage, usageId);
 
-            string[] extraProps = 
+            string[] extraProps =
             {
                 "System.Devices.DeviceInstanceId",
                 "System.ItemNameDisplay",
-                "System.Devices.Manufacturer"
+                "System.Devices.Manufacturer",
+                "System.Devices.ContainerId"
             };
 
             var infos = await DeviceInformation.FindAllAsync(selector, extraProps);
@@ -125,6 +128,9 @@ namespace Base.Services.Peripheral
                 string manufacturer = di.Properties.TryGetValue("System.Devices.Manufacturer", out var oMan) && oMan is string man ? man : string.Empty;
                 string product = di.Properties.TryGetValue("System.ItemNameDisplay", out var oName) && oName is string name ? name : (di.Name ?? string.Empty);
                 string id = di.Id ?? string.Empty;
+                string containerId = di.Properties.TryGetValue("System.Devices.ContainerId", out var oCid) && oCid is Guid gCid
+                    ? gCid.ToString()
+                    : string.Empty;
 
                 var hid = await HidDevice.FromIdAsync(di.Id, FileAccessMode.Read);
                 if (hid != null)
@@ -159,7 +165,8 @@ namespace Base.Services.Peripheral
                     id: id,
                     versionNumber: ver,
                     usage: usage,
-                    usagePage: usagePage));
+                    usagePage: usagePage,
+                    containerId: containerId));
             }
 
             return list;

@@ -251,7 +251,6 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
     public static List<Device> MergeDiscoveredInterface(IEnumerable<IPeripheralDetail> discoveredInterfacers, List<Device> existingDevices = null)
     {
-        //List<Device> devices = existingDevices ?? [];
         List<Device> devices = [];
 
         var interfaceList = discoveredInterfacers.ToList();
@@ -268,12 +267,28 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         {
             try
             {
-                var dev = devices.Find(d => d.VID == deviceInterface.VID && d.PID == deviceInterface.PID);
+                Device dev = null;
+
+                // Primary key: Windows Container ID uniquely identifies the physical device
+                // across both SetupDi (USB) and WinRT (HID) enumeration paths.
+                // Two identical devices on different ports will have different Container IDs.
+                if (!string.IsNullOrEmpty(deviceInterface.ContainerID))
+                    dev = devices.Find(d => d.ContainerID == deviceInterface.ContainerID);
+
+                // Fallback: VID+PID for interfaces that couldn't supply a Container ID (e.g. BLE)
+                if (dev == null)
+                    dev = devices.Find(d =>
+                        string.IsNullOrEmpty(d.ContainerID) &&
+                        d.VID == deviceInterface.VID &&
+                        d.PID == deviceInterface.PID);
+
                 if (dev == null)
                 {
-                    dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product);
+                    dev = new Device(deviceInterface.VID, deviceInterface.PID,
+                                     deviceInterface.Product, deviceInterface.ContainerID);
                     devices.Add(dev);
                 }
+
                 dev.IsAvailable = true;
                 dev.AddInterface(deviceInterface);
             }
@@ -389,11 +404,12 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         Main.PortComboBox.ItemContainerStyle = style;
     }
 
-    public class Device(ushort vid, ushort pid, string name) : INotifyPropertyChanged
+    public class Device(ushort vid, ushort pid, string name, string containerId = "") : INotifyPropertyChanged
     {
         public ushort VID = vid;
         public ushort PID = pid;
         public string productName = name;
+        public string ContainerID = containerId;
         public readonly List<IPeripheralDetail> interfaces = [];
 
         private bool isAvailable = true;
@@ -413,7 +429,11 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             return $"{productName} {PID:X4}";
         }
 
-        public string ProductIdentifier => $"{VID:X4}:{PID:X4}";
+        // Includes ContainerID when available so two identical physical devices are distinct entries.
+        // Falls back to VID:PID for devices that don't supply a Container ID (e.g. BLE).
+        public string ProductIdentifier => string.IsNullOrEmpty(ContainerID)
+            ? $"{VID:X4}:{PID:X4}"
+            : $"{VID:X4}:{PID:X4}:{ContainerID}";
 
         public void AddInterface(IPeripheralDetail @interface)
         {

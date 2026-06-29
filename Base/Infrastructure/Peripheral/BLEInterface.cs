@@ -31,6 +31,8 @@ namespace Base.Services.Peripheral
             VIDUInt = vid;
         }
 
+        public override ConnectionType ConnectionType => ConnectionType.BLE;
+
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
             var ble_task = Task.Run(() =>

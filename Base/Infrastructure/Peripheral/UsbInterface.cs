@@ -21,10 +21,13 @@ public sealed class USBInterfaceDetail : PeripheralInterfaceDetail
         string id = "",
         ushort versionNumber = 0,
         ushort usage = 0,
-        ushort usagePage = 0)
-        : base(pid, vid, product, manufacturer, id, versionNumber, usage, usagePage)
+        ushort usagePage = 0,
+        string containerId = "")
+        : base(pid, vid, product, manufacturer, id, versionNumber, usage, usagePage, containerId)
     {
     }
+
+    public override ConnectionType ConnectionType => ConnectionType.USB;
 
     protected override PeripheralInterface CreateConnection(bool useAsyncRead = false) => new UsbInterface(this, useAsyncRead);
 }
@@ -139,6 +142,7 @@ public sealed class UsbInterface : PeripheralInterface
             string product = GetDeviceString(h, HidNative.HidD_GetProductString);
             string manufacturer = GetDeviceString(h, HidNative.HidD_GetManufacturerString);
             string serial = GetDeviceString(h, HidNative.HidD_GetSerialNumberString);
+            string containerId = GetContainerID(set, devInfo);
 
             var info = new USBInterfaceDetail(
                 pid: (ushort)attrs.ProductID,
@@ -148,7 +152,8 @@ public sealed class UsbInterface : PeripheralInterface
                 id: detail.DevicePath,
                 versionNumber: (ushort)attrs.VersionNumber,
                 usage: caps.Usage,
-                usagePage: caps.UsagePage)
+                usagePage: caps.UsagePage,
+                containerId: containerId)
             {
                 InputReportByteLength = caps.InputReportByteLength,
                 OutputReportByteLength = caps.OutputReportByteLength
@@ -164,6 +169,19 @@ public sealed class UsbInterface : PeripheralInterface
             if (pp != IntPtr.Zero) HidNative.HidD_FreePreparsedData(ref pp);
             h?.Dispose();
         }
+    }
+
+    // DEVPKEY_Device_ContainerId = {8C7ED206-3F8A-4827-B3AB-AE9E1FAEFC6C}, 2
+    private static readonly Guid ContainerIdFmtid = new(0x8C7ED206, 0x3F8A, 0x4827, 0xB3, 0xAB, 0xAE, 0x9E, 0x1F, 0xAE, 0xFC, 0x6C);
+
+    private static string GetContainerID(IntPtr deviceInfoSet, HidNative.SP_DEVINFO_DATA devInfo)
+    {
+        var key = new HidNative.DEVPROPKEY { fmtid = ContainerIdFmtid, pid = 2 };
+        byte[] buf = new byte[16]; // GUID is 16 bytes
+        if (!HidNative.SetupDiGetDeviceProperty(deviceInfoSet, ref devInfo, ref key,
+                out _, buf, (uint)buf.Length, out _, 0))
+            return string.Empty;
+        return new Guid(buf).ToString();
     }
 
     private static string GetDeviceString(SafeFileHandle handle, Func<SafeFileHandle, IntPtr, uint, bool> getter)
