@@ -355,7 +355,7 @@ namespace Base.Services.Peripheral.Native
             public uint pid;
         }
 
-        [DllImport(SETUPAPI, SetLastError = true)]
+        [DllImport(SETUPAPI, EntryPoint = "SetupDiGetDevicePropertyW", SetLastError = true)]
         internal static extern bool SetupDiGetDeviceProperty(
             IntPtr DeviceInfoSet,
             ref SP_DEVINFO_DATA DeviceInfoData,
