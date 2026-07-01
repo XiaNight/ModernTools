@@ -756,6 +756,30 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         AboutWindow.Show(this);
     }
 
+    private void OpenPreferences(object sender, RoutedEventArgs e)
+    {
+        string directory = LocalAppDataStore.Instance.RootDirectory;
+
+        if (!Directory.Exists(directory))
+        {
+            MessageBox.Show($"Preferences folder not found:\n{directory}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open preferences folder:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
     {
         OpenUrl(bugReportUrl);

@@ -91,8 +91,7 @@
                         <MenuItem Header="_Exit" Click="Exit_Click"/>
                     </MenuItem>
                     <MenuItem Header="_Edit">
-                        <MenuItem Header="_Copy" InputGestureText="Ctrl+C"/>
-                        <MenuItem Header="_Paste" InputGestureText="Ctrl+V"/>
+                        <MenuItem Header="_Preference" InputGestureText="Ctrl+," Click="OpenPreferences"/>
                     </MenuItem>
                     <MenuItem Header="_Tools" x:Name="ToolsMenu">
                     </MenuItem>
