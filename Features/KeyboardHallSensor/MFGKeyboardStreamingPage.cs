@@ -1,4 +1,5 @@
 ﻿using Base.Components.Chart;
+using Base.Core;
 using Base.Services.APIService;
 using Microsoft.Win32;
 using System.Diagnostics;
@@ -26,12 +27,15 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     TextBox targetKeyInputField;
     TextBox recordTimeLimitInputField;
     TextBox recordCountLimitInputField;
+    [Persist]
     private byte targetKey = 0x29;
 
     private Button startButton;
     private Button stopButton;
     protected bool isRecording = false;
+    [Persist]
     protected int recordCountLimit = 0;
+    [Persist]
     protected int recordDurationLimitMs = 0;
     protected int recordedCount = 0;
     protected Stopwatch recordingStopwatch;

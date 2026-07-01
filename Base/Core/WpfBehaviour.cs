@@ -76,7 +76,7 @@ namespace Base.Core
         {
             foreach (var field in GetAllFields(GetType()))
             {
-                var attr = field.GetCustomAttribute<PersistAsAttribute>(inherit: true);
+                var attr = field.GetCustomAttribute<PersistAttribute>(inherit: true);
                 if (attr == null) continue;
                 var suffix = string.IsNullOrWhiteSpace(attr.Key) ? field.Name : attr.Key;
                 yield return (field, $"{GetType().Name}.{suffix}");
