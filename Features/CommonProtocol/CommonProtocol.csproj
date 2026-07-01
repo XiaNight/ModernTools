@@ -26,6 +26,9 @@
 	  <Compile Update="RelayControlPage.xaml.cs">
 	    <SubType>Code</SubType>
 	  </Compile>
+	  <Compile Update="BatteryLogPage.xaml.cs">
+	    <SubType>Code</SubType>
+	  </Compile>
 	</ItemGroup>
 	
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">

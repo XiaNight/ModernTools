@@ -6,10 +6,12 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Single switchable ThemeResources: contains both Light and Dark and follows
+                     ThemeManager.ApplicationTheme. Do NOT add extra ThemeResources with an
+                     explicit RequestedTheme - a later one wins statically and forces that theme
+                     on the first paint, causing a light/dark flash before ThemeManager applies. -->
                 <ui:ThemeResources AccentColor="#FF1929"/>
                 <ui:XamlControlsResources />
-                <ui:ThemeResources RequestedTheme="Dark" />
-                <ui:ThemeResources RequestedTheme="Light" />
                 <ResourceDictionary Source="/Base;component/UI/Themes/Generic.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
