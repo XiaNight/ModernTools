@@ -13,7 +13,6 @@ namespace ArmouryProtocol;
 [PageInfo("Armoury Lighting", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
-    public override string PageName => "Armoury Lighting";
 
     private PeripheralInterface _activeInterface;
     private CancellationTokenSource _sendCts;

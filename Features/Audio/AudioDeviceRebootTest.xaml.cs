@@ -14,8 +14,6 @@ namespace Audio
     [PageInfo("Audio Device Reboot Test", Path = ["Audio"])]
     public partial class AudioDeviceRebootTest : PageBase
     {
-        [Path("Audio")]
-        public override string PageName => "Audio Device Reboot Test";
 
         public const string AUDIO_DEVICE_REBOOT_TEST_RUN_AT_STARTUP_KEY = "AudioDeviceRebootTestRunAtStartup";
         public const string TEST_STATE_KEY = "AudioDeviceRebootTestState";

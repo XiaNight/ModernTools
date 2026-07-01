@@ -9,10 +9,6 @@ namespace KeyboardHallSensor
     [PageInfo("Multi Calibration Raw", ShortName = "MCR", NavOrder = 3, Path = ["Keyboard", "Hall Effect"])]
     public partial class MultiCalibrationRawPage : PageBase, IKeyboardPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Multi Calibration Raw";
-        public override string ShortName => "MCR";
-        public override int NavOrder => 3;
         protected string MfgCmdName => "get_raw_multi_calibration";
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
 

@@ -18,8 +18,6 @@ namespace Audio
         Path = ["Audio"])]
     public partial class AudioPage : PageBase
     {
-        public override string Glyph => "\uE189";
-        public override bool ShowDeviceSelection => false;
         public bool IsTesting { get; private set; } = false;
         public int Cycle
         {
@@ -211,9 +209,6 @@ namespace Audio
             RemainingDurationText.Text = $"Remaining Duration: {remaining} s";
         }
 
-        [Path("Audio")]
-        public override string PageName => "Audio";
-        public override string Description => "Place AudioTrigger.bat under ./Tools folder.";
 
         public event Action<TimedFloat> InVolumeOutsideThresholdTriggered;
         public long InVolumeTriggerDebounce { get; set; } = TimeSpan.FromSeconds(1).Ticks;

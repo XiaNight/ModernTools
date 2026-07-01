@@ -9,7 +9,7 @@
 		<Nullable>disable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
-		<InformationalVersion>V99_03_17</InformationalVersion>
+		<InformationalVersion>V01_00_18</InformationalVersion>
 		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
 		<AppName>ModernToolset</AppName>
 		<Company>AsusTek Computer Inc.</Company>
@@ -43,7 +43,7 @@
 		<ProjectReference Include="..\Features\MouseATE\MouseATE.csproj" />
 	</ItemGroup>
 
-	<Target Name="PublishPluginProjects" AfterTargets="Publish">
+	<Target Name="PublishPluginProjects" AfterTargets="Publish" Condition="'$(SkipPluginPublish)' != 'true'">
 		<Exec Command="dotnet msbuild ..\Base\Base.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\Audio\Audio.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\CommonProtocol\CommonProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />

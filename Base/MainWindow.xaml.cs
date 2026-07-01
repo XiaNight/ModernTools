@@ -70,6 +70,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     #endregion
 
+    #region Immersive dark mode (window frame)
+
+    // Asks DWM to paint the window frame with the dark palette so the OS doesn't flash a
+    // white/light frame while the window is being created. Applied in OnSourceInitialized
+    // (HWND exists, before first paint) and refreshed when the theme is toggled.
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;            // Windows 10 2004+ / Windows 11
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19; // older Windows 10 builds
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private void ApplyImmersiveDarkMode()
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+
+        int useDark = ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark ? 1 : 0;
+        // Try the current attribute id first; fall back to the pre-20H1 id on older builds.
+        if (DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int)) != 0)
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDark, sizeof(int));
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        ApplyImmersiveDarkMode();
+    }
+
+    #endregion
+
     #region WPF public
 
     private void ToggleNav_Click(object sender, RoutedEventArgs e)
@@ -97,6 +127,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         };
 
         LocalAppDataStore.Instance.Set("Theme", ThemeManager.Current.ApplicationTheme);
+        ApplyImmersiveDarkMode();
 
         LogMessage($"Theme changed to {ThemeManager.Current.ApplicationTheme}.");
     }
@@ -174,10 +205,37 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             LogMessage($"[PluginLoad] Folder not found: {folder}");
             return;
         }
-        foreach (string dllPath in Directory.GetFiles(folder, "*.dll"))
+
+        // Pre-build a set of already-loaded assembly paths so we can skip them
+        // without needing to read their PE headers via AssemblyName.GetAssemblyName.
+        var loadedPaths = new HashSet<string>(
+            AppDomain.CurrentDomain.GetAssemblies()
+                .Select(a => { try { return Path.GetFullPath(a.Location); } catch { return string.Empty; } })
+                .Where(p => !string.IsNullOrEmpty(p)),
+            StringComparer.OrdinalIgnoreCase);
+
+        string[] dllsToLoad = Directory.GetFiles(folder, "*.dll")
+            .Where(p => !loadedPaths.Contains(Path.GetFullPath(p)))
+            .ToArray();
+
+        // Load assemblies in parallel — Assembly.LoadFrom is thread-safe in .NET.
+        // Log messages are collected and flushed to the UI thread after the parallel section.
+        var logMessages = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        System.Threading.Tasks.Parallel.ForEach(dllsToLoad, dllPath =>
         {
-            LoadPluginDLL(dllPath);
-        }
+            try
+            {
+                var asmName = AssemblyName.GetAssemblyName(dllPath);
+                if (asmName == null) return;
+                Assembly.LoadFrom(dllPath);
+                logMessages.Enqueue($"[PluginLoad] Loaded: {asmName.Name}");
+            }
+            catch (BadImageFormatException) { }
+            catch (Exception ex) { logMessages.Enqueue($"[PluginLoad] Failed {Path.GetFileName(dllPath)}: {ex.Message}"); }
+        });
+
+        foreach (var msg in logMessages)
+            LogMessage(msg);
     }
 
     private void LoadPluginDLL(string dllPath)
@@ -189,6 +247,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var loadedAsm = Assembly.LoadFrom(dllPath);
             LogMessage($"[PluginLoad] Loaded plugin: {asmName.FullName}");
         }
+        catch (BadImageFormatException) { /* Native or resource-only DLL — expected, skip silently */ }
         catch (Exception ex)
         {
             LogMessage($"[PluginLoad] Failed to load plugin from {dllPath}: {ex.Message}");
@@ -257,7 +316,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private async Task BuildNavigationTabs(IEnumerable<Assembly> assemblies)
     {
-        // find all PageBase and none abstract
+        // find all concrete PageBase types
         Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
             .Where(t => typeof(PageBase).IsAssignableFrom(t))
             .Where(t => !t.IsAbstract)
@@ -267,104 +326,54 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         foreach (var t in allTypes)
             jobs[t] = LoadingCover.RentJob(1f);
 
-        foreach (Type t in allTypes)
+        // Navigation metadata comes solely from [PageInfo]; read it off the UI thread up-front
+        // so the dispatcher call below only touches the UI.
+        var pages = allTypes
+            .Select(t => (type: t, info: t.GetCustomAttribute<PageInfoAttribute>()))
+            .ToList();
+
+        // All tabs are created in a single dispatcher call instead of N separate round-trips.
+        // Pages are never instantiated here — tabs are built from attribute metadata and the
+        // page is created lazily on first navigation (see SelectPageLazy).
+        await Dispatcher.InvokeAsync(() =>
         {
-            var pageInfo = t.GetCustomAttribute<PageInfoAttribute>();
-
-            if (pageInfo != null)
+            foreach (var (t, info) in pages)
             {
-                // Fast path: read metadata from attribute without instantiating the page.
-                await Dispatcher.InvokeAsync(() =>
+                if (info == null)
                 {
-                    if (pageInfo.NavOrder >= 0)
-                    {
-                        PageBase.NavigationAlignment alignment = pageInfo.NavAlignment == 1
-                            ? PageBase.NavigationAlignment.Back
-                            : PageBase.NavigationAlignment.Front;
-
-                        AddButtonDelegate add = alignment switch
-                        {
-                            PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
-                            PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
-                            _ => NavTabsManager.AddTop
-                        };
-
-                        INavigationItem newTab = add(
-                            text: pageInfo.PageName,
-                            path: pageInfo.Path,
-                            glyph: pageInfo.Glyph,
-                            secondaryGlyph: pageInfo.SecondaryGlyph,
-                            secondaryText: pageInfo.ShortName,
-                            order: pageInfo.NavOrder);
-
-                        Type capturedType = t;
-                        newTab.OnClick += () => SelectPageLazy(capturedType);
-                        lazyPageTabMap[t] = newTab;
-                    }
-
+                    LogMessage($"[NavInit] Skipped {t.FullName}: missing [PageInfo] attribute.");
                     jobs[t].Finish();
-                }, DispatcherPriority.Loaded);
-            }
-            else
-            {
-                // Legacy path: instantiate immediately (for pages without PageInfoAttribute).
-                await Dispatcher.InvokeAsync(() =>
+                    continue;
+                }
+
+                if (info.NavOrder >= 0)
                 {
-                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    PageBase.NavigationAlignment alignment = info.NavAlignment == 1
+                        ? PageBase.NavigationAlignment.Back
+                        : PageBase.NavigationAlignment.Front;
 
-                    PageBase newPage = null;
-                    try
+                    AddButtonDelegate add = alignment switch
                     {
-                        newPage = (PageBase)Activator.CreateInstance(t);
-                    }
-                    catch (FileNotFoundException fileEx)
-                    {
-                        LogMessage($"[NavInit] Failed to load {t.FullName}: {fileEx.Message}");
-                        jobs[t].Finish();
-                    }
-                    catch (Exception ex)
-                    {
-                        LogMessage($"[NavInit] Failed to load {t.FullName}: {ex.Message}");
-                    }
-                    if (newPage == null)
-                    {
-                        jobs[t].Finish();
-                        return;
-                    }
+                        PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+                        PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+                        _ => NavTabsManager.AddTop
+                    };
 
-                    RegisterWpfObject(newPage);
+                    INavigationItem newTab = add(
+                        text: info.PageName,
+                        path: info.Path,
+                        glyph: info.Glyph,
+                        secondaryGlyph: info.SecondaryGlyph,
+                        secondaryText: info.ShortName,
+                        order: info.NavOrder);
 
-                    if (newPage.NavOrder >= 0)
-                    {
-                        string[] path = PathAttribute.GetPath(newPage, nameof(newPage.PageName));
-                        INavigationItem newTab;
-
-                        AddButtonDelegate add = newPage.NavAlignment switch
-                        {
-                            PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
-                            PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
-                            _ => NavTabsManager.AddTop
-                        };
-
-                        newTab = add(
-                            text: newPage.PageName,
-                            path: path,
-                            glyph: newPage.Glyph,
-                            secondaryGlyph: newPage.SecondaryGlyph,
-                            secondaryText: newPage.ShortName,
-                            order: newPage.NavOrder);
-
-                        newTab.OnClick += () => SelectPage(newPage);
-                        navPageMap.Add(newPage, newTab);
-                    }
-
-                    sw.Stop();
-                    LogMessage($"[NavInit] {t.FullName} : {sw.Elapsed.TotalMilliseconds:0.###} ms");
-                    sw = null;
-                    jobs[t].Finish();
-                }, DispatcherPriority.Loaded);
+                    Type capturedType = t;
+                    newTab.OnClick += () => SelectPageLazy(capturedType);
+                    lazyPageTabMap[t] = newTab;
+                }
+                jobs[t].Finish();
             }
-        }
+        }, DispatcherPriority.Loaded);
     }
 
     /// <summary>
@@ -522,36 +531,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var openBase = typeof(WpfBehaviourSingleton<>);
 
-        Type[] allTypes = assemblies.SelectMany(SafeGetTypes)
-            .Where(t => t != null)
-            .Where(t => t.IsClass && !t.IsAbstract)
+        // Filter to actual singletons first — avoids renting/finishing LoadingJobs
+        // (and their EnsureOnUI/UpdateProgress calls) for every type in all loaded assemblies.
+        Type[] singletonTypes = assemblies.SelectMany(SafeGetTypes)
+            .Where(t => t != null && t.IsClass && !t.IsAbstract && IsSelfReferencingSingleton(t, openBase))
             .ToArray();
 
-        await Task.Delay(100);
+        if (singletonTypes.Length == 0) return;
 
-        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(allTypes.Length);
-        foreach (var t in allTypes)
+        var jobs = new Dictionary<Type, LoadingCover.LoadingJob>(singletonTypes.Length);
+        foreach (var t in singletonTypes)
             jobs[t] = LoadingCover.RentJob(1f);
 
-        foreach (Type t in allTypes)
+        // All singleton instantiations in one dispatcher call instead of N separate round-trips.
+        await Dispatcher.InvokeAsync(() =>
         {
-            // Match: class T : WpfBehaviourSingleton<T>
-            if (!IsSelfReferencingSingleton(t, openBase))
+            foreach (var t in singletonTypes)
             {
-                jobs[t].Finish();
-                continue;
-            }
-
-            await Dispatcher.InvokeAsync(() =>
-            {
-                // Force creation: WpfBehaviourSingleton<T>.Instance
                 var closedBase = openBase.MakeGenericType(t);
                 var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                 _ = prop?.GetValue(null);
-            }, DispatcherPriority.Send);
-
-            jobs[t].Finish();
-        }
+                jobs[t].Finish();
+            }
+        }, DispatcherPriority.Send);
     }
 
     #endregion
@@ -800,7 +802,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void LogMessage(string message)
     {
-        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
         LogTextBox.AppendText($"[{timestamp}] {message}\n");
         LogTextBox.ScrollToEnd();
     }

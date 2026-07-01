@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -22,14 +23,32 @@ namespace Base.Pages
     /// </summary>
     public abstract class PageBase : WpfBehaviour, IPageBase
     {
-        public abstract string PageName { get; }
-        public virtual string Glyph { get; } = "\uE878";
-        public virtual string SecondaryGlyph { get; } = "";
-        public virtual string ShortName { get; } = "";
-        public virtual string Description { get; } = "There is no description for this page.";
-        public virtual NavigationAlignment NavAlignment { get; } = NavigationAlignment.Front;
-        public virtual int NavOrder { get; } = int.MaxValue;
-        public virtual bool ShowDeviceSelection { get; } = true;
+        /// <summary>
+        /// Navigation metadata, resolved once from the <see cref="PageInfoAttribute"/> on the
+        /// concrete page type. Every concrete page must be decorated with [PageInfo].
+        /// </summary>
+        private readonly PageInfoAttribute _info;
+
+        protected PageBase()
+        {
+            _info = GetType().GetCustomAttribute<PageInfoAttribute>(inherit: false)
+                ?? throw new InvalidOperationException(
+                    $"{GetType().FullName} must be decorated with [PageInfo(...)].");
+        }
+
+        // Read-only metadata sourced from [PageInfo]. These are intentionally non-virtual:
+        // pages declare their metadata via the attribute, not by overriding properties.
+        public string PageName => _info.PageName;
+        public string Glyph => _info.Glyph;
+        public string SecondaryGlyph => _info.SecondaryGlyph;
+        public string ShortName => _info.ShortName;
+        public string Description => _info.Description;
+        public NavigationAlignment NavAlignment =>
+            _info.NavAlignment == 1 ? NavigationAlignment.Back : NavigationAlignment.Front;
+        public int NavOrder => _info.NavOrder;
+        public bool ShowDeviceSelection => _info.ShowDeviceSelection;
+        // Named NavPath (not Path) to avoid colliding with System.IO.Path inside page classes.
+        public string[] NavPath => _info.Path;
         protected static DeviceSelection.Device ActiveDevice => DeviceSelection.Instance.ActiveDevice;
 
         protected Grid root;

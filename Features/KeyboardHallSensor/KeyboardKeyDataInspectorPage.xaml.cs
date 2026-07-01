@@ -7,11 +7,9 @@ namespace KeyboardHallSensor
     /// <summary>
     /// Interaction logic for KeyboardKeyDataInspectorPage.xaml
     /// </summary>
-    [PageInfo("Key Data", Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Key Data", Glyph = "\uE765", Path = ["Keyboard", "Hall Effect"], NavOrder = -1)]
     public partial class KeyboardKeyDataInspectorPage : KeyboardPageBase
     {
-        [Path("Keyboard")]
-        public override string PageName => "Key Data";
         private new PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
 
         public KeyboardKeyDataInspectorPage() : base()

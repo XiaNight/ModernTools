@@ -11,7 +11,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = false)]
 public class AteSettingsPage : PageBase
 {
-    public override string PageName => "ATE Settings";
 
     private AteSettingsView _view;
 

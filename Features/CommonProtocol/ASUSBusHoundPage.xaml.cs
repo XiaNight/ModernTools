@@ -29,12 +29,6 @@ using static Base.UI.Pages.ASUSBusHoundPage.BusListener;
     Description = "ASUS Bus Hound is a software that allows you to control your ASUS laptop's fans and performance modes. This page provides integration with ASUS Hound, allowing you to monitor and adjust your laptop's performance settings directly from this application.")]
 public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 {
-    public override string PageName => "Bus Hound";
-    public override string Glyph => "\uEE6F";
-
-    public override string Description =>
-        "ASUS Bus Hound is a software that allows you to control your ASUS laptop's fans and performance modes. This page provides integration with ASUS Hound, allowing you to monitor and adjust your laptop's performance settings directly from this application.";
-
     private const int MaxVisibleItems = 20000;
     private const int MaxBatchSizePerTick = 2000;
 

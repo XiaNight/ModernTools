@@ -112,15 +112,15 @@ namespace Base.Services
 			byte[] payload = parameter is null || parameter.Length == 0 ? [] : (byte[])parameter.Clone();
 			CmdData item = new(device, cmd, wait, payload);
 			pendingCommands.Enqueue(item);
-            try
-            {
-			    OnCmdQueued?.Invoke(item);
-            }
-            catch (Exception e)
-            {
-                Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
-                Debug.Log(e);
-            }
+			try
+			{
+				OnCmdQueued?.Invoke(item);
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
+				Debug.Log(e);
+			}
 			queueSignal.Release();
 		}
 
@@ -164,7 +164,7 @@ namespace Base.Services
 					}
 					catch (OperationCanceledException oce)
 					{
-				        Log($"[HID] Failed to send data: {oce.Message}");
+						Log($"[HID] Failed to send data: {oce.Message}");
 					}
 					catch (Exception ex)
 					{
@@ -204,8 +204,11 @@ namespace Base.Services
 				}
 				else
 				{
-					await device.Write(combined).ConfigureAwait(false);
-					Log($"[HID] Sent: {BitConverter.ToString(combined)}");
+					bool success = await device.Write(combined).ConfigureAwait(false);
+					if(success)
+						Log($"[HID] Sent: {BitConverter.ToString(combined)}");
+					else
+						Log($"[HID] Failed to send: {BitConverter.ToString(combined)}");
 					await Task.Delay(DefaultInterCommandDelayMs, ct).ConfigureAwait(false);
 				}
 			}

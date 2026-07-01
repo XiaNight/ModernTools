@@ -4,13 +4,9 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Raw", ShortName = "RAW", NavOrder = 0, Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Raw", Glyph = "\uE765", ShortName = "RAW", NavOrder = 0, Path = ["Keyboard", "Hall Effect"])]
     public class RawPage : MFGKeyboardStreamingPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Raw";
-        public override string ShortName => "RAW";
-        public override int NavOrder => 0;
         protected override string MfgCmdName => "hall_raw";
         protected override byte MfdCmdCode => 0x00;
         protected override int MfgCmdPackageSize => 3;

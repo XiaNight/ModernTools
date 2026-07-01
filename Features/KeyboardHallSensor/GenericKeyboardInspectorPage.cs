@@ -10,16 +10,13 @@ using System.Windows.Media;
 namespace KeyboardHallSensor;
 
 [PageInfo("Key Inspector",
-    Glyph = "",
+    Glyph = "\uE765",
     Description = "Shows which key is pressed/released and counts clicks per key. Works with any keyboard — no device connection required.",
     NavOrder = 50,
     Path = ["Keyboard"],
     ShowDeviceSelection = false)]
 public class GenericKeyboardInspectorPage : PageBase
 {
-    [Path("Keyboard")]
-    public override string PageName => "Key Inspector";
-
     private Canvas _canvas;
     private TextBlock _statusText;
 

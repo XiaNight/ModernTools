@@ -2,13 +2,9 @@ using Base.Core;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Bottom Average", ShortName = "BMA", NavOrder = 4, Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Bottom Average", Glyph = "\uE765", ShortName = "BMA", NavOrder = 4, Path = ["Keyboard", "Hall Effect"])]
     public class BottomAveragePage : MFGKeyboardBasePage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Bottom Average";
-        public override string ShortName => "BMA";
-        public override int NavOrder => 4;
         protected override string MfgCmdName => "hall_bottom_average";
         protected override byte MfdCmdCode => 0x07;
         protected override int MfgCmdPackageSize => 4;

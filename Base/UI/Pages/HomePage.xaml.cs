@@ -20,8 +20,6 @@ namespace Base.Pages
     [PageInfo("Home", NavOrder = 0)]
     public partial class HomePage : PageBase, INotifyPropertyChanged
     {
-        public override string PageName => "Home";
-        public override int NavOrder => 0;
 
         private readonly DispatcherTimer _clockTimer;
 

@@ -93,7 +93,11 @@ namespace Base.Services.APIService
 
             _ = V1.Instance;
 
-            Start(2345);
+            // Route-table reflection + HTTP listener bind have no UI dependency, so run them
+            // off the UI thread. Doing this work inline would block startup (and stall the
+            // loading-cover fade-out) for no reason — handlers are marshalled back to
+            // uiDispatcher per-request when RequireMainThread is set.
+            Task.Run(() => Start(2345));
         }
 
         public override void OnDestroy()

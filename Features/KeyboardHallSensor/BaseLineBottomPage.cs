@@ -4,13 +4,9 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Bottom Base Line", ShortName = "BBL", NavOrder = 5, Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Bottom Base Line", Glyph = "\uE765", ShortName = "BBL", NavOrder = 5, Path = ["Keyboard", "Hall Effect"])]
     public class BaseLineBottomPage : MFGKeyboardStreamingPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Bottom Base Line";
-        public override string ShortName => "BBL";
-        public override int NavOrder => 5;
         protected override string MfgCmdName => "hall_baseline_bottom";
         protected override byte MfdCmdCode => 0x0E;
         protected override int MfgCmdPackageSize => 3;

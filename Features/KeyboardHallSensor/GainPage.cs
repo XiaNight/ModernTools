@@ -3,13 +3,9 @@ using System.Windows.Media;
 
 namespace KeyboardHallSensor
 {
-    [PageInfo("Gain", ShortName = "GAN", NavOrder = 3, Path = ["Keyboard", "Hall Effect"])]
+    [PageInfo("Gain", Glyph = "\uE765", ShortName = "GAN", NavOrder = 3, Path = ["Keyboard", "Hall Effect"])]
     public class GainPage : MFGKeyboardBasePage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Gain";
-        public override string ShortName => "GAN";
-        public override int NavOrder => 3;
         protected override string MfgCmdName => "hall_gain";
         protected override byte MfdCmdCode => 0x05;
         protected override int MfgCmdPackageSize => 2;
