@@ -17,7 +17,7 @@ namespace Base.Pages
     /// <summary>
     /// Interaction logic for HomePage.xaml
     /// </summary>
-    [PageInfo("Home", NavOrder = 0)]
+    [PageInfo("Home", Glyph = "\uE80F", NavOrder = 0)]
     public partial class HomePage : PageBase, INotifyPropertyChanged
     {
 

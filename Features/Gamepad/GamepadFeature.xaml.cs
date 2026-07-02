@@ -395,15 +395,21 @@ namespace Gamepad
             {
                 case ChartType.ReportRate:
                 case ChartType.SmoothedReportRate:
-                    StripChart.MaxY = 10000; StripChart.MinY = 0; break;
+                    StripChart.MaxY = 10000; StripChart.MinY = 0;
+                    StripChart.AxisYLabelCount = 5;
+                    break;
                 case ChartType.X:
                 case ChartType.Y:
                 case ChartType.RX:
                 case ChartType.RY:
-                    StripChart.MaxY = 32768; StripChart.MinY = -32768; break;
+                    StripChart.MaxY = 32768; StripChart.MinY = -32768;
+                    StripChart.AxisYLabelCount = 4;
+                     break;
                 case ChartType.LT:
                 case ChartType.RT:
-                    StripChart.MaxY = 256; StripChart.MinY = 0; break;
+                    StripChart.MaxY = 256; StripChart.MinY = 0;
+                    StripChart.AxisYLabelCount = 4;
+                     break;
             }
         }
 

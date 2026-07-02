@@ -17,6 +17,8 @@ namespace Base.Core
         public static LocalAppDataStore Instance =>
             instance ?? throw new InvalidOperationException("LocalAppDataStore is not initialized. Call LocalAppDataStore.Init(...) first.");
 
+        public static bool IsInitialised => instance != null;
+
         private readonly string rootDir;
         private readonly string kvFilePath;
         private readonly JsonSerializerOptions jsonOptions;
@@ -348,6 +350,37 @@ namespace Base.Core
             var path = GetPath(relativeParts);
             if (File.Exists(path)) File.Delete(path);
             else if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        }
+
+        // ----------------------------
+        // Reflection helpers for [PersistAs]
+        // ----------------------------
+
+        internal object? GetUntyped(string key, Type type)
+        {
+            if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key is required.", nameof(key));
+            gate.Wait();
+            try
+            {
+                EnsureLoaded_NoLock();
+                if (!cache!.TryGetValue(key, out var elem)) return null;
+                try { return elem.Deserialize(type, jsonOptions); }
+                catch { return null; }
+            }
+            finally { gate.Release(); }
+        }
+
+        internal void SetUntyped(string key, object? value, Type type)
+        {
+            if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("key is required.", nameof(key));
+            gate.Wait();
+            try
+            {
+                EnsureLoaded_NoLock();
+                cache![key] = JsonSerializer.SerializeToElement(value, type, jsonOptions);
+                Save_NoLock();
+            }
+            finally { gate.Release(); }
         }
 
         // ----------------------------

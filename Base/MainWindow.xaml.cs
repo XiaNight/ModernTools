@@ -47,6 +47,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         WindowChrome.SetIsHitTestVisibleInChrome(MenuBar, true);
         WindowChrome.SetIsHitTestVisibleInChrome(TitleBarControls, true);
+        WindowChrome.SetIsHitTestVisibleInChrome(ConfigButton, true);
 
         Debug.OnLog += LogMessage;
     }
@@ -756,6 +757,39 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void ShowAbout(object sender, RoutedEventArgs e)
     {
         AboutWindow.Show(this);
+    }
+
+    /// <summary>
+    /// Opens the central settings dialog, discovering every [Config]-decorated member across the
+    /// currently registered pages / behaviours.
+    /// </summary>
+    private void ConfigButton_Click(object sender, RoutedEventArgs e)
+    {
+        ConfigDialog.Open(currentPage, currentPage?.PageName);
+    }
+
+    private void OpenPreferences(object sender, RoutedEventArgs e)
+    {
+        string directory = LocalAppDataStore.Instance.RootDirectory;
+
+        if (!Directory.Exists(directory))
+        {
+            MessageBox.Show($"Preferences folder not found:\n{directory}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = directory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open preferences folder:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void RedirectToFeedbackURL(object sender, RoutedEventArgs e)
