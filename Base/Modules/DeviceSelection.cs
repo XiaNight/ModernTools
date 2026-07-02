@@ -137,7 +137,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
         foreach (Device device in Main.PortComboBox.Items)
         {
-            if (device.ProductIdentifier == deviceIdentifier)
+            if (device.MatchesIdentifier(deviceIdentifier))
             {
                 index = i;
                 lastConnectedDevice = device;
@@ -201,13 +201,20 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         if (!isShiftPressed) filteredDevices.RemoveAll(device =>
         {
             if (device.VID == 0x045e && device.PID == 0x02FF) return false; // Xbox One Game Controller
+            // BLE devices exposing the ASUS vendor GATT service stay visible even
+            // when they report no (or a Bluetooth SIG) vendor id.
+            if (device.interfaces.Any(i => i is BLEInterfaceDetail { IsVendorService: true })) return false;
             return device.VID != 0x0B05;
         });
 
         Main.PortComboBox.ItemsSource = filteredDevices;
         if (lastConnectedDevice != null)
         {
-            int index = filteredDevices.FindIndex(device => device == lastConnectedDevice);
+            // Each refresh produces fresh Device instances, so match by identity
+            // (VID/PID/transport) instead of by reference and re-anchor to the
+            // fresh instance so the selection survives dropdown refreshes.
+            int index = filteredDevices.FindIndex(device => device.ProductIdentifier == lastConnectedDevice.ProductIdentifier);
+            if (index >= 0) lastConnectedDevice = filteredDevices[index];
             Main.PortComboBox.SelectedIndex = index >= 0 ? index : -1;
         }
         else if (list.Count > 0) Main.PortComboBox.SelectedIndex = 0;
@@ -268,10 +275,15 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         {
             try
             {
-                var dev = devices.Find(d => d.VID == deviceInterface.VID && d.PID == deviceInterface.PID);
+                // Group by transport as well, so the same product connected over
+                // USB and over BLE shows up as two distinct, clearly labelled
+                // dropdown entries.
+                var dev = devices.Find(d => d.VID == deviceInterface.VID
+                    && d.PID == deviceInterface.PID
+                    && d.Transport == deviceInterface.Transport);
                 if (dev == null)
                 {
-                    dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product);
+                    dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product, deviceInterface.Transport);
                     devices.Add(dev);
                 }
                 dev.IsAvailable = true;
@@ -311,17 +323,17 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         await Disconnect();
 
         int idx = Main.PortComboBox.SelectedIndex;
-        if (idx < 0 || idx >= DiscoveredDevices.Count) return false;
+        var items = Main.PortComboBox.ItemsSource?.Cast<Device>().ToArray() ?? [];
+        if (idx < 0 || idx >= items.Length) return false;
 
-        var device = Main.PortComboBox.ItemsSource.Cast<Device>().ToArray()[idx];
-        return Connect(device);
+        return Connect(items[idx]);
     }
 
     [POST(requireMainThread: true)]
     public async Task<bool> Connect(string productIdentifier)
     {
         await Disconnect();
-        var device = DiscoveredDevices.FirstOrDefault(d => string.Compare(d.ProductIdentifier, productIdentifier) == 0);
+        var device = DiscoveredDevices.FirstOrDefault(d => d.MatchesIdentifier(productIdentifier));
         if (device == null) return false;
         return Connect(device);
     }
@@ -341,8 +353,8 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         filteredInterfaces.RemoveAll(@interface => @interface == null);
         if (filteredInterfaces.Count == 0) return false;
 
-        var newDevice = new Device(vid, pid, name);
-        newDevice.interfaces.AddRange(interfaces);
+        var newDevice = new Device(vid, pid, name, filteredInterfaces[0].Transport);
+        newDevice.interfaces.AddRange(filteredInterfaces);
         return Connect(newDevice);
     }
 
@@ -389,12 +401,18 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         Main.PortComboBox.ItemContainerStyle = style;
     }
 
-    public class Device(ushort vid, ushort pid, string name) : INotifyPropertyChanged
+    public class Device(ushort vid, ushort pid, string name, PeripheralTransport transport = PeripheralTransport.UsbHid) : INotifyPropertyChanged
     {
         public ushort VID = vid;
         public ushort PID = pid;
         public string productName = name;
         public readonly List<IPeripheralDetail> interfaces = [];
+
+        /// <summary>Transport all interfaces of this entry are reached over.</summary>
+        public PeripheralTransport Transport { get; } = transport;
+
+        /// <summary>Connection type shown in the device selection dropdown.</summary>
+        public string TransportLabel => Transport.GetLabel();
 
         private bool isAvailable = true;
         public bool IsAvailable
@@ -410,10 +428,17 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
         public override string ToString()
         {
-            return $"{productName} {PID:X4}";
+            return $"{productName} {PID:X4} [{TransportLabel}]";
         }
 
-        public string ProductIdentifier => $"{VID:X4}:{PID:X4}";
+        public string ProductIdentifier => $"{VID:X4}:{PID:X4}:{Transport.GetKey()}";
+
+        /// <summary>
+        /// Matches the current identifier format and the legacy "VID:PID" format
+        /// persisted by earlier versions (which had no transport component).
+        /// </summary>
+        public bool MatchesIdentifier(string identifier)
+            => identifier == ProductIdentifier || identifier == $"{VID:X4}:{PID:X4}";
 
         public void AddInterface(IPeripheralDetail @interface)
         {

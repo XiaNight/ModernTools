@@ -17,6 +17,11 @@ namespace Base.Services.Peripheral
         public uint VIDUInt { get; internal set; }
         public Guid bleServiceGuid { get; internal set; }
 
+        /// <summary>True when this detail wraps the ASUS vendor-specific GATT service.</summary>
+        public bool IsVendorService { get; internal set; }
+
+        public override PeripheralTransport Transport => PeripheralTransport.BluetoothLE;
+
         public BLEInterfaceDetail(
             ushort pid = 0,
             uint vid = 0,
@@ -33,11 +38,14 @@ namespace Base.Services.Peripheral
 
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
+            // GATT service/characteristic discovery routinely takes longer than the
+            // 1s used by the wired HID path, so give BLE a wider window.
             var ble_task = Task.Run(() =>
             {
                 return new BLEInterface(this, useAsyncRead);
             });
-            ble_task.Wait(TimeSpan.FromSeconds(1));
+            if (!ble_task.Wait(TimeSpan.FromSeconds(10)))
+                throw new TimeoutException($"Timed out connecting to BLE device '{Product}'.");
             return ble_task.Result;
         }
     }
@@ -48,9 +56,16 @@ namespace Base.Services.Peripheral
         private const uint BLEReadCharacUuid = 0xFFF2;
         private const uint BLENotificationCharacUuid = 0xFFF4;
 
+        // ASUS vendor GATT services/characteristics use 128-bit UUIDs built on the
+        // base xxxxYYYY-00b0-4240-ba50-05ca45bf8abc where YYYY is the 16-bit short
+        // id (e.g. f364fff0-... carries service id 0xFFF0).
+        private static readonly Guid VendorUuidBase = Guid.Parse("f3640000-00b0-4240-ba50-05ca45bf8abc");
+        private static readonly byte[] VendorUuidBaseBytes = VendorUuidBase.ToByteArray();
+
         public BLEInterfaceDetail BleInfo => (BLEInterfaceDetail)ProductInfo;
 
         private BluetoothLEDevice bleDevice;
+        private GattDeviceService gattService;
         private GattCharacteristic characteristicWrite;
         private GattCharacteristic characteristicRead;
         private GattCharacteristic characteristicNotify;
@@ -62,6 +77,28 @@ namespace Base.Services.Peripheral
             Initialize().GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// Resolves the 16-bit short id of a GATT UUID, understanding both the
+        /// Bluetooth SIG base and the ASUS vendor base.
+        /// </summary>
+        internal static uint? TryGetShortId(Guid uuid)
+        {
+            uint? sid = BluetoothUuidHelper.TryGetShortId(uuid);
+            if (sid != null) return sid;
+
+            // Guid.ToByteArray stores Data1 little-endian: bytes [0..1] carry the
+            // short id, bytes [2..3] the vendor prefix (0xf364).
+            var bytes = uuid.ToByteArray();
+            for (int i = 2; i < 16; i++)
+            {
+                if (bytes[i] != VendorUuidBaseBytes[i]) return null;
+            }
+            return (uint)(bytes[0] | (bytes[1] << 8));
+        }
+
+        internal static bool IsVendorUuid(Guid uuid)
+            => BluetoothUuidHelper.TryGetShortId(uuid) is null && TryGetShortId(uuid) is not null;
+
         private async Task EnsureInitializedAsync()
         {
             if (initialized) return;
@@ -71,13 +108,27 @@ namespace Base.Services.Peripheral
         private async Task Initialize()
         {
             if (initialized) return;
+            try
+            {
+                await InitializeCore();
+            }
+            catch
+            {
+                // Release any half-opened handles so a later retry starts clean.
+                CloseDevice();
+                throw;
+            }
+        }
+
+        private async Task InitializeCore()
+        {
             bleDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(BleInfo.Mac);
-            //if (_bleDevice?.ConnectionStatus != BluetoothConnectionStatus.Connected)
-            //    throw new IOException("BLE device not connected.");
+            if (bleDevice is null)
+                throw new IOException($"BLE device {BleInfo.Mac:X12} is not reachable.");
 
-            var servicesResult = await bleDevice.GetGattServicesForUuidAsync(BleInfo.bleServiceGuid);
-
-            //var servicesResult = await bleDevice.GetGattServicesAsync();
+            var servicesResult = BleInfo.bleServiceGuid == Guid.Empty
+                ? await bleDevice.GetGattServicesAsync()
+                : await bleDevice.GetGattServicesForUuidAsync(BleInfo.bleServiceGuid);
             if (servicesResult.Status != GattCommunicationStatus.Success)
                 throw new IOException("Failed to enumerate GATT services.");
 
@@ -85,24 +136,15 @@ namespace Base.Services.Peripheral
             if (targetUsagePage == 0) targetUsagePage = 0xFFF0; // Default to FFF0 if not set
             GattDeviceService service = null;
             foreach (var s in servicesResult.Services)
-            { 
-                uint? sid = BluetoothUuidHelper.TryGetShortId(s.Uuid);
-                if (sid == null)
-                {
-                    string toString = s.Uuid.ToString();
-                    if (toString == "f364fff0-00b0-4240-ba50-05ca45bf8abc")
-                        sid = 0xFFF0;
-                }
-                if (sid == targetUsagePage)
+            {
+                if (TryGetShortId(s.Uuid) == targetUsagePage)
                 {
                     service = s;
                     break;
                 }
             }
-            if (service is null) throw new IOException($"Target {targetUsagePage} service not found.");
-
-            //BluetoothUuidHelper.FromShortId(0x)
-            //service.GetCharacteristicsForUuidAsync(GattCharacteristicUuids.GapPeripheralPreferredConnectionParameters);
+            if (service is null) throw new IOException($"Target {targetUsagePage:X4} service not found.");
+            gattService = service;
 
             var charsResult = await service.GetCharacteristicsAsync();
             if (charsResult.Status != GattCommunicationStatus.Success)
@@ -110,20 +152,7 @@ namespace Base.Services.Peripheral
 
             foreach (var c in charsResult.Characteristics)
             {
-                uint? sid = BluetoothUuidHelper.TryGetShortId(c.Uuid);
-                if (sid == null)
-                {
-                    switch (c.Uuid.ToString())
-                    {
-                        case "f364fff1-00b0-4240-ba50-05ca45bf8abc":
-                            sid = BLEWriteCharacUuid;
-                            break;
-                        case "f364fff4-00b0-4240-ba50-05ca45bf8abc":
-                            sid = BLENotificationCharacUuid;
-                            break;
-                    }
-                }
-                switch (sid)
+                switch (TryGetShortId(c.Uuid))
                 {
                     case BLEWriteCharacUuid:
                         characteristicWrite = c;
@@ -137,31 +166,57 @@ namespace Base.Services.Peripheral
                     case 0x2A04:
                         characteristicRead = c;
                         break;
-                    default:
-                        continue;
                 }
-                if (sid == BLEWriteCharacUuid) characteristicWrite = c;
-                else if (sid == BLEReadCharacUuid) characteristicRead = c;
             }
             if (characteristicWrite is null && characteristicRead is null && characteristicNotify is null)
-                throw new IOException("Required FFF1/FFF2 characteristics not found."); 
+                throw new IOException("Required FFF1/FFF2/FFF4 characteristics not found.");
 
             if (UseAsyncReads)
             {
-                if(characteristicRead != null)
-                {
-                    characteristicRead.ValueChanged += OnValueChanged;
-                    await characteristicRead.WriteClientCharacteristicConfigurationDescriptorAsync(
-                        GattClientCharacteristicConfigurationDescriptorValue.Notify);
-                }
-                if(characteristicNotify != null)
-                {
-                    characteristicNotify.ValueChanged += OnValueChanged;
-                }
+                await SubscribeAsync(characteristicRead);
+                await SubscribeAsync(characteristicNotify);
             }
+
+            bleDevice.ConnectionStatusChanged += OnConnectionStatusChanged;
 
             initialized = true;
             IsDeviceConnected = true;
+        }
+
+        /// <summary>
+        /// Hooks value-change events and, when the characteristic supports it,
+        /// enables notifications/indications via the CCCD.
+        /// </summary>
+        private async Task SubscribeAsync(GattCharacteristic characteristic)
+        {
+            if (characteristic is null) return;
+            characteristic.ValueChanged += OnValueChanged;
+            try
+            {
+                if (characteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Notify))
+                {
+                    await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                        GattClientCharacteristicConfigurationDescriptorValue.Notify);
+                }
+                else if (characteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Indicate))
+                {
+                    await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                        GattClientCharacteristicConfigurationDescriptorValue.Indicate);
+                }
+            }
+            catch
+            {
+                // Characteristic has no CCCD (or the write was rejected); value
+                // reads keep working, only unsolicited notifications are lost.
+            }
+        }
+
+        private void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
+        {
+            if (sender.ConnectionStatus != BluetoothConnectionStatus.Disconnected) return;
+            if (!IsDeviceConnected) return;
+            IsDeviceConnected = false;
+            InvokeDeviceDisconnected();
         }
 
         private void OnValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
@@ -261,7 +316,11 @@ namespace Base.Services.Peripheral
             List<BLEInterfaceDetail> stdServices = new();
             foreach(var service in services)
             {
-                ushort? usagePage = (ushort?)BluetoothUuidHelper.TryGetShortId(service.Uuid);
+                // Resolve both SIG-base services (0x1800, 0x180A, ...) and the
+                // ASUS vendor services (f364YYYY-...); other 128-bit services are
+                // not addressable through the usage-page based selection and are
+                // skipped.
+                ushort? usagePage = (ushort?)TryGetShortId(service.Uuid);
                 if (usagePage == null) continue;
 
                 stdServices.Add(new BLEInterfaceDetail(
@@ -274,12 +333,16 @@ namespace Base.Services.Peripheral
                     {
                         Mac = dev.BluetoothAddress,
                         SerialNumber = serialNumber,
-                        bleServiceGuid = service.Uuid
+                        bleServiceGuid = service.Uuid,
+                        IsVendorService = IsVendorUuid(service.Uuid)
                     }
                 );
             }
 
-            return stdServices;
+            // Vendor command services first: features that find no usage-page match
+            // fall back to interfaces[0], which must be the service that actually
+            // accepts commands rather than e.g. Generic Access (0x1800).
+            return stdServices.OrderByDescending(s => s.IsVendorService).ToList();
         }
 
         private static async Task ProcessCharacteristic(GattDeviceService service, Guid uuid, Action<byte[]> onValue)
@@ -336,8 +399,15 @@ namespace Base.Services.Peripheral
             writer.WriteBytes(data);
             var buf = writer.DetachBuffer();
 
-            var status = await characteristicWrite.WriteValueAsync(buf, GattWriteOption.WriteWithoutResponse).AsTask(cancellationToken);
-            return status == GattCommunicationStatus.Success;
+            var option = characteristicWrite.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)
+                ? GattWriteOption.WriteWithoutResponse
+                : GattWriteOption.WriteWithResponse;
+
+            var status = await characteristicWrite.WriteValueAsync(buf, option).AsTask(cancellationToken);
+            if (status != GattCommunicationStatus.Success) return false;
+
+            InvokeDataSent(data);
+            return true;
         }
 
         public override async Task<byte[]> ReadAsync(CancellationToken cancellationToken = default)
@@ -359,23 +429,37 @@ namespace Base.Services.Peripheral
         {
             try
             {
-                if (characteristicRead != null)
-                {
-                    characteristicRead.ValueChanged -= OnValueChanged;
-                    _ = characteristicRead.WriteClientCharacteristicConfigurationDescriptorAsync(
-                        GattClientCharacteristicConfigurationDescriptorValue.None);
-                }
+                if (bleDevice != null)
+                    bleDevice.ConnectionStatusChanged -= OnConnectionStatusChanged;
+
+                Unsubscribe(characteristicRead);
+                Unsubscribe(characteristicNotify);
             }
             catch { /* ignore */ }
             finally
             {
                 characteristicWrite = null;
                 characteristicRead = null;
+                characteristicNotify = null;
+                gattService?.Dispose();
+                gattService = null;
                 bleDevice?.Dispose();
                 bleDevice = null;
                 initialized = false;
                 IsDeviceConnected = false;
             }
+        }
+
+        private void Unsubscribe(GattCharacteristic characteristic)
+        {
+            if (characteristic is null) return;
+            characteristic.ValueChanged -= OnValueChanged;
+            try
+            {
+                _ = characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.None);
+            }
+            catch { /* ignore */ }
         }
     }
 }
