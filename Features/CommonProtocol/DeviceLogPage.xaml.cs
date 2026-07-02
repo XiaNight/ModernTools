@@ -19,9 +19,23 @@ namespace CommonProtocol
     {
 
         private PeripheralInterface activeInterface;
-
-        private DispatcherTimer testPrintTimer;
         private DispatcherTimer timer;
+
+        [Config("Polling Rate",
+            Header = "Timing",
+            Hint = "How often the device is polled, in milliseconds.",
+            HelpBox = "Lower values increase responsiveness but use more CPU.",
+            Min = 1, Max = 1000)]
+        private long IntervalMs
+        {
+            get { return intervalMs; }
+            set
+            {
+                timer.Interval = TimeSpan.FromMilliseconds(value);
+                intervalMs = value;
+            }
+        }
+        private long intervalMs;
 
         public DeviceLogPage()
         {
@@ -31,23 +45,6 @@ namespace CommonProtocol
         public override void Awake()
         {
             base.Awake();
-            //LogPanel.AppendLog("Device Log Initialized.");
-
-            //// Test logs
-            //for (int i = 0; i < 100; i++)
-            //{
-            //    LogPanel.AppendLog($"TTTTTTTTTTTTTTTTTTTTT");
-            //}
-
-            //testPrintTimer = new DispatcherTimer
-            //{
-            //    Interval = TimeSpan.FromMilliseconds(250)
-            //};
-
-            //testPrintTimer.Tick += (s, e) =>
-            //{
-            //    LogPanel.AppendLog($"Test log at {DateTime.Now:HH:mm:ss.fff}");
-            //};
 
             timer = new DispatcherTimer
             {

@@ -1,0 +1,16 @@
+<UserControl x:Class="Base.Components.ConfigDateTimeField"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d">
+    <StackPanel Orientation="Horizontal">
+        <DatePicker x:Name="Picker" VerticalAlignment="Center" MinWidth="120" Width="120" Margin="0,0,10,0"/>
+        <TextBox x:Name="Hours" Width="42" MinWidth="0" MaxLength="3" TextAlignment="Center" VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+        <TextBlock Text=":" VerticalAlignment="Center" Margin="3,0"/>
+        <TextBox x:Name="Minutes" Width="42" MinWidth="0" MaxLength="2" TextAlignment="Center" VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+        <TextBlock Text=":" VerticalAlignment="Center" Margin="3,0"/>
+        <TextBox x:Name="Seconds" Width="42" MinWidth="0" MaxLength="2" TextAlignment="Center" VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+    </StackPanel>
+</UserControl>
