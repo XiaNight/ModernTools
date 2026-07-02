@@ -147,10 +147,6 @@ public partial class ConfigDialog : UserControl
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 12, 0),
         };
-        // The hint hovers over the field name; fall back to Description when no Hint is set.
-        var labelTip = !string.IsNullOrWhiteSpace(item.Attr.Hint) ? item.Attr.Hint : item.Attr.Description;
-        if (!string.IsNullOrWhiteSpace(labelTip))
-            label.ToolTip = labelTip;
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
 
@@ -159,6 +155,17 @@ public partial class ConfigDialog : UserControl
         editor.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(editor, 1);
         grid.Children.Add(editor);
+
+        // The hint hovers over the whole row; fall back to Description when no Hint is set. WPF
+        // tooltips don't bubble, so apply it to the row and both children to cover the full area.
+        var rowTip = !string.IsNullOrWhiteSpace(item.Attr.Hint) ? item.Attr.Hint : item.Attr.Description;
+        if (!string.IsNullOrWhiteSpace(rowTip))
+        {
+            grid.Background = Brushes.Transparent; // hit-test the gaps between children
+            grid.ToolTip = rowTip;
+            label.ToolTip = rowTip;
+            editor.ToolTip = rowTip;
+        }
 
         outer.Children.Add(grid);
 

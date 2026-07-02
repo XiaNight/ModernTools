@@ -1,4 +1,5 @@
 using Base.Core;
+using ModernWpf.Controls.Primitives;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -51,6 +52,9 @@ public partial class ConfigInputField : UserControl, IConfigEditor
                 ConfigEditorUtil.AttachHexFilter(Input);
                 break;
         }
+
+        if (!string.IsNullOrEmpty(item.Attr.Placeholder))
+            ControlHelper.SetPlaceholderText(Input, item.Attr.Placeholder);
 
         Input.Text = FormatCurrent();
         Input.LostFocus += (s, e) => Commit();

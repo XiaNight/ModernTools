@@ -57,9 +57,15 @@ namespace Base.Core
         public string Header { get; set; }
 
         /// <summary>
-        /// Optional hint shown as a native tooltip when the cursor hovers over the input control.
+        /// Optional hint shown as a native tooltip when the cursor hovers anywhere over the row.
         /// </summary>
         public string Hint { get; set; }
+
+        /// <summary>
+        /// Optional placeholder text shown inside the input box while it is empty. Applies to the
+        /// single-line text editor (string / numeric / hex fields).
+        /// </summary>
+        public string Placeholder { get; set; }
 
         /// <summary>
         /// Optional plain-text help box rendered directly beneath this field (similar to Unity's
