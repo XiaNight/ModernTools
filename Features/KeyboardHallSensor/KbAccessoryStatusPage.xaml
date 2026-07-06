@@ -19,6 +19,12 @@
                     Click="RefreshBtn_Click" Margin="0 0 12 0"/>
             <CheckBox x:Name="AutoRefreshCheck" Content="Auto refresh" FontSize="14"
                       IsChecked="False" VerticalAlignment="Center"/>
+            <TextBlock Text="Test Mode: " FontSize="14" VerticalAlignment="Center" TextAlignment="Center"/>
+            <ComboBox x:Name="TestModeDropdown" Width="140" VerticalAlignment="Center">
+                <ComboBoxItem Content="Off" IsSelected="True"/>
+                <ComboBoxItem Content="Accessory Type"/>
+                <ComboBoxItem Content="All"/>
+            </ComboBox>
         </StackPanel>
 
         <!-- Status table -->

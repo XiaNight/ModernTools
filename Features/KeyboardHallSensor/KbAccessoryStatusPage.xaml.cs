@@ -18,7 +18,7 @@ namespace KeyboardHallSensor
     /// Response payload (after the echoed PIN): Type, Switch, Encoder Delta (LE 16),
     /// Encoder Abs (LE 16).
     /// </summary>
-    [PageInfo("Accessory", Glyph = "", ShortName = "ACC", NavOrder = 0, Path = ["Keyboard", "Accessory"])]
+    [PageInfo("Accessory", Glyph = "\uE765", ShortName = "ACC", NavOrder = 0, Path = ["Keyboard", "Armoury"])]
     public partial class KbAccessoryStatusPage : PageBase, IKeyboardPage
     {
         //- Get State command. The PIN is appended as a parameter per poll.
@@ -48,7 +48,7 @@ namespace KeyboardHallSensor
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
 
         //- valueCells[field, pinColumn]
-        private readonly TextBlock[,] valueCells = new TextBlock[4, 8];
+        private readonly TextBlock[,] valueCells = new TextBlock[5, 8];
         //- Latest raw bytes per pin: [type, switch, deltaLo, deltaHi, absLo, absHi]
         private readonly byte[][] latest = new byte[8][];
 
@@ -57,11 +57,41 @@ namespace KeyboardHallSensor
         //- Guards against launching a new refresh while the previous one is still draining.
         private int outstandingPolls;
 
+        private int testModeRow;
+        private KeyData[] keyDatas;
+        private TestMode currentTestMode;
+
         public override void Awake()
         {
             InitializeComponent();
             base.Awake();
             BuildTable();
+
+            TestModeDropdown.SelectionChanged += TestModeDropdown_SelectionChanged;
+        }
+
+        private void TestModeDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            TestMode selectedMode = (TestMode)TestModeDropdown.SelectedIndex;
+
+            switch (selectedMode)
+            {
+                case TestMode.Off:
+                    TableHost.RowDefinitions[testModeRow + 1].Height = new GridLength(0);
+                    foreach(var keyData in keyDatas)
+                    {
+                        keyData.ResetFailCount();
+                    }
+                    break;
+                default:
+                    foreach(var keyData in keyDatas)
+                    {
+                        keyData.Lock();
+                    }
+                    TableHost.RowDefinitions[testModeRow + 1].Height = GridLength.Auto;
+                    break;
+            }
+            currentTestMode = selectedMode;
         }
 
         protected override void OnEnable()
@@ -146,26 +176,45 @@ namespace KeyboardHallSensor
 
         public void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
         {
-            var span = bytes.Span;
+            var span = bytes.Span[1..];
 
-            //- Layout: [reportId, FA, 11, idxLo, idxHi, PIN(echo), type, switch,
+            if (span.Length < 2) return;
+
+            bool isError = false;
+            if (span[0] == 0xFF && span[1] == 0xAA)
+            {
+                isError = true;
+                span = span[2..];
+            }
+
+            //- Layout: [FA, 11, idxLo, idxHi, PIN(echo), type, switch,
             //-          deltaLo, deltaHi, absLo, absHi]
-            if (span.Length < 12) return;
-            if (span[1] != 0xFA || span[2] != 0x11) return;
+            if (span.Length < 11) return;
+            if (span[0] != 0xFA || span[1] != 0x11) return;
 
-            byte pin = span[5];
+            byte pin = span[4];
             int col = PinColumn(pin);
             if (col < 0) return;
 
             latest[col] = new[]
             {
-                span[6],  // Accessory Type
-                span[7],  // Switch State
-                span[8],  // Encoder Delta low
-                span[9],  // Encoder Delta high
-                span[10], // Encoder Abs low
-                span[11], // Encoder Abs high
+                span[5],  // Accessory Type
+                span[6],  // Switch State
+                span[7],  // Encoder Delta low
+                span[8],  // Encoder Delta high
+                span[9], // Encoder Abs low
+                span[10], // Encoder Abs high
             };
+
+            keyDatas[col].SetAccessoryType(span[5]);
+            keyDatas[col].SetSwitchState(span[6]);
+            keyDatas[col].SetEncoderDelta(span[7], span[8]);
+            keyDatas[col].SetEncoderAbs(span[9], span[10]);
+
+            if(currentTestMode != TestMode.Off)
+            {
+                keyDatas[col].CheckLock(currentTestMode);
+            }
 
             Dispatcher.Invoke(() => UpdateColumn(col));
         }
@@ -186,10 +235,11 @@ namespace KeyboardHallSensor
             int delta = (data[3] << 8) | data[2];
             int abs = (data[5] << 8) | data[4];
 
-            valueCells[0, col].Text = $"0x{type:X2}  {TypeName(type)}";
+            valueCells[0, col].Text = $"0x{type:X2}\n{TypeName(type)}";
             valueCells[1, col].Text = $"0x{data[1]:X2}";
             valueCells[2, col].Text = $"0x{delta:X4}";
             valueCells[3, col].Text = $"0x{abs:X4}";
+            valueCells[4, col].Text = keyDatas[col].FailCount.ToString();
         }
 
         private static string TypeName(byte type) => type switch
@@ -206,9 +256,10 @@ namespace KeyboardHallSensor
             for (int c = 0; c < Pins.Length; c++)
                 TableHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
 
-            //- Row 0 = header, rows 1..4 = fields.
+            //- Row 0 = header, rows 1..4 = fields + test mode.
             for (int r = 0; r <= Fields.Length; r++)
                 TableHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            TableHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(0) });
 
             //- Top-left corner.
             AddCell("Pin", 0, 0, header: true, alignLeft: true);
@@ -221,11 +272,22 @@ namespace KeyboardHallSensor
             }
 
             //- Field rows.
-            for (int f = 0; f < Fields.Length; f++)
+            int f;
+            for (f = 0; f < Fields.Length; f++)
             {
                 AddCell(Fields[f], f + 1, 0, header: true, alignLeft: true);
                 for (int c = 0; c < Pins.Length; c++)
                     valueCells[f, c] = AddCell("-", f + 1, c + 1);
+            }
+
+            //- Test mode fail count row.
+            testModeRow = f++;
+            keyDatas = new KeyData[Pins.Length];
+            AddCell("Test Mode\nFail Count", f, 0, header: true, alignLeft: true);
+            for (int c = 0; c < Pins.Length; c++)
+            {
+                valueCells[testModeRow, c] = AddCell("0", f, c + 1);
+                keyDatas[c] = new(c);
             }
         }
 
@@ -272,6 +334,70 @@ namespace KeyboardHallSensor
                 for (int f = 0; f < 4; f++)
                     if (valueCells[f, c] != null) valueCells[f, c].Text = "-";
             }
+        }
+
+        private class KeyData
+        {
+            public int Pin { get; }
+            public byte AccessoryType { get; private set; }
+            public byte SwitchState { get; private set;}
+            public short EncoderDelta { get; private set;}
+            public short EncoderAbs { get; private set;}
+
+            private byte lockedAccessoryType;
+            private byte lockedSwitchState;
+            private short lockedEncoderDelta;
+            private short lockedEncoderAbs;
+
+            public int FailCount { get; private set; }
+
+            public KeyData(int pin)
+            {
+                Pin = pin;
+            }
+
+            public void SetAccessoryType(byte value) => AccessoryType = value;
+            public void SetSwitchState(byte value) => SwitchState = value;
+            public void SetEncoderDelta(byte lowByte, byte highByte) => EncoderDelta = (short)((highByte << 8) | lowByte);
+            public void SetEncoderAbs(byte lowByte, byte highByte) => EncoderAbs = (short)((highByte << 8) | lowByte);
+
+
+            public void Lock()
+            {
+                lockedAccessoryType = AccessoryType;
+                lockedSwitchState = SwitchState;
+                lockedEncoderDelta = EncoderDelta;
+                lockedEncoderAbs = EncoderAbs;
+            }
+
+            public bool CheckLock(TestMode mode)
+            {
+                bool match = mode switch
+                {
+                    TestMode.AccessoryType => AccessoryType == lockedAccessoryType,
+                    TestMode.All => AccessoryType == lockedAccessoryType &&
+                                       SwitchState == lockedSwitchState &&
+                                       EncoderDelta == lockedEncoderDelta &&
+                                       EncoderAbs == lockedEncoderAbs,
+                    _ => true,
+                };
+
+                if (!match) FailCount++;
+
+                return match;
+            }
+
+            public void ResetFailCount()
+            {
+                FailCount = 0;
+            }
+        }
+
+        private enum TestMode
+        {
+            Off = 0,
+            AccessoryType = 1,
+            All = 2,
         }
     }
 }

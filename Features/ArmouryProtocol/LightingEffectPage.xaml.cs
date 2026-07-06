@@ -10,7 +10,7 @@ using System.Windows;
 
 namespace ArmouryProtocol;
 
-[PageInfo("Armoury Lighting", Path = ["Keyboard", "Armoury"])]
+[PageInfo("Armoury Lighting", Glyph = "\uE781", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
 
