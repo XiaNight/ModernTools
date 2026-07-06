@@ -3,11 +3,13 @@ using Base.Pages;
 using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
+using System.Collections;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using static Base.Services.DeviceSelection;
 
 namespace KeyboardHallSensor
 {
@@ -41,9 +43,14 @@ namespace KeyboardHallSensor
         };
 
         [Config(Name = "Auto Refresh Interval (ms)",
-                Description = "Polling interval applied to all keys.",
+                Description = "Polling interval between all keys.",
                 Min = 0)]
         private int AutoRefreshIntervalMs { get; set; } = 250;
+
+        [Config(Name = "Individual Refresh Interval (ms)",
+                Description = "Delay between each key's Get State command.",
+                Min = 0)]
+        private int IndividualRefreshIntervalMs { get; set; } = 10;
 
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
 
@@ -56,6 +63,10 @@ namespace KeyboardHallSensor
         //- Number of this page's Get State commands queued but not yet sent.
         //- Guards against launching a new refresh while the previous one is still draining.
         private int outstandingPolls;
+        private IEnumerator commandEnumerator;
+        //- The interface Parse is currently subscribed to. Tracked so we can rewire when the
+        //- shared keyboard interface is reconnected while this page runs in the background.
+        private PeripheralInterface subscribedInterface;
 
         private int testModeRow;
         private KeyData[] keyDatas;
@@ -94,66 +105,82 @@ namespace KeyboardHallSensor
             currentTestMode = selectedMode;
         }
 
-        protected override void OnEnable()
+        //- Runs once (first time the page is shown). Everything set up here keeps running in the
+        //- background while the user is on other pages; it is only torn down in OnDestroy.
+        public override void Start()
         {
-            base.OnEnable();
+            base.Start();
 
             outstandingPolls = 0;
             ProtocolService.OnCmdSent += OnCmdSent;
-
-            Enter();
-            if (ActiveInterface == null) return;
-
-            ActiveInterface.OnDataReceived += Parse;
             DeviceSelection.Instance.OnActiveDeviceDisconnected += ClearAll;
 
-            pollTimer = new DispatcherTimer { Interval = CurrentInterval };
+            EnsureParseSubscription();
+
+            pollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(IndividualRefreshIntervalMs) };
             pollTimer.Tick += OnPollTick;
             pollTimer.Start();
+
+            Poll();
         }
 
-        private TimeSpan CurrentInterval =>
-            TimeSpan.FromMilliseconds(Math.Max(0, AutoRefreshIntervalMs));
-
-        private void OnPollTick(object sender, EventArgs e)
+        protected override void OnEnable()
         {
-            //- Pick up live changes to the configured interval.
-            if (pollTimer != null && pollTimer.Interval != CurrentInterval)
-                pollTimer.Interval = CurrentInterval;
-
-            if (AutoRefreshCheck.IsChecked == true) Poll();
+            base.OnEnable();
+            //- Page brought to the foreground. Polling already runs in the background; just make
+            //- sure we are wired to the current interface and kick an immediate refresh.
+            EnsureParseSubscription();
+            Poll();
         }
 
         protected override void OnDisable()
         {
             base.OnDisable();
+            //- Intentionally does NOT stop polling. The page keeps running in the background.
+            //- All teardown happens in OnDestroy (true kill).
+        }
 
-            ProtocolService.OnCmdSent -= OnCmdSent;
+        public override void OnDestroy()
+        {
+            base.OnDestroy();
 
             pollTimer?.Stop();
+            if (pollTimer != null) pollTimer.Tick -= OnPollTick;
             pollTimer = null;
 
-            if (ActiveInterface == null) return;
-
-            ActiveInterface.OnDataReceived -= Parse;
+            ProtocolService.OnCmdSent -= OnCmdSent;
             DeviceSelection.Instance.OnActiveDeviceDisconnected -= ClearAll;
+
+            if (subscribedInterface != null)
+            {
+                subscribedInterface.OnDataReceived -= Parse;
+                subscribedInterface = null;
+            }
         }
 
-        private void Enter()
+        //- Keep Parse bound to whatever interface is currently active. Cheap no-op when unchanged.
+        //- Called every tick so a background reconnect (leaving and re-entering keyboard pages)
+        //- automatically rewires without depending on the ambiguous OnInterfaceDisconnected event.
+        private void EnsureParseSubscription()
         {
-            KeyboardCommonProtocol.Instance.OnInterfaceDisconnected += Exit;
-            Poll();
+            var current = ActiveInterface;
+            if (ReferenceEquals(current, subscribedInterface)) return;
+
+            if (subscribedInterface != null)
+                subscribedInterface.OnDataReceived -= Parse;
+
+            subscribedInterface = current;
+
+            if (subscribedInterface != null)
+                subscribedInterface.OnDataReceived += Parse;
         }
 
-        private void Exit()
+        private void OnPollTick(object sender, EventArgs e)
         {
-            KeyboardCommonProtocol.Instance.OnInterfaceDisconnected -= Exit;
-            //- Get State is read-only; no exit command required.
-        }
+            EnsureParseSubscription();
 
-        [AppMenuItem("Refresh")]
-        private void Poll()
-        {
+            if (AutoRefreshCheck.IsChecked == false) return;
+
             var device = ActiveInterface;
             if (device == null) return;
 
@@ -161,9 +188,39 @@ namespace KeyboardHallSensor
             //- sent with wait=true, so a fast interval could otherwise stack batches.
             if (Volatile.Read(ref outstandingPolls) > 0) return;
 
-            Interlocked.Exchange(ref outstandingPolls, Pins.Length);
-            foreach (var (pin, _) in Pins)
-                ProtocolService.AppendCmd(device, GetStateCmd, true, pin);
+            commandEnumerator ??= CommandEnumerator();
+
+            if (commandEnumerator.MoveNext())
+            {
+                pollTimer.Interval = TimeSpan.FromMilliseconds(IndividualRefreshIntervalMs);
+            }
+            else
+            {
+                commandEnumerator = null;
+                pollTimer.Interval = TimeSpan.FromMilliseconds(AutoRefreshIntervalMs);
+            }
+        }
+
+        [AppMenuItem("Refresh")]
+        private async void Poll()
+        {
+            //- Skip if the previous refresh batch hasn't finished draining. Commands are
+            //- sent with wait=true, so a fast interval could otherwise stack batches.
+            if (Volatile.Read(ref outstandingPolls) > 0) return;
+
+            //- One-shot sweep. Space each key's Get State by IndividualRefreshIntervalMs,
+            //- mirroring the per-key pacing OnPollTick applies during auto refresh.
+            for (int i = 0; i < Pins.Length; i++)
+            {
+                var device = ActiveInterface;
+                if (device == null) return;
+
+                Interlocked.Increment(ref outstandingPolls);
+                ProtocolService.AppendCmd(device, GetStateCmd, true, Pins[i].Pin);
+
+                if (i < Pins.Length - 1)
+                    await Task.Delay(Math.Max(0, IndividualRefreshIntervalMs));
+            }
         }
 
         //- Fired by the protocol worker after each command is sent (success or failure).
@@ -171,7 +228,23 @@ namespace KeyboardHallSensor
         private void OnCmdSent(ProtocolService.CmdData cmd)
         {
             if (ReferenceEquals(cmd.Cmd, GetStateCmd))
-                Interlocked.Decrement(ref outstandingPolls);
+            {
+                var remaining = Interlocked.Decrement(ref outstandingPolls);
+
+                if (remaining < 0)
+                    Interlocked.Exchange(ref outstandingPolls, 0);
+            }
+        }
+
+        private IEnumerator CommandEnumerator()
+        {
+            foreach (var (pin, _) in Pins.ToArray())
+            {
+                Interlocked.Increment(ref outstandingPolls);
+                ProtocolService.AppendCmd(ActiveInterface, GetStateCmd, true, pin);
+
+                yield return null;
+            }
         }
 
         public void Parse(ReadOnlyMemory<byte> bytes, DateTime time)
