@@ -4,6 +4,7 @@ using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
 using System.Collections;
+using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -56,6 +57,9 @@ namespace KeyboardHallSensor
 
         //- valueCells[field, pinColumn]
         private readonly TextBlock[,] valueCells = new TextBlock[5, 8];
+        //- Per-pin "poll this key" checkboxes in the header row. Unchecked pins are skipped,
+        //- so the sweep iterates faster when only a few keys are selected.
+        private readonly CheckBox[] pinEnabledChecks = new CheckBox[8];
         //- Latest raw bytes per pin: [type, switch, deltaLo, deltaHi, absLo, absHi]
         private readonly byte[][] latest = new byte[8][];
 
@@ -208,18 +212,23 @@ namespace KeyboardHallSensor
             //- sent with wait=true, so a fast interval could otherwise stack batches.
             if (Volatile.Read(ref outstandingPolls) > 0) return;
 
-            //- One-shot sweep. Space each key's Get State by IndividualRefreshIntervalMs,
-            //- mirroring the per-key pacing OnPollTick applies during auto refresh.
+            //- One-shot sweep. Space each polled key's Get State by IndividualRefreshIntervalMs,
+            //- mirroring the per-key pacing OnPollTick applies during auto refresh. Unchecked
+            //- pins are skipped entirely (no command, no delay).
+            bool firstPolled = true;
             for (int i = 0; i < Pins.Length; i++)
             {
+                if (!IsPinEnabled(i)) continue;
+
+                if (!firstPolled)
+                    await Task.Delay(Math.Max(0, IndividualRefreshIntervalMs));
+                firstPolled = false;
+
                 var device = ActiveInterface;
                 if (device == null) return;
 
                 Interlocked.Increment(ref outstandingPolls);
                 ProtocolService.AppendCmd(device, GetStateCmd, true, Pins[i].Pin);
-
-                if (i < Pins.Length - 1)
-                    await Task.Delay(Math.Max(0, IndividualRefreshIntervalMs));
             }
         }
 
@@ -238,10 +247,13 @@ namespace KeyboardHallSensor
 
         private IEnumerator CommandEnumerator()
         {
-            foreach (var (pin, _) in Pins.ToArray())
+            for (int i = 0; i < Pins.Length; i++)
             {
+                //- Skip unchecked pins without consuming a tick, so the sweep is faster.
+                if (!IsPinEnabled(i)) continue;
+
                 Interlocked.Increment(ref outstandingPolls);
-                ProtocolService.AppendCmd(ActiveInterface, GetStateCmd, true, pin);
+                ProtocolService.AppendCmd(ActiveInterface, GetStateCmd, true, Pins[i].Pin);
 
                 yield return null;
             }
@@ -327,7 +339,7 @@ namespace KeyboardHallSensor
             //- Column 0 = field labels, columns 1..8 = the 8 pins.
             TableHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
             for (int c = 0; c < Pins.Length; c++)
-                TableHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
+                TableHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
 
             //- Row 0 = header, rows 1..4 = fields + test mode.
             for (int r = 0; r <= Fields.Length; r++)
@@ -337,11 +349,11 @@ namespace KeyboardHallSensor
             //- Top-left corner.
             AddCell("Pin", 0, 0, header: true, alignLeft: true);
 
-            //- Header row: pin label + index.
+            //- Header row: poll checkbox + pin label + index.
             for (int c = 0; c < Pins.Length; c++)
             {
                 var (pin, label) = Pins[c];
-                AddCell($"{label}\n(0x{pin:X2})", 0, c + 1, header: true);
+                AddPinHeaderCell(c + 1, pin, label);
             }
 
             //- Field rows.
@@ -392,6 +404,47 @@ namespace KeyboardHallSensor
             TableHost.Children.Add(border);
             return textBlock;
         }
+
+        //- Header cell for a pin: a "poll this key" checkbox on top of the key label.
+        private void AddPinHeaderCell(int col, byte pin, string label)
+        {
+            var check = new CheckBox
+            {
+                IsChecked = true,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 2),
+            };
+            pinEnabledChecks[col - 1] = check;
+
+            var text = new TextBlock
+            {
+                Text = $"{label}\n(0x{pin:X2})",
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                TextAlignment = TextAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            };
+            text.SetResourceReference(TextBlock.ForegroundProperty, "TextControlForeground");
+
+            var stack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 4, 8, 4),
+            };
+            stack.Children.Add(check);
+            stack.Children.Add(text);
+
+            Grid.SetRow(stack, 0);
+            Grid.SetColumn(stack, col);
+
+            TableHost.Children.Add(stack);
+        }
+
+        //- Whether the pin at the given column index should be polled.
+        private bool IsPinEnabled(int index) => pinEnabledChecks[index]?.IsChecked == true;
 
         private void RefreshBtn_Click(object sender, RoutedEventArgs e) => Poll();
 
