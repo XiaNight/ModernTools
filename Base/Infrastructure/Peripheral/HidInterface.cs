@@ -306,7 +306,7 @@ namespace Base.Services.Peripheral
                 var err = Marshal.GetLastWin32Error();
                 System.Diagnostics.Debug.WriteLine($"CreateFile failed, error={err}");
 
-                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, IntPtr.Zero);
+                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                 _handleWrite = HidNative.CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
 
 
@@ -342,7 +342,7 @@ namespace Base.Services.Peripheral
 
                 if (asyncReads) StartAsyncRead();
             }
-            catch
+            catch (Exception e)
             {
                 Cleanup();
             }
