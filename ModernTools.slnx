@@ -38,4 +38,9 @@
     <BuildDependency Project="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj" />
     <Platform Solution="*|x64" Project="x64" />
   </Project>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/ModernTools.Tests/ModernTools.Tests.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
 </Solution>
