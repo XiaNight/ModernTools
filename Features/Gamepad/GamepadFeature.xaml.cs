@@ -94,9 +94,6 @@ namespace Gamepad
         private byte prevVibLT = 0;
         private byte prevVibRT = 0;
 
-        // Diagnostics: number of upcoming reports to dump (raw bytes + decoded usages)
-        private int diagReportsRemaining = 0;
-
         // Recording
         private bool isRecording = false;
         private delegate string AddRecordDataDelegate(DateTime time);
@@ -444,12 +441,6 @@ namespace Gamepad
                 reportRateRaw = atomicReportRate;
 
                 var data = newData.data;
-
-                if (diagReportsRemaining > 0)
-                {
-                    diagReportsRemaining--;
-                    LogReportDiagnostic(data);
-                }
 
                 if (!mappingReady)
                     BuildMapping(data);
@@ -957,21 +948,6 @@ namespace Gamepad
                       + "9=LStickKnob 10=RStickKnob; axes: X=0x30 Y=0x31 Z/LT=0x32 Rx=0x33 Ry=0x34 Rz/RT=0x35 Hat=0x39.");
             Debug.Log("[GP-DIAG] If the declared usages differ from this fixed mapping, the misplacement is a "
                       + "device-descriptor/layout mismatch, not a caps-parsing bug. Use 'Log Raw Reports' to confirm.");
-        }
-
-        [AppMenuItem("Diagnostics/Log Raw Reports")]
-        private void LogRawReports()
-        {
-            if (ActiveInterface == null)
-            {
-                Debug.Log("[GP-DIAG] No active interface — connect a device first.");
-                return;
-            }
-            diagReportsRemaining = 200;
-            Debug.Log("[GP-DIAG] Logging the next 200 reports. Actuate ONE control at a time and watch which "
-                      + "raw byte changes vs. which usage Windows decodes:");
-            Debug.Log("[GP-DIAG]   • raw byte changes but no usage decodes  -> reports don't match descriptor (device firmware)");
-            Debug.Log("[GP-DIAG]   • a usage decodes but it's the 'wrong' one -> device numbers usages differently than the app assumes");
         }
 
         private void LogReportDiagnostic(byte[] data)
