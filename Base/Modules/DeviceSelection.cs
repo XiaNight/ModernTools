@@ -258,7 +258,6 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
     public static List<Device> MergeDiscoveredInterface(IEnumerable<IPeripheralDetail> discoveredInterfacers, List<Device> existingDevices = null)
     {
-        //List<Device> devices = existingDevices ?? [];
         List<Device> devices = [];
 
         var interfaceList = discoveredInterfacers.ToList();
@@ -275,17 +274,26 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         {
             try
             {
-                // Group by transport as well, so the same product connected over
-                // USB and over BLE shows up as two distinct, clearly labelled
-                // dropdown entries.
-                var dev = devices.Find(d => d.VID == deviceInterface.VID
-                    && d.PID == deviceInterface.PID
-                    && d.Transport == deviceInterface.Transport);
+                // A single physical device can surface through more than one
+                // enumeration path at once. An HID-over-GATT gamepad, for example,
+                // is returned by the BLE scanner (no Container ID) *and* by the HID
+                // stack (with a Container ID); both must collapse into one entry.
+                Device dev = devices.Find(d => IsSameDeviceEntry(d, deviceInterface));
+
                 if (dev == null)
                 {
-                    dev = new Device(deviceInterface.VID, deviceInterface.PID, deviceInterface.Product, deviceInterface.Transport);
+                    dev = new Device(deviceInterface.VID, deviceInterface.PID,
+                                     deviceInterface.Product, deviceInterface.ContainerID,
+                                     deviceInterface.Transport);
                     devices.Add(dev);
                 }
+                else if (string.IsNullOrEmpty(dev.ContainerID) && !string.IsNullOrEmpty(deviceInterface.ContainerID))
+                {
+                    // Adopt a Container ID contributed by a later interface so the
+                    // entry's identity is stable regardless of enumeration order.
+                    dev.ContainerID = deviceInterface.ContainerID;
+                }
+
                 dev.IsAvailable = true;
                 dev.AddInterface(deviceInterface);
             }
@@ -295,6 +303,28 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             }
         }
         return devices;
+    }
+
+    /// <summary>
+    /// Decides whether a discovered interface belongs to an existing device entry.
+    /// <para>
+    /// When both sides carry a Windows Container ID, they must match exactly — this
+    /// keeps two identical devices on different ports as separate entries. When
+    /// either side lacks a Container ID (e.g. a BLE/BT interface, or the same
+    /// physical device seen once via the HID stack and once via the BLE scanner),
+    /// fall back to VID+PID+transport. That collapses the duplicate enumerations of
+    /// one physical device while still keeping the same product reached over
+    /// different transports (USB vs BLE) as distinct, clearly labelled entries.
+    /// </para>
+    /// </summary>
+    private static bool IsSameDeviceEntry(Device device, IPeripheralDetail candidate)
+    {
+        if (!string.IsNullOrEmpty(device.ContainerID) && !string.IsNullOrEmpty(candidate.ContainerID))
+            return device.ContainerID == candidate.ContainerID;
+
+        return device.VID == candidate.VID
+            && device.PID == candidate.PID
+            && device.Transport == candidate.Transport;
     }
 
     public void RemoveUnavailableDevices()
@@ -353,7 +383,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         filteredInterfaces.RemoveAll(@interface => @interface == null);
         if (filteredInterfaces.Count == 0) return false;
 
-        var newDevice = new Device(vid, pid, name, filteredInterfaces[0].Transport);
+        var newDevice = new Device(vid, pid, name, filteredInterfaces[0].ContainerID, filteredInterfaces[0].Transport);
         newDevice.interfaces.AddRange(filteredInterfaces);
         return Connect(newDevice);
     }
@@ -401,11 +431,12 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         Main.PortComboBox.ItemContainerStyle = style;
     }
 
-    public class Device(ushort vid, ushort pid, string name, PeripheralTransport transport = PeripheralTransport.UsbHid) : INotifyPropertyChanged
+    public class Device(ushort vid, ushort pid, string name, string containerId = "", PeripheralTransport transport = PeripheralTransport.UsbHid) : INotifyPropertyChanged
     {
         public ushort VID = vid;
         public ushort PID = pid;
         public string productName = name;
+        public string ContainerID = containerId;
         public readonly List<IPeripheralDetail> interfaces = [];
 
         /// <summary>Transport all interfaces of this entry are reached over.</summary>
@@ -431,23 +462,17 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             return $"{productName} {PID:X4} [{TransportLabel}]";
         }
 
-        public string ProductIdentifier => $"{VID:X4}:{PID:X4}:{Transport.GetKey()}";
+        // Encodes the transport, plus the Container ID when available so two identical
+        // physical devices on different ports are distinct entries. Devices without a
+        // Container ID (e.g. BLE/BT) fall back to VID:PID:transport.
+        public string ProductIdentifier => string.IsNullOrEmpty(ContainerID)
+            ? $"{VID:X4}:{PID:X4}:{Transport.GetKey()}"
+            : $"{VID:X4}:{PID:X4}:{Transport.GetKey()}:{ContainerID}";
 
         /// <summary>
-        /// Matches the current identifier format and the legacy "VID:PID" format
-        /// persisted by earlier versions (which had no transport component).
+        /// Matches the current identifier format plus the legacy formats persisted by
+        /// earlier versions: "VID:PID" (no transport component) and
+        /// "VID:PID:transport" (no Container ID component).
         /// </summary>
         public bool MatchesIdentifier(string identifier)
-            => identifier == ProductIdentifier || identifier == $"{VID:X4}:{PID:X4}";
-
-        public void AddInterface(IPeripheralDetail @interface)
-        {
-            if (interfaces.Contains(@interface)) return;
-            interfaces.Add(@interface);
-        }
-
-        public IPeripheralDetail this[int index] => interfaces[index];
-
-        public event PropertyChangedEventHandler PropertyChanged;
-    }
-}
+     

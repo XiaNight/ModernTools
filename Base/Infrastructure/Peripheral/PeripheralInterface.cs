@@ -2,6 +2,8 @@
 
 namespace Base.Services.Peripheral;
 
+public enum ConnectionType { USB, HID, BLE, BT, Unknown }
+
 /// <summary>
 /// Physical transport a peripheral interface is reached over.
 /// </summary>
@@ -41,6 +43,8 @@ public interface IPeripheralDetail : IEquatable<IPeripheralDetail>
     ushort VersionNumber { get; }
     ushort UsagePage { get; }
     ushort Usage { get; }
+    string ContainerID { get; }
+    ConnectionType ConnectionType { get; }
     PeripheralTransport Transport { get; }
 
     PeripheralInterface Connect(bool useAsyncRead = false);
@@ -56,7 +60,8 @@ public abstract class PeripheralInterfaceDetail(
     string id = "",
     ushort versionNumber = 0,
     ushort usage = 0,
-    ushort usagePage = 0) : IPeripheralDetail
+    ushort usagePage = 0,
+    string containerId = "") : IPeripheralDetail
 {
     protected static readonly Dictionary<string, PeripheralInterface> connections = new();
     public ushort PID { get; protected set; } = pid;
@@ -67,6 +72,8 @@ public abstract class PeripheralInterfaceDetail(
     public ushort VersionNumber { get; protected set; } = versionNumber;
     public ushort UsagePage { get; protected set; } = usagePage;
     public ushort Usage { get; protected set; } = usage;
+    public string ContainerID { get; protected set; } = containerId ?? string.Empty;
+    public abstract ConnectionType ConnectionType { get; }
 
     public virtual PeripheralTransport Transport => DetectTransport(ID);
 
@@ -418,3 +425,4 @@ public abstract class PeripheralInterface : IDisposable
             : TryGetUsageValue(report, cap.UsagePage, cap.Usage, out value, cap.LinkCollection);
     }
 }
+                                                                                                                                                

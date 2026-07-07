@@ -36,6 +36,8 @@ namespace Base.Services.Peripheral
             VIDUInt = vid;
         }
 
+        public override ConnectionType ConnectionType => ConnectionType.BLE;
+
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
             // GATT service/characteristic discovery routinely takes longer than the
