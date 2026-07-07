@@ -5,11 +5,6 @@ namespace KeyboardHallSensor
     [PageInfo("Analog", Glyph = "\uE765", ShortName = "ANA", NavOrder = 1, Path = ["Keyboard", "Hall Effect"])]
     public class AnalogPage : MFGKeyboardStreamingPage
     {
-        [Path("Keyboard")]
-        public override string PageName => "Analog";
-        public override string ShortName => "ANA";
-        public override int NavOrder => 1;
-        public override string Glyph => "\uE765";
         protected override string MfgCmdName => "hall_analog";
         protected override byte MfdCmdCode => 0x04;
         protected override int MfgCmdPackageSize => 3;

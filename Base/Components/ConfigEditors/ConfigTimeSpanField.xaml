@@ -1,0 +1,16 @@
+<UserControl x:Class="Base.Components.ConfigTimeSpanField"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.modernwpf.com/2019" d:Width="700"
+             mc:Ignorable="d">
+    <StackPanel Orientation="Horizontal">
+        <TextBox x:Name="Hours" Width="48" MinWidth="0" MaxLength="4" TextAlignment="Center" VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+        <TextBlock Text="h " VerticalAlignment="Center" Margin="3,0"/>
+        <TextBox x:Name="Minutes" Width="48" MinWidth="0" MaxLength="2" TextAlignment="Center"  VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+        <TextBlock Text="m " VerticalAlignment="Center" Margin="3,0"/>
+        <TextBox x:Name="Seconds" Width="48" MinWidth="0" MaxLength="2" TextAlignment="Center" VerticalAlignment="Center" ui:TextBoxHelper.IsDeleteButtonVisible="False"/>
+        <TextBlock Text="s" VerticalAlignment="Center" Margin="3,0"/>
+    </StackPanel>
+</UserControl>

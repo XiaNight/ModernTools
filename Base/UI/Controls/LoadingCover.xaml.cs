@@ -361,6 +361,8 @@ namespace Base.Components
                 IsOpen = false;
 
                 tcs.TrySetResult(null);
+
+                Base.Services.Debug.Log("LoadingCover", $"FadeOut completed");
             };
 
             BeginAnimation(OpacityProperty, anim);

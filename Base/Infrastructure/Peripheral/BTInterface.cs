@@ -9,6 +9,8 @@ namespace Base.Services.Peripheral
     {
         public string PortName { get; }
 
+        public override PeripheralTransport Transport => PeripheralTransport.BluetoothClassic;
+
         public BTInterfaceDetail(
             ushort pid = 0,
             ushort vid = 0,

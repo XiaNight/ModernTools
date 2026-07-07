@@ -11,8 +11,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = false)]
 public class FixtureControlPage : PageBase
 {
-    [Path("ATE")]
-    public override string PageName => "Fixture Control";
 
     private FixtureControlView _view;
 

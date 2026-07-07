@@ -11,8 +11,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = false)]
 public class DpiTestPage : PageBase
 {
-    [Path("ATE", "Mouse")]
-    public override string PageName => "DPI Test";
 
     private DpiTestView _view;
     private Tests.RawInputCapture _capture;

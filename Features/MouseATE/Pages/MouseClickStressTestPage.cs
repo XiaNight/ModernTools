@@ -13,8 +13,6 @@ namespace MouseATE.Pages;
     ShowDeviceSelection = false)]
 public class MouseClickStressTestPage : PageBase
 {
-    [Path("ATE", "Mouse")]
-    public override string PageName => "Click Stress Test";
 
     private MouseClickStressTestView _view;
     private MouseHookService         _hook;

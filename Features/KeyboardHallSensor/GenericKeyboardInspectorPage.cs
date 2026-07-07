@@ -10,16 +10,13 @@ using System.Windows.Media;
 namespace KeyboardHallSensor;
 
 [PageInfo("Key Inspector",
-    Glyph = "",
+    Glyph = "\uE765",
     Description = "Shows which key is pressed/released and counts clicks per key. Works with any keyboard — no device connection required.",
     NavOrder = 50,
     Path = ["Keyboard"],
     ShowDeviceSelection = false)]
 public class GenericKeyboardInspectorPage : PageBase
 {
-    [Path("Keyboard")]
-    public override string PageName => "Key Inspector";
-
     private Canvas _canvas;
     private TextBlock _statusText;
 
@@ -30,12 +27,11 @@ public class GenericKeyboardInspectorPage : PageBase
     private static readonly Brush _releasedBorder;
     static GenericKeyboardInspectorPage()
     {
-        var pressed = new SolidColorBrush(Color.FromRgb(0, 210, 100));
-        pressed.Freeze();
+        // Find color in resource
+        var pressed = (Brush)Application.Current.TryFindResource("SystemControlHighlightAccentBrush");
         _pressedBorder = pressed;
 
-        var released = new SolidColorBrush(Color.FromRgb(75, 75, 75));
-        released.Freeze();
+        var released = (Brush)Application.Current.TryFindResource("SystemControlForegroundBaseLowBrush");
         _releasedBorder = released;
     }
 
@@ -127,7 +123,7 @@ public class GenericKeyboardInspectorPage : PageBase
             Canvas.SetLeft(display, px);
             Canvas.SetTop(display, py);
             _canvas.Children.Add(display);
-            display.ShowLabel();
+            //display.ShowLabel();
             display.SetText("0");
             display.SetBorderColor(_releasedBorder);
 
@@ -165,7 +161,7 @@ public class GenericKeyboardInspectorPage : PageBase
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (!_keyToLabel.TryGetValue(key, out var label)) return;
-
+        
         if (_displayByLabel.TryGetValue(label, out var d))
             d.SetBorderColor(_releasedBorder);
 
@@ -194,47 +190,47 @@ public class GenericKeyboardInspectorPage : PageBase
         { Key.F9,              "F9"           }, { Key.F10, "F10" }, { Key.F11, "F11" }, { Key.F12, "F12" },
         { Key.PrintScreen,     "PrtSc"        },
         { Key.Scroll,          "Scroll Lock"  },
-        { Key.Pause,           "Pause\nBreak" },
+        { Key.Pause,           "Pause\\nBreak" },
 
         // Number row
-        { Key.OemTilde,        "~\n`"         },
-        { Key.D1,              "!\n1"         }, { Key.D2, "@\n2" }, { Key.D3, "#\n3" },
-        { Key.D4,              "$\n4"         }, { Key.D5, "%\n5" }, { Key.D6, "^\n6" },
-        { Key.D7,              "&\n7"         }, { Key.D8, "*\n8" }, { Key.D9, "(\n9" }, { Key.D0, ")\n0" },
-        { Key.OemMinus,        "_\n-"         },
-        { Key.OemPlus,         "+\n="         },
+        { Key.OemTilde,        "~\\n`"         },
+        { Key.D1,              "!\\n1"         }, { Key.D2, "@\\n2" }, { Key.D3, "#\\n3" },
+        { Key.D4,              "$\\n4"         }, { Key.D5, "%\\n5" }, { Key.D6, "^\\n6" },
+        { Key.D7,              "&\\n7"         }, { Key.D8, "*\\n8" }, { Key.D9, "(\\n9" }, { Key.D0, ")\\n0" },
+        { Key.OemMinus,        "_\\n-"         },
+        { Key.OemPlus,         "+\\n="         },
         { Key.Back,            "bksp"         },
 
         // Top row
         { Key.Tab,             "Tab"          },
         { Key.Q,  "Q" }, { Key.W, "W" }, { Key.E, "E" }, { Key.R, "R" }, { Key.T, "T" },
         { Key.Y,  "Y" }, { Key.U, "U" }, { Key.I, "I" }, { Key.O, "O" }, { Key.P, "P" },
-        { Key.OemOpenBrackets, "{\n["         },
-        { Key.OemCloseBrackets,"}\n]"         },
-        { Key.OemPipe,         "|\n\\"        },
+        { Key.OemOpenBrackets, "{\\n["         },
+        { Key.OemCloseBrackets,"}\\n]"         },
+        { Key.OemPipe,         "|\\n\\"        },
 
         // Home row
         { Key.CapsLock,        "Caps Lock"    },
         { Key.A, "A" }, { Key.S, "S" }, { Key.D, "D" }, { Key.F, "F" }, { Key.G, "G" },
         { Key.H, "H" }, { Key.J, "J" }, { Key.K, "K" }, { Key.L, "L" },
-        { Key.OemSemicolon,    ":\n;"         },
-        { Key.OemQuotes,       "\"\n'"        },
+        { Key.OemSemicolon,    ":\\n;"         },
+        { Key.OemQuotes,       "\"\\n'"        },
         { Key.Return,          "Enter"        },
 
         // Bottom row
         { Key.LeftShift,       "L-Shift"      },
         { Key.Z, "Z" }, { Key.X, "X" }, { Key.C, "C" }, { Key.V, "V" },
         { Key.B, "B" }, { Key.N, "N" }, { Key.M, "M" },
-        { Key.OemComma,        "<\n,"         },
-        { Key.OemPeriod,       ">\n."         },
-        { Key.OemQuestion,     "?\n/"         },
+        { Key.OemComma,        "<\\n,"         },
+        { Key.OemPeriod,       ">\\n."         },
+        { Key.OemQuestion,     "?\\n/"         },
         { Key.RightShift,      "R-Shift"      },
 
         // Modifier row
         { Key.LeftCtrl,        "L-Ctrl"       },
         { Key.LWin,            "L-Win"        },
         { Key.LeftAlt,         "L-Alt"        },
-        { Key.Space,           "Space"        },
+        { Key.Space,           ""             },
         { Key.RightAlt,        "R-Alt"        },
         { Key.RWin,            "R-Win"        },
         { Key.Apps,            "Menu"         },
@@ -260,10 +256,10 @@ public class GenericKeyboardInspectorPage : PageBase
         { Key.Multiply,        "*"            },
         { Key.Subtract,        "-"            },
         { Key.Add,             "+"            },
-        { Key.NumPad7,         "7\nHome"      }, { Key.NumPad8, "8\n↑"   }, { Key.NumPad9, "9\nPgUp" },
-        { Key.NumPad4,         "4\n←"         }, { Key.NumPad5, "5"      }, { Key.NumPad6, "6\n→"    },
-        { Key.NumPad1,         "1\nEnd"       }, { Key.NumPad2, "2\n↓"   }, { Key.NumPad3, "3\nPgDn" },
-        { Key.NumPad0,         "0\nIns"       },
-        { Key.Decimal,         ".\nDel"       },
+        { Key.NumPad7,         "7\\nHome"      }, { Key.NumPad8, "8\\n↑"   }, { Key.NumPad9, "9\\nPgUp" },
+        { Key.NumPad4,         "4\\n←"         }, { Key.NumPad5, "5"      }, { Key.NumPad6, "6\\n→"    },
+        { Key.NumPad1,         "1\\nEnd"       }, { Key.NumPad2, "2\\n↓"   }, { Key.NumPad3, "3\\nPgDn" },
+        { Key.NumPad0,         "0\\nIns"       },
+        { Key.Decimal,         ".\\nDel"       },
     };
 }

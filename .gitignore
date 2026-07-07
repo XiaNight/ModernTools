@@ -33,6 +33,7 @@ bld/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
+[Dd]ist/
 
 # Build results on 'Bin' directories
 **/[Bb]in/*
@@ -416,3 +417,6 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Windows system stuff
+**/desktop.ini

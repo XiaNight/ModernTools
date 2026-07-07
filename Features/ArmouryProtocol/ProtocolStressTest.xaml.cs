@@ -93,7 +93,6 @@ public sealed class StressTestResult
 [PageInfo("Protocol Stress Test", Path = ["ATE"])]
 public partial class ProtocolStressTest : PageBase
 {
-    public override string PageName => "Protocol Stress Test";
 
     // ── public state ────────────────────────────────────────────────────────
     public StressTestParameters Parameters { get; } = new();

@@ -17,14 +17,25 @@ namespace CommonProtocol
     [PageInfo("Device Log", Glyph = "\uF714", Description = "View the log of the active device.")]
     public partial class DeviceLogPage : PageBase
     {
-        public override string PageName => "Device Log";
-        public override string Glyph => "\uF714";
-        public override string Description => "View the log of the active device.";
 
         private PeripheralInterface activeInterface;
-
-        private DispatcherTimer testPrintTimer;
         private DispatcherTimer timer;
+
+        [Config("Polling Rate",
+            Header = "Timing",
+            Hint = "How often the device is polled, in milliseconds.",
+            HelpBox = "Lower values increase responsiveness but use more CPU.",
+            Min = 1)]
+        private long IntervalMs
+        {
+            get { return intervalMs; }
+            set
+            {
+                timer.Interval = TimeSpan.FromMilliseconds(value);
+                intervalMs = value;
+            }
+        }
+        private long intervalMs = 1000;
 
         public DeviceLogPage()
         {
@@ -34,23 +45,6 @@ namespace CommonProtocol
         public override void Awake()
         {
             base.Awake();
-            //LogPanel.AppendLog("Device Log Initialized.");
-
-            //// Test logs
-            //for (int i = 0; i < 100; i++)
-            //{
-            //    LogPanel.AppendLog($"TTTTTTTTTTTTTTTTTTTTT");
-            //}
-
-            //testPrintTimer = new DispatcherTimer
-            //{
-            //    Interval = TimeSpan.FromMilliseconds(250)
-            //};
-
-            //testPrintTimer.Tick += (s, e) =>
-            //{
-            //    LogPanel.AppendLog($"Test log at {DateTime.Now:HH:mm:ss.fff}");
-            //};
 
             timer = new DispatcherTimer
             {
@@ -87,45 +81,6 @@ namespace CommonProtocol
         {
             ProtocolService.AppendCmd(activeInterface, "get_log", true);
         }
-
-        [AppMenuItem("Set Interval")]
-        private async void IntervalPopup()
-        {
-            var textBox = new TextBox
-            {
-                MinWidth = 220,
-                Margin = new Thickness(0, 12, 0, 0),
-                Text = "1000"
-            };
-
-            var panel = new StackPanel();
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Enter interval (ms):"
-            });
-            panel.Children.Add(textBox);
-
-            var dialog = new ContentDialog
-            {
-                Title = "Interval",
-                Content = panel,
-                PrimaryButtonText = "OK",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Primary
-            };
-
-            var result = await dialog.ShowAsync();
-            if (result != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            if (int.TryParse(textBox.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int interval) && interval > 0)
-            {
-                Dispatcher.Invoke(() => timer.Interval = TimeSpan.FromMilliseconds(interval));
-            }
-        }
-
 
         private void ConnectToInterface()
         {

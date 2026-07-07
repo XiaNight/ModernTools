@@ -4,6 +4,35 @@ namespace Base.Services.Peripheral;
 
 public enum ConnectionType { USB, HID, BLE, BT, Unknown }
 
+/// <summary>
+/// Physical transport a peripheral interface is reached over.
+/// </summary>
+public enum PeripheralTransport
+{
+    UsbHid,
+    BluetoothLE,
+    BluetoothClassic,
+}
+
+public static class PeripheralTransportExtensions
+{
+    /// <summary>Short label shown in the device selection UI.</summary>
+    public static string GetLabel(this PeripheralTransport transport) => transport switch
+    {
+        PeripheralTransport.BluetoothLE => "BLE",
+        PeripheralTransport.BluetoothClassic => "BT",
+        _ => "USB/HID",
+    };
+
+    /// <summary>Stable token used in persisted/API device identifiers.</summary>
+    public static string GetKey(this PeripheralTransport transport) => transport switch
+    {
+        PeripheralTransport.BluetoothLE => "BLE",
+        PeripheralTransport.BluetoothClassic => "BT",
+        _ => "USB",
+    };
+}
+
 public interface IPeripheralDetail : IEquatable<IPeripheralDetail>
 {
     ushort PID { get; }
@@ -16,6 +45,7 @@ public interface IPeripheralDetail : IEquatable<IPeripheralDetail>
     ushort Usage { get; }
     string ContainerID { get; }
     ConnectionType ConnectionType { get; }
+    PeripheralTransport Transport { get; }
 
     PeripheralInterface Connect(bool useAsyncRead = false);
 
@@ -44,6 +74,24 @@ public abstract class PeripheralInterfaceDetail(
     public ushort Usage { get; protected set; } = usage;
     public string ContainerID { get; protected set; } = containerId ?? string.Empty;
     public abstract ConnectionType ConnectionType { get; }
+
+    public virtual PeripheralTransport Transport => DetectTransport(ID);
+
+    /// <summary>
+    /// HID interfaces surfaced by the Bluetooth stack carry the Bluetooth enumerator
+    /// (BTHLE / BTHENUM) or the HID-over-GATT service UUID (0x1812) in their device
+    /// path; anything else reached through the HID class driver is wired USB.
+    /// </summary>
+    public static PeripheralTransport DetectTransport(string devicePath)
+    {
+        if (string.IsNullOrEmpty(devicePath)) return PeripheralTransport.UsbHid;
+        if (devicePath.Contains("BTHLE", StringComparison.OrdinalIgnoreCase)
+            || devicePath.Contains("00001812-0000-1000-8000-00805f9b34fb", StringComparison.OrdinalIgnoreCase))
+            return PeripheralTransport.BluetoothLE;
+        if (devicePath.Contains("BTHENUM", StringComparison.OrdinalIgnoreCase))
+            return PeripheralTransport.BluetoothClassic;
+        return PeripheralTransport.UsbHid;
+    }
 
     protected abstract PeripheralInterface CreateConnection(bool useAsyncRead = false);
     public PeripheralInterface Connect(bool useAsyncRead = false)
@@ -128,29 +176,50 @@ public abstract class PeripheralInterface : IDisposable
     {
         timeout ??= TimeSpan.FromSeconds(5);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(timeout.Value);
-
-        var tasks = new List<Task<List<IPeripheralDetail>>>
+        var sources = new (string Name, Task<List<IPeripheralDetail>> Task)[]
         {
-            UsbInterface.GetConnectedDevices().ContinueWith(t => t.Result.Cast<IPeripheralDetail>().ToList(), cts.Token),
-            //BLEInterface.GetConnectedDevices().ContinueWith(t => t.Result.Cast<IPeripheralDetail>().ToList(), cts.Token),
-            //BTInterface.GetConnectedDevices().ContinueWith(t => t.Result.Cast<IPeripheralDetail>().ToList(), cts.Token),
-            HidInterface.GetConnectedDevices().ContinueWith(t => t.Result.Cast<IPeripheralDetail>().ToList(), cts.Token)
+            ("USB", EnumerateSource(UsbInterface.GetConnectedDevices)),
+            ("HID", EnumerateSource(HidInterface.GetConnectedDevices)),
+            ("BLE", EnumerateSource(BLEInterface.GetConnectedDevices)),
+            //("BT", EnumerateSource(BTInterface.GetConnectedDevices)),
         };
 
-        var finishedTasks = await Task.WhenAll(tasks).ConfigureAwait(false);
+        // The underlying WinRT/Win32 enumerations are not reliably cancellable,
+        // so bound the wait instead: a source that misses the deadline simply
+        // contributes nothing this round.
+        var all = Task.WhenAll(sources.Select(s => s.Task));
+        await Task.WhenAny(all, Task.Delay(timeout.Value, cancellationToken)).ConfigureAwait(false);
 
         var results = new List<IPeripheralDetail>();
-        foreach (var t in finishedTasks)
+        foreach (var (name, task) in sources)
+        {
+            if (task.IsCompletedSuccessfully)
+                results.AddRange(task.Result);
+            else
+                Debug.Log($"[Peripheral] {name} enumeration did not finish within {timeout.Value.TotalSeconds:0.#}s.");
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Runs one enumeration source, isolating its failures so a broken or absent
+    /// stack (e.g. no Bluetooth radio) never breaks discovery of the other sources.
+    /// </summary>
+    private static Task<List<IPeripheralDetail>> EnumerateSource<T>(Func<Task<List<T>>> source) where T : IPeripheralDetail
+    {
+        return Task.Run(async () =>
         {
             try
             {
-                results.AddRange(t);
+                var list = await source().ConfigureAwait(false);
+                return list?.Cast<IPeripheralDetail>().ToList() ?? new List<IPeripheralDetail>();
             }
-            catch { /* ignore per-source failures */ }
-        }
-        return results;
+            catch (Exception ex)
+            {
+                Debug.Log($"[Peripheral] Device enumeration failed: {ex.Message}");
+                return new List<IPeripheralDetail>();
+            }
+        });
     }
 
     [Obsolete("Use GetConnectedDevicesAsync for better performance and cancellation support")]
@@ -164,6 +233,15 @@ public abstract class PeripheralInterface : IDisposable
     public virtual int InputReportLength => 0;
     public virtual int OutputReportLength => 0;
     public virtual (ushort UsagePage, ushort Usage) GetTopLevelUsage() => (0, 0);
+
+    /// <summary>
+    /// Human-readable dump of the input-report capabilities the device DECLARES
+    /// (button/value usages, report ids, bit sizes, logical ranges, link
+    /// collections). Used for diagnosing usage→UI mapping mismatches. Interfaces
+    /// without a HID report descriptor return a short placeholder.
+    /// </summary>
+    public virtual string DescribeInputCapabilities()
+        => "No HID report descriptor available for this interface.";
 
     // Cache latest input report per ReportId (USB HID: first byte is ReportId if > 0)
     private readonly ConcurrentDictionary<byte, byte[]> lastReports = new();
@@ -208,7 +286,7 @@ public abstract class PeripheralInterface : IDisposable
         return lastReports.TryGetValue(reportId, out report);
     }
 
-    public virtual Task Write(byte[] data) => WriteAsync(data, CancellationToken.None);
+    public virtual Task<bool> Write(byte[] data) => WriteAsync(data, CancellationToken.None);
 
     /// <summary>
     /// Wait for the next received report (from InvokeDataReceived) without polling.
@@ -347,3 +425,4 @@ public abstract class PeripheralInterface : IDisposable
             : TryGetUsageValue(report, cap.UsagePage, cap.Usage, out value, cap.LinkCollection);
     }
 }
+                                                                                                                                                

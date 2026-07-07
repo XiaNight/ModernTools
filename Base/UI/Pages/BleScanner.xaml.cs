@@ -39,6 +39,11 @@ namespace Base.Pages
             var interfaceDetails = await BLEInterface.CreateInterfaceDetailFromAddress(device.Address);
             if (interfaceDetails == null) return;
             var devices = DeviceSelection.MergeDiscoveredInterface(interfaceDetails.Cast<IPeripheralDetail>());
+            if (devices.Count == 0)
+            {
+                Debug.Log($"[BLE] No usable GATT services found on {device.Name} [{device.Address:X12}].");
+                return;
+            }
             DeviceSelection.Instance.Connect(devices[0]);
 
             /*
@@ -140,11 +145,9 @@ namespace Base.Pages
         }
     }
 
+    [PageInfo("BLE Scanner", NavOrder = -1)]
     public class BleScannerPage : PageBase
     {
-        public override string PageName => "BLE Scanner";
-        public override int NavOrder => -1;
-
         private BleScanner page;
         private BluetoothLEAdvertisementWatcher watcher;
 

@@ -313,7 +313,7 @@ namespace Base.Services.Peripheral
                 var err = Marshal.GetLastWin32Error();
                 System.Diagnostics.Debug.WriteLine($"CreateFile failed, error={err}");
 
-                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, IntPtr.Zero);
+                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                 _handleWrite = HidNative.CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
 
 
@@ -349,7 +349,7 @@ namespace Base.Services.Peripheral
 
                 if (asyncReads) StartAsyncRead();
             }
-            catch
+            catch (Exception e)
             {
                 Cleanup();
             }
@@ -406,6 +406,9 @@ namespace Base.Services.Peripheral
 
         public override bool TryGetUsageValue(byte[] inputReport, ushort usagePage, ushort usage, out int value, ushort linkCollection = 0)
             => _descriptorContext?.TryGetUsageValue(inputReport, usagePage, usage, out value, linkCollection) ?? (value = 0) == 0 && false;
+
+        public override string DescribeInputCapabilities()
+            => _descriptorContext?.DescribeCapabilities() ?? "HID report descriptor not available.";
 
         public override bool TryGetValueCap(ushort usagePage, ushort usage, out HidValueCap cap)
         {

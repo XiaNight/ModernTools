@@ -1,3 +1,4 @@
+using Base.Core;
 using Base.Services;
 using Base.Services.APIService;
 using System.Collections.Concurrent;
@@ -13,6 +14,7 @@ public abstract class MFGKeyboardBasePage : KeyboardPageBase
     protected abstract string MfgCmdName { get; }
     protected abstract byte MfdCmdCode { get; }
     protected abstract int MfgCmdPackageSize { get; }
+    [Config(Name = "Max Value", Min = 1)]
     protected virtual int MaxValue { get; set; } = 1;
     protected virtual bool IsManualCmd { get; } = true;
 

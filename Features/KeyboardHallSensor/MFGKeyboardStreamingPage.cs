@@ -1,12 +1,11 @@
 ﻿using Base.Components.Chart;
+using Base.Core;
 using Base.Services.APIService;
 using Microsoft.Win32;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 
 namespace KeyboardHallSensor;
 
@@ -17,22 +16,36 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     protected override bool IsManualCmd { get; } = false;
 
     protected virtual bool CanAdjustMax { get; } = true;
-    private ToggleButton minMaxToggle;
+
     private Button resetMinMaxButton;
-    private TextBox maxValueInputField;
+
+    /// <summary>
+    /// Whether key displays show their min/max. Exposed as a Config toggle; the setter drives the
+    /// live display and the visibility of the Reset button.
+    /// </summary>
+    [Config(Name = "Show Min Max", Header = "Min Max")]
+    private bool ShowMinMax
+    {
+        get => showMinMax;
+        set { showMinMax = value; SetMinMaxMode(value); }
+    }
+    private bool showMinMax;
 
     #region Record
 
-    TextBox targetKeyInputField;
-    TextBox recordTimeLimitInputField;
-    TextBox recordCountLimitInputField;
+    [Persist, Config(Name = "Key", Type = ConfigType.Hex, Header = "Record", Condition = nameof(CanRecord))]
     private byte targetKey = 0x29;
 
     private Button startButton;
     private Button stopButton;
     protected bool isRecording = false;
+
+    [Persist, Config(Name = "Count Limit", Min = 0, Condition = nameof(CanRecord))]
     protected int recordCountLimit = 0;
+
+    [Persist, Config(Name = "Time Limit (ms)", Min = 0, Condition = nameof(CanRecord))]
     protected int recordDurationLimitMs = 0;
+
     protected int recordedCount = 0;
     protected Stopwatch recordingStopwatch;
     private long startTick = 0;
@@ -46,13 +59,8 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     {
         base.Awake();
 
-        Header("Min Max");
-        if (CanAdjustMax)
-        {
-            maxValueInputField = AddTextBox("Max Value", MaxValue.ToString(), handler: SetMaxValue);
-        }
-
-        minMaxToggle = AddToggle("Show Min Max", SetMinMaxMode);
+        // Settings (Max Value, Show Min Max, and the Record fields below) are exposed through the
+        // Config dialog via [Config] attributes. Only action buttons remain in the property panel.
         resetMinMaxButton = AddButton("Reset Min Max", ResetMinMax);
         resetMinMaxButton.Visibility = Visibility.Collapsed;
 
@@ -74,10 +82,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
 
         if (CanRecord)
         {
-            Header("Record");
-            targetKeyInputField = AddTextBox("Key", handler: ParseRecordKey);
-            recordTimeLimitInputField = AddTextBox("Time Limit(ms)", handler: ParseRecordDuration);
-            recordCountLimitInputField = AddTextBox("Count Limit", handler: ParseRecordCount);
             startButton = AddButton("Start", StartRecording);
 
             stopButton = AddButton("Stop", () =>
@@ -109,65 +113,18 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     protected void SetRecordKey(byte key)
     {
         targetKey = key;
-        targetKeyInputField.Text = key.ToString("X2");
-    }
-
-    protected bool ParseRecordKey(string key)
-    {
-        if(string.IsNullOrEmpty(key))
-        {
-            return true;
-        }
-        if (byte.TryParse(key, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte result))
-        {
-            targetKey = result;
-            return true;
-        }
-        return false;
     }
 
     [POST("SetRecordDuration", true)]
     protected void SetRecordDuration(int duration)
     {
         recordDurationLimitMs = duration;
-        recordTimeLimitInputField.Text = duration.ToString();
-    }
-
-    protected bool ParseRecordDuration(string duration)
-    {
-        if(string.IsNullOrEmpty(duration))
-        {
-            recordDurationLimitMs = 0;
-            return true;
-        }
-        if (int.TryParse(duration, out int result))
-        {
-            recordDurationLimitMs = result;
-            return true;
-        }
-        return false;
     }
 
     [POST("SetRecordCount")]
     protected void SetRecordCount(int count)
     {
         recordCountLimit = count;
-        recordCountLimitInputField.Text = count.ToString();
-    }
-
-    protected bool ParseRecordCount(string count)
-    {
-        if (string.IsNullOrEmpty(count))
-        {
-            recordCountLimit = 0;
-            return true;
-        }
-        if (int.TryParse(count, out int result))
-        {
-            recordCountLimit = result;
-            return true;
-        }
-        return false;
     }
 
     [POST("SetRecordPath")]
@@ -199,10 +156,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
 
         isRecording = true;
         startTick = DateTime.UtcNow.Ticks;
-
-        targetKeyInputField.IsEnabled = false;
-        recordTimeLimitInputField.IsEnabled = false;
-        recordCountLimitInputField.IsEnabled = false;
     }
 
     [POST("StopRecording")]
@@ -214,10 +167,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         isRecording = false;
 
         recordingStopwatch.Stop();
-
-        targetKeyInputField.IsEnabled = true;
-        recordTimeLimitInputField.IsEnabled = true;
-        recordCountLimitInputField.IsEnabled = true;
 
         recordStream?.Close();
         recordStream = null;
@@ -302,7 +251,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
     {
         Chart.Clear();
         targetKey = keycode;
-        targetKeyInputField.Text = keycode.ToString("X2");
     }
 
     public void SetMinMaxMode(bool state)
@@ -319,20 +267,6 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         foreach (var item in data)
         {
             item.Value.linkedKeyDisplay?.ResetMinMax();
-        }
-    }
-
-    private bool SetMaxValue(string value)
-    {
-        if (int.TryParse(value, out int result))
-        {
-            MaxValue = result;
-            return true;
-        }
-        else
-        {
-            maxValueInputField.Text = MaxValue.ToString();
-            return false;
         }
     }
 

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -27,8 +29,15 @@ namespace Base.Core
         private bool isStarted = false;
         private bool isEnabled = false;
         public new bool IsEnabled => isEnabled;
-        public virtual void OnApplicationQuit(System.ComponentModel.CancelEventArgs e) { }
-        public virtual void Awake() { }
+        public virtual void OnApplicationQuit(System.ComponentModel.CancelEventArgs e)
+        {
+            SavePersistFields();
+        }
+
+        public virtual void Awake()
+        {
+            LoadPersistFields();
+        }
         public virtual void Start() { }
         protected virtual void OnEnable() { }
         protected virtual void OnDisable() { }
@@ -54,6 +63,41 @@ namespace Base.Core
 
             OnDisable();
             isEnabled = false;
+        }
+
+        private static IEnumerable<FieldInfo> GetAllFields(Type type)
+        {
+            for (var t = type; t != null && t != typeof(object); t = t.BaseType)
+                foreach (var f in t.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
+                    yield return f;
+        }
+
+        private IEnumerable<(FieldInfo field, string key)> PersistFields()
+        {
+            foreach (var field in GetAllFields(GetType()))
+            {
+                var attr = field.GetCustomAttribute<PersistAttribute>(inherit: true);
+                if (attr == null) continue;
+                var suffix = string.IsNullOrWhiteSpace(attr.Key) ? field.Name : attr.Key;
+                yield return (field, $"{GetType().Name}.{suffix}");
+            }
+        }
+
+        private void LoadPersistFields()
+        {
+            if (!LocalAppDataStore.IsInitialised) return;
+            foreach (var (field, key) in PersistFields())
+            {
+                var loaded = LocalAppDataStore.Instance.GetUntyped(key, field.FieldType);
+                if (loaded != null) field.SetValue(this, loaded);
+            }
+        }
+
+        private void SavePersistFields()
+        {
+            if (!LocalAppDataStore.IsInitialised) return;
+            foreach (var (field, key) in PersistFields())
+                LocalAppDataStore.Instance.SetUntyped(key, field.GetValue(this), field.FieldType);
         }
 
         public WpfBehaviour()
