@@ -227,6 +227,15 @@ public abstract class PeripheralInterface : IDisposable
     public virtual int OutputReportLength => 0;
     public virtual (ushort UsagePage, ushort Usage) GetTopLevelUsage() => (0, 0);
 
+    /// <summary>
+    /// Human-readable dump of the input-report capabilities the device DECLARES
+    /// (button/value usages, report ids, bit sizes, logical ranges, link
+    /// collections). Used for diagnosing usage→UI mapping mismatches. Interfaces
+    /// without a HID report descriptor return a short placeholder.
+    /// </summary>
+    public virtual string DescribeInputCapabilities()
+        => "No HID report descriptor available for this interface.";
+
     // Cache latest input report per ReportId (USB HID: first byte is ReportId if > 0)
     private readonly ConcurrentDictionary<byte, byte[]> lastReports = new();
 

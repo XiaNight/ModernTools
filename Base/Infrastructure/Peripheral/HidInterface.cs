@@ -400,6 +400,9 @@ namespace Base.Services.Peripheral
         public override bool TryGetUsageValue(byte[] inputReport, ushort usagePage, ushort usage, out int value, ushort linkCollection = 0)
             => _descriptorContext?.TryGetUsageValue(inputReport, usagePage, usage, out value, linkCollection) ?? (value = 0) == 0 && false;
 
+        public override string DescribeInputCapabilities()
+            => _descriptorContext?.DescribeCapabilities() ?? "HID report descriptor not available.";
+
         public override bool TryGetValueCap(ushort usagePage, ushort usage, out HidValueCap cap)
         {
             cap = default;

@@ -94,6 +94,9 @@ namespace Gamepad
         private byte prevVibLT = 0;
         private byte prevVibRT = 0;
 
+        // Diagnostics: number of upcoming reports to dump (raw bytes + decoded usages)
+        private int diagReportsRemaining = 0;
+
         // Recording
         private bool isRecording = false;
         private delegate string AddRecordDataDelegate(DateTime time);
@@ -441,6 +444,12 @@ namespace Gamepad
                 reportRateRaw = atomicReportRate;
 
                 var data = newData.data;
+
+                if (diagReportsRemaining > 0)
+                {
+                    diagReportsRemaining--;
+                    LogReportDiagnostic(data);
+                }
 
                 if (!mappingReady)
                     BuildMapping(data);
@@ -924,6 +933,70 @@ namespace Gamepad
             hasHat = ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x39, out _);
 
             mappingReady = true;
+        }
+
+        // ── HID diagnostics ──────────────────────────────────────────────────
+        // These answer "is a mis-placed button/axis the device's fault or the
+        // app's fixed usage→UI mapping?" by logging (a) what the device DECLARES,
+        // and (b) the raw report bytes next to what Windows DECODES from them.
+
+        [AppMenuItem("Diagnostics/Dump HID Descriptor")]
+        private void DumpHidDescriptor()
+        {
+            if (ActiveInterface?.ProductInfo is not { } info)
+            {
+                Debug.Log("[GP-DIAG] No active interface — connect a device first.");
+                return;
+            }
+
+            Debug.Log($"[GP-DIAG] Device '{info.Product}' VID:{info.VID:X4} PID:{info.PID:X4} " +
+                      $"transport={info.Transport} selectedInterface usage=0x{info.UsagePage:X2}:0x{info.Usage:X2}");
+            Debug.Log("[GP-DIAG] Declared input capabilities (what the device's report descriptor says):\n"
+                      + ActiveInterface.DescribeInputCapabilities());
+            Debug.Log("[GP-DIAG] App's fixed mapping — buttons: usage 1=A 2=B 3=X 4=Y 5=LB 6=RB 7=View 8=Menu "
+                      + "9=LStickKnob 10=RStickKnob; axes: X=0x30 Y=0x31 Z/LT=0x32 Rx=0x33 Ry=0x34 Rz/RT=0x35 Hat=0x39.");
+            Debug.Log("[GP-DIAG] If the declared usages differ from this fixed mapping, the misplacement is a "
+                      + "device-descriptor/layout mismatch, not a caps-parsing bug. Use 'Log Raw Reports' to confirm.");
+        }
+
+        [AppMenuItem("Diagnostics/Log Raw Reports")]
+        private void LogRawReports()
+        {
+            if (ActiveInterface == null)
+            {
+                Debug.Log("[GP-DIAG] No active interface — connect a device first.");
+                return;
+            }
+            diagReportsRemaining = 200;
+            Debug.Log("[GP-DIAG] Logging the next 200 reports. Actuate ONE control at a time and watch which "
+                      + "raw byte changes vs. which usage Windows decodes:");
+            Debug.Log("[GP-DIAG]   • raw byte changes but no usage decodes  -> reports don't match descriptor (device firmware)");
+            Debug.Log("[GP-DIAG]   • a usage decodes but it's the 'wrong' one -> device numbers usages differently than the app assumes");
+        }
+
+        private void LogReportDiagnostic(byte[] data)
+        {
+            if (ActiveInterface == null) return;
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("[GP-DIAG] raw=").Append(BitConverter.ToString(data));
+
+            var pressed = ActiveInterface.GetPressedButtons(data, 0x09);
+            sb.Append(" | btns(0x09)=").Append(pressed.Length == 0 ? "none" : string.Join(",", pressed));
+
+            (ushort usage, string name)[] axes =
+            {
+                (0x30, "X"), (0x31, "Y"), (0x32, "Z/LT"), (0x33, "Rx"),
+                (0x34, "Ry"), (0x35, "Rz/RT"), (0x36, "Slider"), (0x37, "Dial"), (0x39, "Hat"),
+            };
+            sb.Append(" | axes=");
+            foreach (var (usage, name) in axes)
+            {
+                if (ActiveInterface.TryGetUsageValue(data, 0x01, usage, out int v))
+                    sb.Append(name).Append('=').Append(v).Append(' ');
+            }
+
+            Debug.Log(sb.ToString());
         }
 
         [AppMenuItem("Clear")]
