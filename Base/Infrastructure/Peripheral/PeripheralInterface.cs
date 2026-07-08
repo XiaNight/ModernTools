@@ -425,4 +425,3 @@ public abstract class PeripheralInterface : IDisposable
             : TryGetUsageValue(report, cap.UsagePage, cap.Usage, out value, cap.LinkCollection);
     }
 }
-                                                                                                                                                

@@ -475,4 +475,18 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         /// "VID:PID:transport" (no Container ID component).
         /// </summary>
         public bool MatchesIdentifier(string identifier)
-     
+            => identifier == ProductIdentifier
+            || identifier == $"{VID:X4}:{PID:X4}"
+            || identifier == $"{VID:X4}:{PID:X4}:{Transport.GetKey()}";
+
+        public void AddInterface(IPeripheralDetail @interface)
+        {
+            if (interfaces.Contains(@interface)) return;
+            interfaces.Add(@interface);
+        }
+
+        public IPeripheralDetail this[int index] => interfaces[index];
+
+        public event PropertyChangedEventHandler PropertyChanged;
+    }
+}

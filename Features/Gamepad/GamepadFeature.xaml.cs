@@ -127,11 +127,16 @@ namespace Gamepad
             StripChart = page.StripChart;
 
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
+            DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
+
+            if(DeviceSelection.Instance.ActiveDevice != null)
+            {
+                ConnectToInterface();
+            }
 
             page.StripChart.Start(); 
             page.StripChart.MaxY = 1200;
 
-            DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
 
             page.ResetCharts.Click += (_, _) =>
             {
