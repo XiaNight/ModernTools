@@ -50,6 +50,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         WindowChrome.SetIsHitTestVisibleInChrome(ConfigButton, true);
 
         Debug.OnLog += LogMessage;
+
+        // Make the banner system available project-wide, then surface any startup banners.
+        BannerManager.Init(BannerContainer);
+        if (System.Diagnostics.Debugger.IsAttached)
+        {
+            BannerManager.Instance.ShowWarning(
+                "Debug mode: the app was started from a debugger. Report rate might not be accurate.",
+                dismissible: false);
+        }
     }
 
     #region WndProc

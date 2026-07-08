@@ -38,4 +38,9 @@
 	<SolidColorBrush x:Key="Accent2Brush" Color="DarkOrange"/>
 	<SolidColorBrush x:Key="Accent3Brush" Color="LawnGreen"/>
 	<SolidColorBrush x:Key="Accent4Brush" Color="OrangeRed"/>
+    
+    <!-- Banner backgrounds -->
+    <SolidColorBrush x:Key="InfoBackgroundBrush" Color="#663399ff"/>
+    <SolidColorBrush x:Key="WarningBackgroundBrush" Color="#66ffcc00"/>
+    <SolidColorBrush x:Key="ErrorBackgroundBrush" Color="#66ff3b30"/>
 </ResourceDictionary>
