@@ -17,7 +17,10 @@
 			<Private>false</Private>
 			<ExcludeAssets>runtime</ExcludeAssets>
 		</ProjectReference>
-		<ProjectReference Include="..\KeyboardHallSensor\KeyboardHallSensor.csproj" />
+		<ProjectReference Include="..\KeyboardHallSensor\KeyboardHallSensor.csproj" >
+			<Private>false</Private>
+			<ExcludeAssets>runtime</ExcludeAssets>
+		</ProjectReference>
 	</ItemGroup>
 	
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">

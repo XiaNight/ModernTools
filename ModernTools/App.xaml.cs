@@ -1,5 +1,6 @@
 ﻿using Base.Core;
 using Base.Helpers;
+using Base.UI.Themes;
 using ModernWpf;
 using System.Reflection;
 using System.Windows;
@@ -22,6 +23,9 @@ public partial class App : Application
         LocalAppDataStore.Init("ASUS", app_name);
         ApplicationTheme theme = LocalAppDataStore.Instance.Get("Theme", ApplicationTheme.Light);
         ThemeManager.Current.ApplicationTheme = theme;
+
+        // Sync the custom colour palette to the restored theme (the resource tree defaults to light).
+        PaletteManager.Apply(ThemeManager.Current.ActualApplicationTheme);
 
         var window = new Base.MainWindow();
         window.Show();

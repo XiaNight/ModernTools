@@ -38,7 +38,7 @@ $rid      = 'win-x64'
 $config   = 'Release'
 $appName   = 'ModernToolset'
 $distRoot  = Join-Path $repo 'dist'
-$stateFile = Join-Path $repo 'publish-versions.json'   # cache of last main / dev builds
+$stateFile = Join-Path $distRoot 'publish-versions.json'   # cache of last main / dev builds
 
 # =====================================================================================
 #  Version handling
@@ -84,26 +84,46 @@ function Compare-ModernVersion {
 
 function Get-VersionState {
     # Read the last main / dev build versions from the cache file.
+    # Never throws: a missing folder/file, empty file, or corrupt JSON all yield an
+    # empty state (treated as "no history"), so a fresh checkout still builds fine.
     param([string]$Path)
     $state = [pscustomobject]@{ LastMain = $null; LastDev = $null }
-    if (Test-Path $Path) {
-        try {
-            $j = Get-Content $Path -Raw | ConvertFrom-Json
-            if ($j.lastMainBuild) { $state.LastMain = ConvertFrom-ModernVersion $j.lastMainBuild }
-            if ($j.lastDevBuild)  { $state.LastDev  = ConvertFrom-ModernVersion $j.lastDevBuild }
+    try {
+        if ($Path -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+            if ($raw -and $raw.Trim()) {
+                $j = $raw | ConvertFrom-Json -ErrorAction Stop
+                if ($j.lastMainBuild) { $state.LastMain = ConvertFrom-ModernVersion ([string]$j.lastMainBuild) }
+                if ($j.lastDevBuild)  { $state.LastDev  = ConvertFrom-ModernVersion ([string]$j.lastDevBuild) }
+            }
         }
-        catch { Write-Host "Warning: could not read $Path ($_); ignoring cache." -ForegroundColor Yellow }
+    }
+    catch {
+        Write-Host "Warning: could not read version cache '$Path' ($($_.Exception.Message)); treating as no history." -ForegroundColor Yellow
     }
     return $state
 }
 
 function Save-VersionState {
+    # Never fatal: the build already succeeded, so a cache write problem is only a
+    # warning. Creates the parent folder if it is missing.
     param([string]$Path, $State)
-    $obj = [ordered]@{
-        lastMainBuild = if ($State.LastMain) { ConvertTo-ModernVersionString $State.LastMain } else { $null }
-        lastDevBuild  = if ($State.LastDev)  { ConvertTo-ModernVersionString $State.LastDev }  else { $null }
+    try {
+        $dir = Split-Path -Parent $Path
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+        }
+        $obj = [ordered]@{
+            lastMainBuild = if ($State.LastMain) { ConvertTo-ModernVersionString $State.LastMain } else { $null }
+            lastDevBuild  = if ($State.LastDev)  { ConvertTo-ModernVersionString $State.LastDev }  else { $null }
+        }
+        ($obj | ConvertTo-Json) | Set-Content -LiteralPath $Path -ErrorAction Stop
+        return $true
     }
-    ($obj | ConvertTo-Json) | Set-Content -Path $Path
+    catch {
+        Write-Host "Warning: could not write version cache '$Path' ($($_.Exception.Message)); skipping." -ForegroundColor Yellow
+        return $false
+    }
 }
 
 # --- Resolve version from the csproj unless overridden ---
@@ -327,10 +347,15 @@ $zips = @()
 if ($Mode -in @('both', 'standalone')) { $zips += Publish-Bundle -ModeName 'standalone'           -SelfContained $true }
 if ($Mode -in @('both', 'framework'))  { $zips += Publish-Bundle -ModeName 'framework-dependent'   -SelfContained $false }
 
-# --- Record this build in the version cache so the next run can check quickly. ---
-if ($isDev) { $state.LastDev = $parsed } else { $state.LastMain = $parsed }
-Save-VersionState -Path $stateFile -State $state
-Write-Host "Recorded $Version as last $trackName build in $stateFile." -ForegroundColor DarkGray
+# --- Record this build in the version cache so the next run can check quickly.
+#     Failures here only warn (see Save-VersionState) - the build has already been
+#     produced, so we never fail the run just because the cache couldn't be updated. ---
+if ($parsed) {
+    if ($isDev) { $state.LastDev = $parsed } else { $state.LastMain = $parsed }
+    if (Save-VersionState -Path $stateFile -State $state) {
+        Write-Host "Recorded $Version as last $trackName build in $stateFile." -ForegroundColor DarkGray
+    }
+}
 
 Write-Host "`n=== Done ===" -ForegroundColor Green
 $zips | ForEach-Object { Write-Host "  $_" -ForegroundColor White }

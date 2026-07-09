@@ -230,7 +230,8 @@ public partial class ConfigDialog : UserControl
                     ValueType = field.FieldType,
                     Label = ResolveLabel(attr, field.Name),
                     Get = () => field.GetValue(target),
-                    Set = v => field.SetValue(target, v),
+                    Set = WrapSet(target, attr.Changed,
+                        () => field.GetValue(target), v => field.SetValue(target, v)),
                 });
             }
 
@@ -248,7 +249,8 @@ public partial class ConfigDialog : UserControl
                     ValueType = prop.PropertyType,
                     Label = ResolveLabel(attr, prop.Name),
                     Get = () => prop.GetValue(target),
-                    Set = v => prop.SetValue(target, v),
+                    Set = WrapSet(target, attr.Changed,
+                        () => prop.GetValue(target), v => prop.SetValue(target, v)),
                 });
             }
         }
@@ -284,6 +286,48 @@ public partial class ConfigDialog : UserControl
         }
 
         return true; // unresolved — default to showing the entry
+    }
+
+    /// <summary>
+    /// Wraps a member's setter so that a <see cref="ConfigAttribute.Changed"/> callback is invoked
+    /// after the value is written — but only when the value actually changes (compared after any
+    /// custom setter normalisation). When no callback is configured or it cannot be resolved, the
+    /// original setter is returned unchanged.
+    /// </summary>
+    private static Action<object> WrapSet(object target, string changed, Func<object> get, Action<object> set)
+    {
+        if (string.IsNullOrWhiteSpace(changed)) return set;
+
+        var callback = ResolveChangedCallback(target, changed);
+        if (callback == null) return set;
+
+        return v =>
+        {
+            var before = get();
+            set(v);
+            if (!Equals(before, get()))
+                callback();
+        };
+    }
+
+    /// <summary>
+    /// Resolves a <see cref="ConfigAttribute.Changed"/> callback: a parameterless method on the
+    /// target (searched up the hierarchy, including non-public members). Returns <c>null</c> when
+    /// the name cannot be resolved.
+    /// </summary>
+    private static Action ResolveChangedCallback(object target, string name)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public |
+                                   BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+        for (var t = target.GetType(); t != null && t != typeof(object); t = t.BaseType)
+        {
+            var method = t.GetMethod(name, flags, binder: null, types: Type.EmptyTypes, modifiers: null);
+            if (method != null)
+                return () => method.Invoke(target, null);
+        }
+
+        return null;
     }
 
     private static string ResolveLabel(ConfigAttribute attr, string memberName)
