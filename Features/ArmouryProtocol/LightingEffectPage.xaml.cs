@@ -1,410 +1,301 @@
 ﻿using Base.Core;
+using Base.Helpers;
 using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
-using System.Diagnostics;
-using System.Globalization;
-using System.Text;
-using System.Threading;
-using System.Windows;
 
 namespace ArmouryProtocol;
 
-[PageInfo("Armoury Lighting", Path = ["Keyboard", "Armoury"])]
+/*
+ * 3-1 Set Advance Effect (Layer) - Mode
+ * C1 00 00 00 0A 00 13 06
+ * 
+ * 3-2 Set Advance Effect (Layer) - Dat
+ * C1 01 00 00 72 53 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+ * C1 01 00 00 5F 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+ * C1 01 00 00 4C 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+ * C1 01 00 00 39 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+ * C1 01 00 00 26 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+ * C1 01 00 00 13 93 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
+
+ * 3-3 Get Advance Effect (Reactive) - Setting
+ * C1 02 03 00 0F 32 01 FF FF 00 00 00 00 00 00 00 00 00 00 00
+
+ * 3-3 Get Advance Effect (Ripple ) - Setting
+ * C1 02 05 02 64 32 01 FF 01 01 64 00 00 00 00 00 00 00 00
+ * C1 02 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+ * C1 02 05 00 00 00 00 00 00 00 00 00 00
+
+ * 3-4 Set Advance Effect - Brightness
+ * C1 03 00 00 32
+
+ * 3-5 Set Advance Effect (Layer) - Apply
+ * C1 04 00 00 8E 71 00 00 00 00 00 00
+ */
+
+[PageInfo("Advanced Lighting", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
+    [Config(key: "總共Frame數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Auto, Header = "3-1 Set Advance Effect (Layer) - Mode")]
+    private short frameCount = 0x72;
 
-    private PeripheralInterface _activeInterface;
-    private CancellationTokenSource _sendCts;
+    [Config(key: "X數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
+    private byte xCount = 0x13;
 
-    private int _r;
-    private int _g;
-    private int _b;
+    [Config(key: "Y數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
+    private byte yCount = 0x06;
+
+    [Config(key: "Key數量", Min = 1, Header = "3-2 Set Advance Effect (Layer) - Data")]
+    private byte keyCount = 0x72;
+    
+    [Config(key: "速度", Min = 0x00, Max = 0xfe, Header = "3-3 Set Advance Effect (Reactive)", Type = ConfigType.Hex)]
+    private byte reactiveSpeed = 0x30;
+
+    [Config(key: "亮度", Min = 1, Max = 100, Type = ConfigType.Slider)]
+    private byte reactiveBrightness = 100;
+
+    [Config(key: "亮度", Min = 1, Max = 100, Header = "3-4 Set Advance Effect (Layer) - Brightness", Type =ConfigType.Slider)]
+    private byte brightness = 50;
+
+    private readonly int keysPerPacket = 0x13;
+
+    private PeripheralInterface ActiveInterface;
 
     public LightingEffectPage()
     {
         InitializeComponent();
-
-        SendOnceButton.Click += async (_, _) => await SendSingleFrameAsync();
-        StartButton.Click += async (_, _) => await StartAsync();
-        StopButton.Click += (_, _) => Stop();
-        SaveButton.Click += SaveProfile;
-        EraseButton.Click += EraseProfile;
-
-        DeviceSelection.Instance.OnActiveDeviceDisconnected += Stop;
-
-        UpdateElapsed(TimeSpan.Zero);
     }
 
-    private void SaveProfile(object sender, RoutedEventArgs e)
+    public override void Awake()
     {
-        int profileIndex = ReadInt(SaveTextBox.Text, 1, min: 0, max: 0xFF);
-
-        byte[] saveProtocol = [0xC0, 0x85, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-        ProtocolService.AppendCmd(_activeInterface, saveProtocol, true, (byte)profileIndex);
-
-        LastSentTextBox.Text = $"Sent save profile command for profile index {profileIndex}";
+        base.Awake();
+        DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToDevice;
+        DeviceSelection.Instance.OnActiveDeviceDisconnected += OnActiveDeviceDisconnected;
     }
 
-    private void EraseProfile(object sender, RoutedEventArgs e)
+    protected override void OnEnable()
     {
-        byte[] eraseProtocol = [0xC0, 0x86];
-        ProtocolService.AppendCmd(_activeInterface, eraseProtocol, true);
-
-        LastSentTextBox.Text = "Sent erase profiles command";
+        base.OnEnable();
+        if(ActiveInterface == null && DeviceSelection.Instance.ActiveDevice != null)
+        {
+            ConnectToDevice();
+        }
     }
 
-    private async Task SendSingleFrameAsync()
+    private void ConnectToDevice()
     {
+
+        var device = DeviceSelection.Instance.ActiveDevice;
+        if (device == null) return;
         try
         {
-            Stop();
+            var usagePage = device.PID == 0x1ACE ? 0xFF02 : 0xFF00;
+            if (device.interfaces.Count == 0) return;
 
-            var iface = EnsureInterfaceConnected();
-            if (iface == null) return;
+            var deviceInterface = device.interfaces.FirstOrDefault(@interface =>
+                (@interface.UsagePage == usagePage) && (@interface.Usage == 1),
+                device.interfaces[0]
+            );
+            if (deviceInterface == null) return;
 
-            var step = ReadInt(StepTextBox.Text, 64, min: 1, max: 255);
-            AdvanceColor(step);
-
-            var packets = BuildLightingPackets((byte)_r, (byte)_g, (byte)_b);
-            await SendPacketsAsync(iface, packets, intervalMs: 0, CancellationToken.None);
-
-            SetStatus($"Sent one frame: R={_r:X2} G={_g:X2} B={_b:X2}");
+            ActiveInterface = deviceInterface.Connect(true);
         }
         catch (Exception ex)
         {
-            SetStatus($"Error: {ex.Message}");
+            Debug.Log("[Keyboard] Failed to open HID device: " + ex.Message);
+            return;
         }
     }
 
-    private async Task StartAsync()
+    private void OnActiveDeviceDisconnected()
     {
-        var sw = new Stopwatch();
-        try
+        ActiveInterface = null;
+    }
+
+    [AppMenuItem("Send All Packets")]
+    private List<byte[]> SendAll()
+    {
+        List<byte[]> bytes = new();
+
+        int checksum = 0;
+        byte[] initialPacket = Construct3_1Mode();
+        bytes.AddRange(Construct3_2Data(ref checksum));
+        bytes.AddRange(Construct3_3Reactive());
+        byte[] brightnessPacket = Construct3_4Brightness();
+        byte[] applyPacket = Construct3_5Apply(checksum);
+
+        ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000);
+
+
+        for (int packetId = 0; packetId < bytes.Count; packetId++)
         {
-            Stop();
+            byte[] packet = bytes[packetId];
+            ProtocolService.AppendCmd(ActiveInterface, packet, packetId % 6 == 5);
+        }
 
-            var iface = EnsureInterfaceConnected();
-            if (iface == null) return;
+        ProtocolService.AppendCmdTimeout(ActiveInterface, brightnessPacket, true, 5000);
 
-            var frameCount = ReadInt(FrameCountTextBox.Text, 60, min: 1, max: 1000000);
-            var intervalMs = ReadDouble(IntervalMsTextBox.Text, 10, min: 0, max: 60000);
-            var step = ReadInt(StepTextBox.Text, 64, min: 1, max: 255);
+        ProtocolService.AppendCmdTimeout(ActiveInterface, applyPacket, true, 5000);
 
-            _sendCts = new CancellationTokenSource();
 
-            StartButton.IsEnabled = false;
-            StopButton.IsEnabled = true;
-            SendOnceButton.IsEnabled = false;
+        return bytes;
+    }
 
-            UpdateElapsed(TimeSpan.Zero);
-            SetStatus($"Running... frames={frameCount}, intervalMs={intervalMs:0.###}, step={step}");
+    private byte[] Construct3_1Mode()
+    {
+        byte frameCountLowByte = (byte)(frameCount & 0xFF);
+        byte frameCountHighByte = (byte)((frameCount >> 8) & 0xFF);
+        byte[] data = [0xC1, 0x00, 0x00, 0x00, frameCountLowByte, frameCountHighByte, xCount, yCount];
+        return data;
+    }
 
-            sw.Start();
+    private List<byte[]> Construct3_2Data(ref int checksum)
+    {
+        List<byte[]> dataList = new();
 
-            await Task.Run(async () =>
+        for (short currentFrameIndex = 0; currentFrameIndex < frameCount; currentFrameIndex++)
+        {
+            dataList.AddRange(Construct3_2SingleFrame(currentFrameIndex, ref checksum));
+        }
+
+        return dataList;
+    }
+
+    private List<byte[]> Construct3_2SingleFrame(short currentFrameIndex, ref int checksum)
+    {
+        byte remainingKeys = keyCount;
+        short requiredPackets = (short)Math.Ceiling((double)keyCount / keysPerPacket);
+
+        List<byte[]> frameDataList = new(requiredPackets);
+
+        for (short packetIndex = 0; packetIndex < requiredPackets; packetIndex++)
+        {
+            byte packetState = packetIndex switch
             {
-                for (int i = 1; i <= frameCount; i++)
-                {
-                    _sendCts.Token.ThrowIfCancellationRequested();
+                0 => 0b01, // First packet
+                _ when packetIndex == requiredPackets - 1 => 0b10, // Last packet
+                _ => 0b00, // Middle packets
+            };
 
-                    AdvanceColor(step);
-                    var packets = BuildLightingPackets((byte)_r, (byte)_g, (byte)_b);
-
-                    await SendPacketsAsync(iface, packets, intervalMs, _sendCts.Token).ConfigureAwait(false);
-
-                    UpdateLastSent(i, frameCount, packets);
-
-                    // Update elapsed occasionally (cheap + avoids spamming dispatcher)
-                    if ((i & 0x7) == 0)
-                        UpdateElapsed(sw.Elapsed);
-                }
-            }, _sendCts.Token);
-
-            sw.Stop();
-            UpdateElapsed(sw.Elapsed);
-            SetStatus($"Done. Elapsed: {FormatElapsed(sw.Elapsed)}");
+            byte[] data = Construct3_2SinglePacket(currentFrameIndex, packetState, packetIndex, remainingKeys, ref checksum);
+            frameDataList.Add(data);
+            remainingKeys -= (byte)Math.Min(remainingKeys, keysPerPacket);
         }
-        catch (OperationCanceledException)
-        {
-            sw.Stop();
-            UpdateElapsed(sw.Elapsed);
-            SetStatus($"Stopped. Elapsed: {FormatElapsed(sw.Elapsed)}");
-        }
-        catch (Exception ex)
-        {
-            sw.Stop();
-            UpdateElapsed(sw.Elapsed);
-            SetStatus($"Error: {ex.Message}");
-        }
-        finally
-        {
-            StartButton.IsEnabled = true;
-            StopButton.IsEnabled = false;
-            SendOnceButton.IsEnabled = true;
-        }
+
+        return frameDataList;
     }
 
-    private void Stop()
+    private byte[] Construct3_2SinglePacket(short currentFrameIndex, in byte packetState, in int packetIndex, in byte remainingKeys, ref int checksum)
     {
-        try { _sendCts?.Cancel(); } catch { }
-        _sendCts = null;
+        int headerSize = 6;
 
-        StartButton.IsEnabled = true;
-        StopButton.IsEnabled = false;
-        SendOnceButton.IsEnabled = true;
-    }
-
-    private PeripheralInterface EnsureInterfaceConnected()
-    {
-        var dev = DeviceSelection.Instance.ActiveDevice;
-        if (dev == null)
+        byte keysInThisPacket = (byte)Math.Min(remainingKeys, keysPerPacket);
+        
+        byte[] data = new byte[headerSize + keysInThisPacket * 3];
+        data[0] = 0xC1;
+        data[1] = 0x01;
+        data[2] = currentFrameIndex.LowByte();
+        data[3] = currentFrameIndex.HighByte();
+        data[4] = remainingKeys;
+        data[5] = (byte)((packetState << 6) | (keysInThisPacket & 0x3F));
+        for (int j = 0; j < keysInThisPacket; j++)
         {
-            SetStatus("No active device. Select a device and click Connect.");
-            return null;
+            int keyIndex = (packetIndex * keysPerPacket) + j;
+            if (keyIndex >= keyCount)
+                break;
+            byte[] rgb = GetKeyRGB(currentFrameIndex, (byte)packetIndex, (byte)j);
+            data[headerSize + j * 3] = rgb[0];     // R
+            data[headerSize + j * 3 + 1] = rgb[1]; // G
+            data[headerSize + j * 3 + 2] = rgb[2]; // B
+            checksum += rgb[0] + rgb[1] + rgb[2];
         }
 
-        // Reuse existing if still connected
-        if (_activeInterface != null && _activeInterface.IsDeviceConnected)
-            return _activeInterface;
+        return data;
+    }
 
-        _activeInterface = null;
+    /// <param name="frameIndex">Current frame index in all frames.</param>
+    /// <param name="packetIndex">Current packet index in a single frame.</param>
+    /// <param name="keyIndex">Current key index in a single packet.</param>
+    /// <returns></returns>
+    private byte[] GetKeyRGB(short frameIndex, byte packetIndex, byte keyIndex)
+    {
+        int keyGlobalIndex = (packetIndex * keysPerPacket) + keyIndex;
 
-        (ushort usagePage, ushort usageId)? filter = TryReadUsageFilter();
+        return FrameScan(frameIndex, keyGlobalIndex);
+    }
 
-        var detail = dev.interfaces
-            .OfType<IPeripheralDetail>()
-            .FirstOrDefault(d => filter == null || (d.UsagePage == filter.Value.usagePage && d.Usage == filter.Value.usageId));
+    private byte[] KeyScan(short frameIndex, int keyGlobalIndex)
+    {
+        bool isFrameMatchKeyIndex = keyGlobalIndex == frameIndex; // Example condition, adjust as needed
+        return isFrameMatchKeyIndex ? [0xFF, 0x00, 0x00] : [0x00, 0x00, 0x00];
+    }
 
-        if (detail == null)
+    private byte[] FrameScan(short frameIndex, int keyGlobalIndex)
+    {
+        bool contains = false;
+        foreach (var candidate in FrameIndicatorCandidates(frameIndex))
         {
-            SetStatus("No matching interface found on active device.");
-            return null;
-        }
-
-        // Connect with async reads disabled (we only write)
-        var iface = detail.Connect(false);
-        if (iface == null)
-        {
-            SetStatus("Failed to open interface.");
-            return null;
-        }
-
-        _activeInterface = iface;
-        SetStatus($"Connected: {dev} (usagePage=0x{detail.UsagePage:X4}, usageId=0x{detail.Usage:X4})");
-        return _activeInterface;
-    }
-
-    private (ushort usagePage, ushort usageId)? TryReadUsageFilter()
-    {
-        var upText = (UsagePageTextBox.Text ?? string.Empty).Trim();
-        var uText = (UsageIdTextBox.Text ?? string.Empty).Trim();
-
-        if (string.IsNullOrWhiteSpace(upText) || string.IsNullOrWhiteSpace(uText))
-            return null;
-
-        if (!TryParseUShortHex(upText, out var usagePage) || !TryParseUShortHex(uText, out var usageId))
-            return null;
-
-        return (usagePage, usageId);
-    }
-
-    private static bool TryParseUShortHex(string text, out ushort value)
-    {
-        text = text.Trim();
-        if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            text = text[2..];
-        return ushort.TryParse(text, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out value);
-    }
-
-    private static int ReadInt(string text, int fallback, int min, int max)
-    {
-        if (!int.TryParse((text ?? string.Empty).Trim(), out var v)) v = fallback;
-        if (v < min) v = min;
-        if (v > max) v = max;
-        return v;
-    }
-
-    private static double ReadDouble(string text, double fallback, double min, double max)
-    {
-        // support both "1.1" and "1,1" by trying invariant first, then current culture
-        var s = (text ?? string.Empty).Trim();
-        if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) &&
-            !double.TryParse(s, NumberStyles.Float, CultureInfo.CurrentCulture, out v))
-        {
-            v = fallback;
-        }
-
-        if (v < min) v = min;
-        if (v > max) v = max;
-        return v;
-    }
-
-    private void AdvanceColor(int step)
-    {
-        // Similar to the .bat: R += step; if overflow => reset R and increment G, etc.
-        _r += step;
-        if (_r >= 256)
-        {
-            _r = 0;
-            _g += step;
-            if (_g >= 256)
+            if (candidate == keyGlobalIndex)
             {
-                _g = 0;
-                _b += step;
-                if (_b >= 256)
-                    _b = 0;
+                contains = true;
+                break;
             }
         }
+
+        return contains ? [0xFF, 0xFF, 0xFF] : [0x00, 0x00, 0x00];
     }
 
-    private static IReadOnlyList<byte[]> BuildLightingPackets(byte r, byte g, byte b)
+    private int[] FrameIndicatorCandidates(short frameIndex)
     {
-        // Based on the provided script. Each packet:
-        // usb_hid_cmd.exe w PID USAGE_PAGE C0 84 {packetBytes...}
-        // We send only the payload after C0 84 (device-specific command prefix goes into the report payload).
+        int tens = frameIndex % 10;
+        int hundreds = (frameIndex / 10) % 10;
+        int thousands = (frameIndex / 100) % 10;
+        int tenthousands = (frameIndex / 1000) % 10;
 
-        var headers = new (byte b0, byte b1)[]
-        {
-            (0x72, 0x53),
-            (0x5F, 0x13),
-            (0x4C, 0x13),
-            (0x39, 0x13),
-            (0x26, 0x13),
-            (0x13, 0x93),
-        };
+        (int, int) tensC = tensMap[tens];
+        (int, int) hundredsC = hundredsMap[hundreds];
+        (int, int) thousandsC = thousandsMap[thousands];
+        (int, int) tenthousandsC = tenthousandsMap[tenthousands];
 
-        // Repeated RGB blocks; ends with 00 00 00.
-        // Note: keep in sync with your protocol expectation.
-        const int rgbTriplets = 19;
+        int[] candidates = new int[4];
+        candidates[0] = MatrixConverter(tensC.Item1, tensC.Item2);
+        candidates[1] = MatrixConverter(hundredsC.Item1, hundredsC.Item2);
+        candidates[2] = MatrixConverter(thousandsC.Item1, thousandsC.Item2);
+        candidates[3] = MatrixConverter(tenthousandsC.Item1, tenthousandsC.Item2);
 
-        var list = new List<byte[]>(headers.Length);
-        foreach (var (b0, b1) in headers)
-        {
-            var payload = new byte[2 + rgbTriplets * 3];
-            payload[0] = b0;
-            payload[1] = b1;
-
-            int offset = 2;
-            for (int i = 0; i < rgbTriplets; i++)
-            {
-                payload[offset++] = r;
-                payload[offset++] = g;
-                payload[offset++] = b;
-            }
-
-            list.Add(payload);
-        }
-
-        return list;
+        return candidates;
     }
 
-    private static async Task SendPacketsAsync(PeripheralInterface iface, IReadOnlyList<byte[]> packets, double intervalMs, CancellationToken ct)
+    private int MatrixConverter(int x, int y)
     {
-        if (iface == null) return;
-
-        foreach (var p in packets)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            // Prefix according to batch: "C0 84" + payload
-            var cmd = new byte[2 + p.Length];
-            cmd[0] = 0xC0;
-            cmd[1] = 0x84;
-            Buffer.BlockCopy(p, 0, cmd, 2, p.Length);
-
-            await iface.Write(cmd).ConfigureAwait(false);
-
-            if (intervalMs > 0)
-                await DelayMsAsync(intervalMs, ct).ConfigureAwait(false);
-        }
+        return (y * xCount) + x;
     }
 
-    private static Task DelayMsAsync(double ms, CancellationToken ct)
+    private (int, int)[] tensMap = [(3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1), (10, 1), (11, 1), (12, 1)];
+    private (int, int)[] hundredsMap = [(3, 2), (4, 2), (5, 2), (6, 2), (7, 2), (8, 2), (9, 2), (10, 2), (11, 2), (12, 2)];
+    private (int, int)[] thousandsMap = [(3, 3), (4, 3), (5, 3), (6, 3), (7, 3), (8, 3), (9, 3), (10, 3), (11, 3), (12, 3)];
+    private (int, int)[] tenthousandsMap = [(4, 4), (5, 4), (6, 4), (7, 4), (8, 4), (9, 4), (10, 4), (11, 4), (12, 4), (13, 4)];
+
+    private List<byte[]> Construct3_3Reactive()
     {
-        if (ms <= 0) return Task.CompletedTask;
-
-        var target = TimeSpan.FromMilliseconds(ms);
-
-        // For larger delays use Task.Delay (yield), but keep a small spin tail for better accuracy.
-        if (target >= TimeSpan.FromMilliseconds(2))
-        {
-            var coarse = target - TimeSpan.FromMilliseconds(1);
-            return DelayCoarseThenSpinAsync(coarse, target, ct);
-        }
-
-        // For tiny delays just spin.
-        return SpinDelayAsync(target, ct);
+        List<byte[]> dataList = new();
+        byte[] data = [0xC1, 0x02, 0x03, 0x00, reactiveSpeed, reactiveBrightness, 0x01, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        dataList.Add(data);
+        return dataList;
     }
 
-    private static async Task DelayCoarseThenSpinAsync(TimeSpan coarse, TimeSpan total, CancellationToken ct)
+    private byte[] Construct3_4Brightness()
     {
-        var sw = Stopwatch.StartNew();
-
-        if (coarse > TimeSpan.Zero)
-            await Task.Delay(coarse, ct).ConfigureAwait(false);
-
-        var remaining = total - sw.Elapsed;
-        if (remaining > TimeSpan.Zero)
-            await SpinDelayAsync(remaining, ct).ConfigureAwait(false);
+        return [0xC1, 0x03, 0x00, 0x00, brightness];
     }
 
-    private static Task SpinDelayAsync(TimeSpan time, CancellationToken ct)
+    private byte[] Construct3_5Apply(int checksum)
     {
-        return Task.Run(() =>
-        {
-            var sw = Stopwatch.StartNew();
-            while (sw.Elapsed < time)
-            {
-                ct.ThrowIfCancellationRequested();
-                Thread.SpinWait(50);
-            }
-        }, ct);
-    }
+        byte b0 = (byte)(checksum & 0xFF);
+        byte b1 = (byte)((checksum >> 8) & 0xFF);
+        byte b2 = (byte)((checksum >> 16) & 0xFF);
+        byte b3 = (byte)((checksum >> 24) & 0xFF);
 
-    private static string FormatElapsed(TimeSpan ts)
-        => $"{(int)ts.TotalHours:00}:{ts.Minutes:00}:{ts.Seconds:00}.{ts.Milliseconds:000}";
-
-    private void UpdateLastSent(int frameIndex, int frameCount, IReadOnlyList<byte[]> packets)
-    {
-        try
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"Frame {frameIndex}/{frameCount} - R={_r:X2} G={_g:X2} B={_b:X2}");
-            for (int i = 0; i < packets.Count; i++)
-            {
-                sb.Append($"Pkt{i}: C0-84-");
-                sb.AppendLine(BitConverter.ToString(packets[i]));
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                LastSentTextBox.Text = sb.ToString();
-            });
-        }
-        catch { }
-    }
-
-    private void SetStatus(string text)
-    {
-        try
-        {
-            Dispatcher.Invoke(() => StatusTextBlock.Text = text);
-        }
-        catch { }
-    }
-
-    private void UpdateElapsed(TimeSpan ts)
-    {
-        try
-        {
-            Dispatcher.Invoke(() =>
-            {
-                var tb = FindName("ElapsedTextBlock") as System.Windows.Controls.TextBlock;
-                if (tb != null)
-                    tb.Text = FormatElapsed(ts);
-            });
-        }
-        catch { }
+        return [0xC1, 0x04, 0x00, 0x00, b0, b1, b2, b3, 0x00, 0x00, 0x00];
     }
 }

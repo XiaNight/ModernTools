@@ -4,11 +4,14 @@ using System.Text.RegularExpressions;
 
 namespace Base.Services
 {
+    /// <summary>
+    /// Accept layout from: https://www.keyboard-layout-editor.com/
+    /// </summary>
     public partial class LayoutConverter
     {
-        public static List<KeyDef> Convert()
+        public static List<KeyDef> Convert(string layoutName = "keyboard_layout.txt")
         {
-            string path = Path.Combine(MainWindow.GetConfigFolder(), "keyboard_layout.txt");
+            string path = Path.Combine(MainWindow.GetConfigFolder(), layoutName);
             string kleRaw = File.ReadAllText(path);
 
             var matches = RowRegex().Matches(kleRaw);

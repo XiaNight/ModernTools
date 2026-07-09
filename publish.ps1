@@ -36,7 +36,75 @@ $repo     = $PSScriptRoot
 $mainProj = Join-Path $repo 'ModernTools\ModernTools.csproj'
 $rid      = 'win-x64'
 $config   = 'Release'
-$appName  = 'ModernToolset'
+$appName   = 'ModernToolset'
+$distRoot  = Join-Path $repo 'dist'
+$stateFile = Join-Path $repo 'publish-versions.json'   # cache of last main / dev builds
+
+# =====================================================================================
+#  Version handling
+#  Format: V(Major)_(HotFix)_(Minor)  e.g. V01_00_01
+#  Significance (high -> low): Major > Minor > HotFix.
+#    - HotFix++  : bump HotFix, keep Minor.
+#    - Minor++   : bump Minor, reset HotFix.
+#    - Major++   : bump Major, reset Minor + HotFix.
+#  Major >= 90 (usually 99) denotes a dev build; main builds use Major < 90.
+#  Last built versions are cached in publish-versions.json (no directory scanning).
+# =====================================================================================
+
+function ConvertFrom-ModernVersion {
+    # Parse "V01_00_01" -> object, or $null if the string is not a valid version.
+    param([string]$Text)
+    if ($Text -and $Text.Trim() -match '^V(\d{2})_(\d{2})_(\d{2})$') {
+        return [pscustomobject]@{
+            Major  = [int]$Matches[1]
+            HotFix = [int]$Matches[2]
+            Minor  = [int]$Matches[3]
+        }
+    }
+    return $null
+}
+
+function ConvertTo-ModernVersionString {
+    param($V)
+    return ('V{0:D2}_{1:D2}_{2:D2}' -f $V.Major, $V.HotFix, $V.Minor)
+}
+
+function Test-IsDevVersion {
+    param($V)
+    return ($V.Major -ge 90)
+}
+
+function Compare-ModernVersion {
+    # Returns >0 if A>B, 0 if equal, <0 if A<B. Significance: Major > Minor > HotFix.
+    param($A, $B)
+    if ($A.Major -ne $B.Major) { return $A.Major  - $B.Major }
+    if ($A.Minor -ne $B.Minor) { return $A.Minor  - $B.Minor }
+    return $A.HotFix - $B.HotFix
+}
+
+function Get-VersionState {
+    # Read the last main / dev build versions from the cache file.
+    param([string]$Path)
+    $state = [pscustomobject]@{ LastMain = $null; LastDev = $null }
+    if (Test-Path $Path) {
+        try {
+            $j = Get-Content $Path -Raw | ConvertFrom-Json
+            if ($j.lastMainBuild) { $state.LastMain = ConvertFrom-ModernVersion $j.lastMainBuild }
+            if ($j.lastDevBuild)  { $state.LastDev  = ConvertFrom-ModernVersion $j.lastDevBuild }
+        }
+        catch { Write-Host "Warning: could not read $Path ($_); ignoring cache." -ForegroundColor Yellow }
+    }
+    return $state
+}
+
+function Save-VersionState {
+    param([string]$Path, $State)
+    $obj = [ordered]@{
+        lastMainBuild = if ($State.LastMain) { ConvertTo-ModernVersionString $State.LastMain } else { $null }
+        lastDevBuild  = if ($State.LastDev)  { ConvertTo-ModernVersionString $State.LastDev }  else { $null }
+    }
+    ($obj | ConvertTo-Json) | Set-Content -Path $Path
+}
 
 # --- Resolve version from the csproj unless overridden ---
 if (-not $Version) {
@@ -48,6 +116,100 @@ if (-not $Version) {
         throw "Could not find <InformationalVersion> in $mainProj. Pass -Version explicitly."
     }
 }
+
+# --- Validate the version BEFORE building: it must parse and be strictly higher than
+#     the last recorded build on the SAME track (main vs dev). If not, offer to
+#     auto-increment (Y) or abort (n). ---
+$parsed = ConvertFrom-ModernVersion $Version
+$state  = Get-VersionState -Path $stateFile
+
+$isDev     = if ($parsed) { Test-IsDevVersion $parsed } else { $false }
+$lastSame  = if ($isDev) { $state.LastDev } else { $state.LastMain }
+$trackName = if ($isDev) { 'dev' } else { 'main' }
+
+$invalidReason = $null
+if (-not $parsed) {
+    $invalidReason = "'$Version' is not a valid version (expected V##_##_## e.g. V01_00_01)."
+}
+elseif ($lastSame -and (Compare-ModernVersion $parsed $lastSame) -le 0) {
+    $invalidReason = ("'{0}' is not higher than the last {1} build '{2}'." -f `
+        $Version, $trackName, (ConvertTo-ModernVersionString $lastSame))
+}
+
+if ($invalidReason) {
+    $prevStr = if ($lastSame) { ConvertTo-ModernVersionString $lastSame } else { '(none)' }
+    Write-Host ""
+    Write-Host "Previous version: $prevStr" -ForegroundColor Yellow
+    Write-Host "Current version:  $Version" -ForegroundColor Yellow
+    Write-Host $invalidReason -ForegroundColor Red
+
+    $ans = Read-Host "Auto-increment the version? (Y/n)"
+    if ($ans -notmatch '^(y|yes|)$') {   # anything other than Y / Enter aborts
+        throw "Aborted by user (version not incremented)."
+    }
+
+    # Increment relative to the higher of (current, last same-track build) so the
+    # result is guaranteed to clear the last build on this track.
+    $base = $parsed
+    if ($lastSame -and (-not $base -or (Compare-ModernVersion $lastSame $base) -ge 0)) { $base = $lastSame }
+    if (-not $base) { $base = [pscustomobject]@{ Major = 1; HotFix = 0; Minor = 0 } }
+
+    $baseIsDev = Test-IsDevVersion $base
+
+    # Reset rules: HotFix++ keeps Minor; Minor++ resets HotFix; Major++ resets both.
+    $hotfixNew = [pscustomobject]@{ Major = $base.Major; HotFix = $base.HotFix + 1; Minor = $base.Minor }
+    $minorNew  = [pscustomobject]@{ Major = $base.Major; HotFix = 0;                Minor = $base.Minor + 1 }
+
+    # Major on a DEV build rolls onto the MAIN track: take the last main Major, +1, and
+    # turn this into a main build. On a main build, just bump Major normally.
+    if ($baseIsDev) {
+        $mainMajor = if ($state.LastMain) { $state.LastMain.Major + 1 } else { 1 }
+        $majorNew  = [pscustomobject]@{ Major = $mainMajor; HotFix = 0; Minor = 0 }
+    }
+    else {
+        $majorNew  = [pscustomobject]@{ Major = $base.Major + 1; HotFix = 0; Minor = 0 }
+    }
+    $majorNote = if ($baseIsDev) { '  (dev -> main build)' } else { '' }
+
+    $new = $null
+    while (-not $new) {
+        Write-Host "`nIncrement which part? (base $(ConvertTo-ModernVersionString $base))" -ForegroundColor Cyan
+        Write-Host "  1. Hotfix: $(ConvertTo-ModernVersionString $hotfixNew)"
+        Write-Host "  2. Minor:  $(ConvertTo-ModernVersionString $minorNew)"
+        Write-Host "  3. Major:  $(ConvertTo-ModernVersionString $majorNew)$majorNote"
+        Write-Host "  x. Abort"
+        switch ((Read-Host "Choice").Trim().ToLower()) {
+            '1' { $new = $hotfixNew }
+            '2' { $new = $minorNew }
+            '3' { $new = $majorNew }
+            'x' { throw "Aborted by user (increment cancelled)." }
+            default { Write-Host "Please enter 1, 2, 3, or x." -ForegroundColor Yellow }
+        }
+    }
+
+    $Version = ConvertTo-ModernVersionString $new
+    Write-Host "New version: $Version" -ForegroundColor Green
+
+    # Persist the bump to the csproj so the compiled assembly matches the zip names.
+    $csprojText = Get-Content $mainProj -Raw
+    if ($csprojText -match '<InformationalVersion>(.*?)</InformationalVersion>') {
+        $csprojText = $csprojText -replace '<InformationalVersion>.*?</InformationalVersion>', "<InformationalVersion>$Version</InformationalVersion>"
+        Set-Content -Path $mainProj -Value $csprojText -NoNewline
+        Write-Host "Updated <InformationalVersion> in $mainProj." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Note: no <InformationalVersion> tag in csproj to update; using $Version for this build only." -ForegroundColor Yellow
+    }
+
+    $parsed    = $new
+    $isDev     = Test-IsDevVersion $parsed
+    $trackName = if ($isDev) { 'dev' } else { 'main' }
+}
+
+if ($isDev) {
+    Write-Host "Note: Major $($parsed.Major) (>=90) - this is a DEV build." -ForegroundColor Magenta
+}
+
 Write-Host "ModernToolset publish - version $Version" -ForegroundColor Cyan
 
 # --- Plugin projects (Plugins subfolder name => project path) ---
@@ -64,7 +226,6 @@ $plugins = [ordered]@{
     'MCPServer'            = 'Features\MCPServer\MCPServer.csproj'
 }
 
-$distRoot  = Join-Path $repo 'dist'
 $buildRoot = Join-Path $distRoot 'build'
 
 function Publish-Bundle {
@@ -165,6 +326,11 @@ Write-Host "Host provides $($hostFiles.Count) assemblies." -ForegroundColor Dark
 $zips = @()
 if ($Mode -in @('both', 'standalone')) { $zips += Publish-Bundle -ModeName 'standalone'           -SelfContained $true }
 if ($Mode -in @('both', 'framework'))  { $zips += Publish-Bundle -ModeName 'framework-dependent'   -SelfContained $false }
+
+# --- Record this build in the version cache so the next run can check quickly. ---
+if ($isDev) { $state.LastDev = $parsed } else { $state.LastMain = $parsed }
+Save-VersionState -Path $stateFile -State $state
+Write-Host "Recorded $Version as last $trackName build in $stateFile." -ForegroundColor DarkGray
 
 Write-Host "`n=== Done ===" -ForegroundColor Green
 $zips | ForEach-Object { Write-Host "  $_" -ForegroundColor White }

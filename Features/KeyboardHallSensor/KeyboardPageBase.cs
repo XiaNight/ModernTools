@@ -20,6 +20,7 @@ namespace KeyboardHallSensor
     /// <typeparam name="T">The type of the page that inherits from KeyboardPageBase for instance management.</typeparam>
     public abstract class KeyboardPageBase : PageBase, IKeyboardPage
     {
+        private const string keyboardLayoutName = "keyboard_layout.txt";
         protected ConcurrentDictionary<byte, KeyDisplay> KeyDisplays { get; private set; } = new();
         private ConcurrentStack<KeyDisplay> spawnedKeys = new();
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
@@ -108,7 +109,7 @@ namespace KeyboardHallSensor
 
         protected void SetupKeyboard()
         {
-            var keyboardLayout = LayoutConverter.Convert();
+            var keyboardLayout = LayoutConverter.Convert(keyboardLayoutName);
             float unit = 50;
             foreach (KeyDef keyDef in keyboardLayout)
             {
