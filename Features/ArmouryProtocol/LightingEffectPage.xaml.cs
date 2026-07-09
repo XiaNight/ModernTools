@@ -7,6 +7,7 @@ using Base.Services;
 using Base.Services.Peripheral;
 using KeyboardHallSensor;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Threading;
 
 namespace ArmouryProtocol;
@@ -74,15 +75,24 @@ public partial class LightingEffectPage : PageBase
 
     //- Keyboard UI
     private readonly Dictionary<string, KeyDisplayRendered> keyDisplayByLayoutKey = new(StringComparer.Ordinal);
-    // Precomputed once in BuildKeyboard: each rendered key paired with its static global key index.
-    private readonly List<(KeyDisplayRendered display, int globalKeyIndex)> renderedKeys = new();
-    private int[] uiGlobalIndices = Array.Empty<int>();
+    // Precomputed once in BuildKeyboard: each rendered key paired with its cached
+    // light info (matrix cell + normalized physical position), plus a lookup by index.
+    private readonly List<(KeyDisplayRendered display, KeyLightInfo info)> renderedKeys = new();
+    private readonly Dictionary<int, KeyLightInfo> keyInfoByGlobalIndex = new();
     public List<FrameData> frameDatas = new();
-    private FrameData.ColorStrategy currentStrategy;
+    private LightingPreset currentPreset;
 
     //- Animation Player
     private DispatcherTimer animationTimer;
     private bool repeatAll = true;
+
+    // While sending, the preview scrubs to whichever frame is currently going out.
+    private volatile bool sendPreviewActive;
+
+    // Frames the current effect spans: the preset's own count, or the manual
+    // frame-count config for developer strategies (FrameCount == 0).
+    private int ActiveFrameCount =>
+        currentPreset != null && currentPreset.FrameCount > 0 ? currentPreset.FrameCount : frameCount;
 
     public LightingEffectPage()
     {
@@ -138,7 +148,7 @@ public partial class LightingEffectPage : PageBase
         ShowPlayButton();
         int currentFrame = (int)TimelineSlider.Value;
         currentFrame++;
-        if (currentFrame > frameCount)
+        if (currentFrame > ActiveFrameCount)
         {
             currentFrame = 1;
         }
@@ -154,7 +164,7 @@ public partial class LightingEffectPage : PageBase
         currentFrame--;
         if (currentFrame < 1)
         {
-            currentFrame = frameCount;
+            currentFrame = ActiveFrameCount;
         }
         // Setting Value raises TimelineSlider_ValueChanged, which renders the frame.
         TimelineSlider.Value = currentFrame;
@@ -186,19 +196,11 @@ public partial class LightingEffectPage : PageBase
 
     private void FrameCountChanged()
     {
-        TimelineSlider.Maximum = frameCount;
-
-        for (short i = (short)frameDatas.Count; i < frameCount; i++)
+        // Only developer strategies follow the manual frame-count config; named
+        // presets carry their own count. Regenerate so the change takes effect.
+        if (currentPreset != null && currentPreset.FrameCount <= 0)
         {
-            FrameData frameData = new(i);
-            frameData.SetAllKeyColors(uiGlobalIndices, currentStrategy);
-            frameDatas.Add(frameData);
-        }
-
-        // Drop stale frames if the count was lowered.
-        if (frameDatas.Count > frameCount)
-        {
-            frameDatas.RemoveRange(frameCount, frameDatas.Count - frameCount);
+            ApplyPreset(currentPreset);
         }
     }
 
@@ -216,19 +218,85 @@ public partial class LightingEffectPage : PageBase
         base.Awake();
         DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToDevice;
         DeviceSelection.Instance.OnActiveDeviceDisconnected += OnActiveDeviceDisconnected;
+        ProtocolService.OnCmdSent += HandleCmdSent;
 
         BuildKeyboard();
+        PopulatePresets();
+    }
 
-        for (short i = 0; i < frameCount; i++)
+    private void PopulatePresets()
+    {
+        // Group the flat preset list into Static / Dynamic / Developer sections.
+        var view = new ListCollectionView(LightingPresets.All.ToList());
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(LightingPreset.Category)));
+
+        PresetSelector.ItemsSource = view;
+        PresetSelector.SelectionChanged += PresetSelector_SelectionChanged;
+
+        // Selecting fires SelectionChanged -> ApplyPreset (generates + plays).
+        PresetSelector.SelectedItem = LightingPresets.Default;
+    }
+
+    private void PresetSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PresetSelector.SelectedItem is LightingPreset preset)
         {
-            frameDatas.Add(new(i));
+            ApplyPreset(preset);
         }
+    }
 
-        currentStrategy = FrameScan;
-        SetAllFramesColor(uiGlobalIndices, currentStrategy);
+    private void ApplyPreset(LightingPreset preset)
+    {
+        currentPreset = preset;
+
+        int count = ActiveFrameCount;
+        RegenerateFrames(count);
+
+        TimelineSlider.Maximum = count;
+        TimelineSlider.Value = 1;
         ShowFrame(0);
-        StartAnimation();
-        ShowPauseButton();
+
+        // Multi-frame effects animate; a single still frame just holds.
+        if (count > 1)
+        {
+            StartAnimation();
+            ShowPauseButton();
+        }
+        else
+        {
+            PauseAnimation();
+            ShowPlayButton();
+        }
+    }
+
+    // Rebuilds every frame's colors from the current preset.
+    // EVERY addressable key index (0..keyCount-1) is generated and stored - including
+    // keys with no on-screen keycap and matrix cells not present in the layout - so the
+    // packets always carry a complete, correctly-indexed color set. Mapped keys use
+    // their real cached physical position; unknown keys fall back to their matrix cell
+    // with a default (0,0) position.
+    private void RegenerateFrames(int count)
+    {
+        frameDatas.Clear();
+
+        for (int frame = 0; frame < count; frame++)
+        {
+            FrameData frameData = new((short)frame);
+
+            for (int globalKeyIndex = 0; globalKeyIndex < keyCount; globalKeyIndex++)
+            {
+                if (!keyInfoByGlobalIndex.TryGetValue(globalKeyIndex, out KeyLightInfo info))
+                {
+                    Vector2Int cell = InverseMatrixTransform(globalKeyIndex, xCount);
+                    info = new KeyLightInfo(globalKeyIndex, cell.x, cell.y, 0f, 0f, 0f, 0f);
+                }
+
+                var (r, g, b) = currentPreset.GetColor(frame, count, info);
+                frameData.SetKeyColor(globalKeyIndex, r, g, b);
+            }
+
+            frameDatas.Add(frameData);
+        }
     }
 
     protected override void OnEnable()
@@ -282,10 +350,16 @@ public partial class LightingEffectPage : PageBase
     {
         var keyDefs = LayoutConverter.Convert(lightingProfile.LayoutFileName);
         const float unit = 50f;
-        float maxX = 0, maxY = 0;
+        float maxPxX = 0, maxPxY = 0;
 
         renderedKeys.Clear();
-        var indices = new List<int>();
+        keyInfoByGlobalIndex.Clear();
+
+        // First pass: create the displays and resolve each mapped key's matrix cell
+        // and physical center. Track layout bounds so we can normalize positions.
+        var pending = new List<(KeyDisplayRendered display, int globalKeyIndex, int mx, int my, float cx, float cy)>();
+        float minCx = float.MaxValue, minCy = float.MaxValue;
+        float maxCx = float.MinValue, maxCy = float.MinValue;
 
         foreach (var def in keyDefs)
         {
@@ -301,37 +375,47 @@ public partial class LightingEffectPage : PageBase
 
             keyDisplayByLayoutKey[def.Label] = display;
 
-            // Resolve the static layout-key -> global-index mapping once, up front.
-            // Keys that don't map (unknown label / not present in the matrix) are
-            // still shown but simply won't be driven by the animation.
-            if (TryGetGlobalKeyIndex(def.Label, out int globalKeyIndex))
+            // Keys that don't map (unknown label / not in the matrix) are still
+            // shown but won't be driven by the effects.
+            if (lightingProfile.TryGetMatrixPosition(def.Label, out Vector2Int cell))
             {
-                renderedKeys.Add((display, globalKeyIndex));
-                indices.Add(globalKeyIndex);
+                int globalKeyIndex = MatrixTransform(cell.x, cell.y, xCount);
+                float cx = def.X + (def.W / 2f);
+                float cy = def.Y + (def.H / 2f);
+
+                pending.Add((display, globalKeyIndex, cell.x, cell.y, cx, cy));
+
+                minCx = Math.Min(minCx, cx);
+                maxCx = Math.Max(maxCx, cx);
+                minCy = Math.Min(minCy, cy);
+                maxCy = Math.Max(maxCy, cy);
             }
             else
             {
                 Debug.Log($"[Keyboard] Unmapped layout key skipped: '{def.Label}'");
             }
 
-            maxX = Math.Max(maxX, px + pw);
-            maxY = Math.Max(maxY, py + ph);
+            maxPxX = Math.Max(maxPxX, px + pw);
+            maxPxY = Math.Max(maxPxY, py + ph);
         }
 
-        uiGlobalIndices = indices.ToArray();
+        // Second pass: normalize physical positions to 0..1 and cache the results.
+        float rangeX = Math.Max(1e-3f, maxCx - minCx);
+        float rangeY = Math.Max(1e-3f, maxCy - minCy);
 
-        KeyboardCanvas.Width = maxX + 8;
-        KeyboardCanvas.Height = maxY + 8;
-    }
+        foreach (var p in pending)
+        {
+            var info = new KeyLightInfo(
+                p.globalKeyIndex, p.mx, p.my,
+                (p.cx - minCx) / rangeX, (p.cy - minCy) / rangeY,
+                p.cx, p.cy);
 
-    private bool TryGetGlobalKeyIndex(string layoutKey, out int globalKeyIndex)
-    {
-        globalKeyIndex = -1;
-        if (!lightingProfile.TryGetMatrixPosition(layoutKey, out Vector2Int vector))
-            return false;
+            renderedKeys.Add((p.display, info));
+            keyInfoByGlobalIndex[p.globalKeyIndex] = info;
+        }
 
-        globalKeyIndex = MatrixTransform(vector.x, vector.y, xCount);
-        return true;
+        KeyboardCanvas.Width = maxPxX + 8;
+        KeyboardCanvas.Height = maxPxY + 8;
     }
 
     #endregion
@@ -352,7 +436,7 @@ public partial class LightingEffectPage : PageBase
     {
         int currentFrame = (int)TimelineSlider.Value;
         currentFrame++;
-        if (currentFrame > frameCount)
+        if (currentFrame > ActiveFrameCount)
         {
             if (!repeatAll)
             {
@@ -376,20 +460,12 @@ public partial class LightingEffectPage : PageBase
         if (frameIndex < 0 || frameIndex >= frameDatas.Count)
             return;
         FrameData frameData = frameDatas[frameIndex];
-        // renderedKeys already holds the precomputed global index per key,
-        // so this hot path does no matrix lookups or conversions.
-        foreach (var (display, globalKeyIndex) in renderedKeys)
+        // renderedKeys holds the cached key info, so this hot path does no
+        // matrix lookups or conversions.
+        foreach (var (display, info) in renderedKeys)
         {
-            byte[] rgb = frameData.GetKeyColor(globalKeyIndex);
+            byte[] rgb = frameData.GetKeyColor(info.GlobalKeyIndex);
             display.SetColor(rgb[0], rgb[1], rgb[2]);
-        }
-    }
-
-    public void SetAllFramesColor(int[] globalKeyIndices, FrameData.ColorStrategy colorStrategy)
-    {
-        foreach (var frameData in frameDatas)
-        {
-            frameData.SetAllKeyColors(globalKeyIndices, colorStrategy);
         }
     }
 
@@ -400,25 +476,14 @@ public partial class LightingEffectPage : PageBase
         public readonly short frameIndex;
         public Dictionary<int, byte[]> KeyColors { get; set; } = new();
 
-        public delegate byte[] ColorStrategy(short frameIndex, int globalKeyIndex);
-
         public FrameData(short index)
         {
             this.frameIndex = index;
         }
 
-        public void SetAllKeyColors(int[] globalKeyIndices, ColorStrategy colorStrategy)
+        public void SetKeyColor(int globalKeyIndex, byte r, byte g, byte b)
         {
-            foreach (int globalKeyIndex in globalKeyIndices)
-            {
-                SetKeyColor(globalKeyIndex, colorStrategy);
-            }
-        }
-
-        public void SetKeyColor(int globalKeyIndex, ColorStrategy colorStrategy)
-        {
-            byte[] rgb = colorStrategy(frameIndex, globalKeyIndex);
-            KeyColors[globalKeyIndex] = rgb;
+            KeyColors[globalKeyIndex] = new[] { r, g, b };
         }
 
         public byte[] GetKeyColor(int globalKeyIndex)
@@ -435,34 +500,102 @@ public partial class LightingEffectPage : PageBase
     [AppMenuItem("Send All Packets")]
     private List<byte[]> SendAll()
     {
-        List<byte[]> bytes = new();
+        // Arm the timeline to follow the packets as they go out, and stop the
+        // free-running preview so the two don't fight over the current frame.
+        // Only when a device is actually connected (otherwise nothing is sent,
+        // and we'd never get the Apply packet that disarms the preview).
+        sendPreviewActive = ActiveInterface != null;
+        if (sendPreviewActive)
+        {
+            PauseAnimation();
+            ShowPlayButton();
+        }
 
         int checksum = 0;
         byte[] initialPacket = Construct3_1Mode();
-        bytes.AddRange(Construct3_2Data(ref checksum));
-        bytes.AddRange(Construct3_3Reactive());
+        List<byte[]> frameBytes = Construct3_2Data(ref checksum);
+        List<byte[]> reactiveBytes = Construct3_3Reactive();
         byte[] brightnessPacket = Construct3_4Brightness();
         byte[] applyPacket = Construct3_5Apply(checksum);
 
         ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000);
 
-        for (int packetId = 0; packetId < bytes.Count; packetId++)
+        for (int framePacketId = 0; framePacketId < frameBytes.Count; framePacketId++)
         {
-            byte[] packet = bytes[packetId];
-            ProtocolService.AppendCmd(ActiveInterface, packet, packetId % 6 == 5);
+            byte[] packet = frameBytes[framePacketId];
+            ProtocolService.AppendCmd(ActiveInterface, packet, framePacketId % 6 == 5);
         }
 
+        for (int reactivePacketId = 0; reactivePacketId < reactiveBytes.Count; reactivePacketId++)
+        {
+            byte[] packet = reactiveBytes[reactivePacketId];
+            ProtocolService.AppendCmdTimeout(ActiveInterface, packet, true, 5000);
+        }
         ProtocolService.AppendCmdTimeout(ActiveInterface, brightnessPacket, true, 5000);
-
         ProtocolService.AppendCmdTimeout(ActiveInterface, applyPacket, true, 5000);
 
-        return bytes;
+        return frameBytes;
+    }
+
+    // Fired (on the send worker thread) after each packet is written. We mirror
+    // the 3-2 "Data" packets onto the timeline so the on-screen keyboard shows
+    // exactly which frame is currently being uploaded.
+    private void HandleCmdSent(ProtocolService.CmdData cmd)
+    {
+        if (!sendPreviewActive)
+            return;
+
+        byte[] bytes = cmd.Cmd;
+        if (bytes == null || bytes.Length < 4 || bytes[0] != 0xC1)
+            return;
+
+        switch (bytes[1])
+        {
+            case 0x01: // 3-2 Data: frame index is little-endian at [2], [3].
+                int frameIndex = bytes[2] | (bytes[3] << 8);
+                Dispatcher.BeginInvoke((Action)(() => ScrubToSendingFrame(frameIndex)));
+                break;
+
+            case 0x04: // 3-5 Apply: the upload has finished.
+                Dispatcher.BeginInvoke((Action)EndSendPreview);
+                break;
+        }
+    }
+
+    private void ScrubToSendingFrame(int frameIndex)
+    {
+        if (!sendPreviewActive)
+            return;
+
+        int display = frameIndex + 1; // timeline is 1-based
+        if (display < 1)
+            display = 1;
+        if (display > TimelineSlider.Maximum)
+            display = (int)TimelineSlider.Maximum;
+
+        // Raises TimelineSlider_ValueChanged, which renders the frame.
+        TimelineSlider.Value = display;
+    }
+
+    private void EndSendPreview()
+    {
+        if (!sendPreviewActive)
+            return;
+        sendPreviewActive = false;
+
+        // Return to the live preview for animated effects.
+        if (ActiveFrameCount > 1)
+        {
+            StartAnimation();
+            ShowPauseButton();
+        }
     }
 
     private byte[] Construct3_1Mode()
     {
-        byte frameCountLowByte = (byte)(frameCount & 0xFF);
-        byte frameCountHighByte = (byte)((frameCount >> 8) & 0xFF);
+        int activeFrameCount = ActiveFrameCount;
+        byte frameCountLowByte = (byte)(activeFrameCount & 0xFF);
+        byte frameCountHighByte = (byte)((activeFrameCount >> 8) & 0xFF);
         byte[] data = [0xC1, 0x00, 0x00, 0x00, frameCountLowByte, frameCountHighByte, xCount, yCount];
         return data;
     }
@@ -471,7 +604,8 @@ public partial class LightingEffectPage : PageBase
     {
         List<byte[]> dataList = new();
 
-        for (short currentFrameIndex = 0; currentFrameIndex < frameCount; currentFrameIndex++)
+        int activeFrameCount = ActiveFrameCount;
+        for (short currentFrameIndex = 0; currentFrameIndex < activeFrameCount; currentFrameIndex++)
         {
             dataList.AddRange(Construct3_2SingleFrame(currentFrameIndex, ref checksum));
         }
@@ -553,63 +687,20 @@ public partial class LightingEffectPage : PageBase
         return [0xC1, 0x04, 0x00, 0x00, b0, b1, b2, b3, 0x00, 0x00, 0x00];
     }
 
-    #endregion
-
-    #region Color Strategy
-
     /// <param name="frameIndex">Current frame index in all frames.</param>
     /// <param name="packetIndex">Current packet index in a single frame.</param>
     /// <param name="keyIndex">Current key index in a single packet.</param>
-    /// <returns></returns>
     private byte[] GetKeyRGB(short frameIndex, byte packetIndex, byte keyIndex)
     {
         int keyGlobalIndex = (packetIndex * keysPerPacket) + keyIndex;
 
-        // Use the same strategy the UI renders with, so sent packets match the preview.
-        return (currentStrategy ?? FrameScan)(frameIndex, keyGlobalIndex);
-    }
-
-    private byte[] FrameScan(short frameIndex, int keyGlobalIndex)
-    {
-        bool contains = false;
-        foreach (var candidate in FrameIndicatorCandidates(frameIndex))
+        // Read the already-generated frame so what's sent exactly matches the preview.
+        if (frameIndex >= 0 && frameIndex < frameDatas.Count)
         {
-            if (candidate == keyGlobalIndex)
-            {
-                contains = true;
-                break;
-            }
+            return frameDatas[frameIndex].GetKeyColor(keyGlobalIndex);
         }
-
-        return contains ? [0xFF, 0xFF, 0xFF] : [0x00, 0x00, 0x00];
+        return [0x00, 0x00, 0x00];
     }
-
-    private int[] FrameIndicatorCandidates(short frameIndex)
-    {
-        int tens = frameIndex % 10;
-        int hundreds = (frameIndex / 10) % 10;
-        int thousands = (frameIndex / 100) % 10;
-        int tenthousands = (frameIndex / 1000) % 10;
-
-        Vector2Int tensC = tensMap[tens];
-        Vector2Int hundredsC = hundredsMap[hundreds];
-        Vector2Int thousandsC = thousandsMap[thousands];
-        Vector2Int tenthousandsC = tenthousandsMap[tenthousands];
-
-        int[] candidates =
-        [
-            MatrixTransform(tensC.x, tensC.y, xCount),
-            MatrixTransform(hundredsC.x, hundredsC.y, xCount),
-            MatrixTransform(thousandsC.x, thousandsC.y, xCount),
-            MatrixTransform(tenthousandsC.x, tenthousandsC.y, xCount),
-        ];
-        return candidates;
-    }
-
-    private readonly Vector2Int[] tensMap = [new(3, 1), new(4, 1), new(5, 1), new(6, 1), new(7, 1), new(8, 1), new(9, 1), new(10, 1), new(11, 1), new(12, 1)];
-    private readonly Vector2Int[] hundredsMap = [new(3, 2), new(4, 2), new(5, 2), new(6, 2), new(7, 2), new(8, 2), new(9, 2), new(10, 2), new(11, 2), new(12, 2)];
-    private readonly Vector2Int[] thousandsMap = [new(3, 3), new(4, 3), new(5, 3), new(6, 3), new(7, 3), new(8, 3), new(9, 3), new(10, 3), new(11, 3), new(12, 3)];
-    private readonly Vector2Int[] tenthousandsMap = [new(4, 4), new(5, 4), new(6, 4), new(7, 4), new(8, 4), new(9, 4), new(10, 4), new(11, 4), new(12, 4), new(13, 4)];
 
     #endregion
 
