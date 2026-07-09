@@ -1,4 +1,5 @@
-﻿using Base.Core;
+﻿using ArmouryProtocol.Lighting;
+using Base.Core;
 using Base.Framework.Utilities;
 using Base.Helpers;
 using Base.Pages;
@@ -63,10 +64,19 @@ public partial class LightingEffectPage : PageBase
 
     private readonly int keysPerPacket = 0x13;
 
+    private const int Fps = 40;
+
     private PeripheralInterface ActiveInterface;
+
+    // Per-model lighting tables (layout file, matrix, layout->matrix map).
+    // Fixed to M708 for now; swap this out when model switching is added.
+    private readonly KeyboardLightingProfile lightingProfile = KeyboardLightingProfiles.Default;
 
     //- Keyboard UI
     private readonly Dictionary<string, KeyDisplayRendered> keyDisplayByLayoutKey = new(StringComparer.Ordinal);
+    // Precomputed once in BuildKeyboard: each rendered key paired with its static global key index.
+    private readonly List<(KeyDisplayRendered display, int globalKeyIndex)> renderedKeys = new();
+    private int[] uiGlobalIndices = Array.Empty<int>();
     public List<FrameData> frameDatas = new();
     private FrameData.ColorStrategy currentStrategy;
 
@@ -81,16 +91,21 @@ public partial class LightingEffectPage : PageBase
         TimelineSlider.ValueChanged += TimelineSlider_ValueChanged;
         TimelineSlider.Maximum = frameCount;
 
-        animationTimer = new DispatcherTimer();
-        animationTimer.Interval = TimeSpan.FromMilliseconds(1000 / 40);
+        // Render priority keeps ticks in step with the render loop instead of
+        // being preempted by lower-priority (Background) dispatcher work.
+        animationTimer = new DispatcherTimer(DispatcherPriority.Render);
+        animationTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / Fps);
         animationTimer.Tick += AnimationTimer_Tick;
 
         PlayButton.Click += PlayButton_Click;
         PauseButton.Click += PauseButton_Click;
         PreviousButton.Click += PreviousButton_Click;
         NextButton.Click += NextButton_Click;
-        RepeatAllButton.Click += RepeatAllButton_Click; ;
+        RepeatAllButton.Click += RepeatAllButton_Click;
         RepeatOffButton.Click += RepeatOffButton_Click;
+
+        // Sync the repeat toggle icon with the initial repeat state.
+        SetRepeat(repeatAll);
     }
 
     private void RepeatOffButton_Click(object sender, System.Windows.RoutedEventArgs e)
@@ -120,54 +135,70 @@ public partial class LightingEffectPage : PageBase
     private void NextButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         PauseAnimation();
+        ShowPlayButton();
         int currentFrame = (int)TimelineSlider.Value;
         currentFrame++;
         if (currentFrame > frameCount)
         {
             currentFrame = 1;
         }
+        // Setting Value raises TimelineSlider_ValueChanged, which renders the frame.
         TimelineSlider.Value = currentFrame;
-        ShowFrame(currentFrame - 1);
     }
 
     private void PreviousButton_Click(object sender, System.Windows.RoutedEventArgs e)
-    {   
+    {
         PauseAnimation();
+        ShowPlayButton();
         int currentFrame = (int)TimelineSlider.Value;
         currentFrame--;
         if (currentFrame < 1)
         {
             currentFrame = frameCount;
         }
+        // Setting Value raises TimelineSlider_ValueChanged, which renders the frame.
         TimelineSlider.Value = currentFrame;
-        ShowFrame(currentFrame - 1);
     }
 
     private void PauseButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         PauseAnimation();
+        ShowPlayButton();
+    }
+
+    private void ShowPlayButton()
+    {
         PlayButton.Visibility = System.Windows.Visibility.Visible;
         PauseButton.Visibility = System.Windows.Visibility.Collapsed;
+    }
+
+    private void ShowPauseButton()
+    {
+        PlayButton.Visibility = System.Windows.Visibility.Collapsed;
+        PauseButton.Visibility = System.Windows.Visibility.Visible;
     }
 
     private void PlayButton_Click(object sender, System.Windows.RoutedEventArgs e)
     {
         StartAnimation();
-        PlayButton.Visibility = System.Windows.Visibility.Collapsed;
-        PauseButton.Visibility = System.Windows.Visibility.Visible;
+        ShowPauseButton();
     }
 
     private void FrameCountChanged()
     {
         TimelineSlider.Maximum = frameCount;
 
-        string[] layoutKeys = keyDisplayByLayoutKey.Keys.ToArray();
-
         for (short i = (short)frameDatas.Count; i < frameCount; i++)
         {
             FrameData frameData = new(i);
-            frameData.SetAllKeyColors(layoutKeys, currentStrategy, M708MatrixLightKeyTable, xCount);
+            frameData.SetAllKeyColors(uiGlobalIndices, currentStrategy);
             frameDatas.Add(frameData);
+        }
+
+        // Drop stale frames if the count was lowered.
+        if (frameDatas.Count > frameCount)
+        {
+            frameDatas.RemoveRange(frameCount, frameDatas.Count - frameCount);
         }
     }
 
@@ -194,10 +225,10 @@ public partial class LightingEffectPage : PageBase
         }
 
         currentStrategy = FrameScan;
-        string[] layoutKeys = keyDisplayByLayoutKey.Keys.ToArray();
-        SetAllFramesColor(layoutKeys, currentStrategy);
+        SetAllFramesColor(uiGlobalIndices, currentStrategy);
         ShowFrame(0);
         StartAnimation();
+        ShowPauseButton();
     }
 
     protected override void OnEnable()
@@ -249,9 +280,12 @@ public partial class LightingEffectPage : PageBase
 
     private void BuildKeyboard()
     {
-        var keyDefs = LayoutConverter.Convert("M708.txt");
+        var keyDefs = LayoutConverter.Convert(lightingProfile.LayoutFileName);
         const float unit = 50f;
         float maxX = 0, maxY = 0;
+
+        renderedKeys.Clear();
+        var indices = new List<int>();
 
         foreach (var def in keyDefs)
         {
@@ -267,12 +301,37 @@ public partial class LightingEffectPage : PageBase
 
             keyDisplayByLayoutKey[def.Label] = display;
 
+            // Resolve the static layout-key -> global-index mapping once, up front.
+            // Keys that don't map (unknown label / not present in the matrix) are
+            // still shown but simply won't be driven by the animation.
+            if (TryGetGlobalKeyIndex(def.Label, out int globalKeyIndex))
+            {
+                renderedKeys.Add((display, globalKeyIndex));
+                indices.Add(globalKeyIndex);
+            }
+            else
+            {
+                Debug.Log($"[Keyboard] Unmapped layout key skipped: '{def.Label}'");
+            }
+
             maxX = Math.Max(maxX, px + pw);
             maxY = Math.Max(maxY, py + ph);
         }
 
+        uiGlobalIndices = indices.ToArray();
+
         KeyboardCanvas.Width = maxX + 8;
         KeyboardCanvas.Height = maxY + 8;
+    }
+
+    private bool TryGetGlobalKeyIndex(string layoutKey, out int globalKeyIndex)
+    {
+        globalKeyIndex = -1;
+        if (!lightingProfile.TryGetMatrixPosition(layoutKey, out Vector2Int vector))
+            return false;
+
+        globalKeyIndex = MatrixTransform(vector.x, vector.y, xCount);
+        return true;
     }
 
     #endregion
@@ -281,12 +340,6 @@ public partial class LightingEffectPage : PageBase
 
     private void StartAnimation()
     {
-        if (animationTimer == null)
-        {
-            animationTimer = new DispatcherTimer();
-            animationTimer.Interval = TimeSpan.FromMilliseconds(1000 / 40); // 40 FPS
-            animationTimer.Tick += AnimationTimer_Tick;
-        }
         animationTimer.Start();
     }
 
@@ -299,13 +352,19 @@ public partial class LightingEffectPage : PageBase
     {
         int currentFrame = (int)TimelineSlider.Value;
         currentFrame++;
-        if (repeatAll && currentFrame > frameCount)
+        if (currentFrame > frameCount)
         {
+            if (!repeatAll)
+            {
+                // Reached the end and not repeating: stop on the last frame.
+                PauseAnimation();
+                ShowPlayButton();
+                return;
+            }
             currentFrame = 1;
         }
+        // Setting Value raises TimelineSlider_ValueChanged, which renders the frame.
         TimelineSlider.Value = currentFrame;
-
-        ShowFrame(currentFrame - 1);
     }
 
     #endregion
@@ -317,28 +376,27 @@ public partial class LightingEffectPage : PageBase
         if (frameIndex < 0 || frameIndex >= frameDatas.Count)
             return;
         FrameData frameData = frameDatas[frameIndex];
-        foreach (var kvp in keyDisplayByLayoutKey)
+        // renderedKeys already holds the precomputed global index per key,
+        // so this hot path does no matrix lookups or conversions.
+        foreach (var (display, globalKeyIndex) in renderedKeys)
         {
-            string layoutKey = kvp.Key;
-            KeyDisplayRendered display = kvp.Value;
-            string matrixKey = ConvertToMatrixKey(layoutKey);
-            Vector2Int vector = GetKeyPositionFromMatrixKey(M708MatrixLightKeyTable, matrixKey);
-            int globalKeyIndex = MatrixTransform(vector.x, vector.y, xCount);
             byte[] rgb = frameData.GetKeyColor(globalKeyIndex);
             display.SetColor(rgb[0], rgb[1], rgb[2]);
         }
     }
 
-    public void SetAllFramesColor(string[] layoutKeys, FrameData.ColorStrategy colorStrategy)
+    public void SetAllFramesColor(int[] globalKeyIndices, FrameData.ColorStrategy colorStrategy)
     {
         foreach (var frameData in frameDatas)
         {
-            frameData.SetAllKeyColors(layoutKeys, colorStrategy, M708MatrixLightKeyTable, xCount);
+            frameData.SetAllKeyColors(globalKeyIndices, colorStrategy);
         }
     }
 
     public class FrameData
     {
+        private static readonly byte[] Off = { 0x00, 0x00, 0x00 };
+
         public readonly short frameIndex;
         public Dictionary<int, byte[]> KeyColors { get; set; } = new();
 
@@ -349,13 +407,10 @@ public partial class LightingEffectPage : PageBase
             this.frameIndex = index;
         }
 
-        public void SetAllKeyColors(string[] layoutKeys, ColorStrategy colorStrategy, string[,] matrix, byte xCount)
+        public void SetAllKeyColors(int[] globalKeyIndices, ColorStrategy colorStrategy)
         {
-            for (int i = 0; i < layoutKeys.Length; i++)
+            foreach (int globalKeyIndex in globalKeyIndices)
             {
-                string matrixKey = ConvertToMatrixKey(layoutKeys[i]);
-                Vector2Int vector = GetKeyPositionFromMatrixKey(matrix, matrixKey);
-                int globalKeyIndex = MatrixTransform(vector.x, vector.y, xCount);
                 SetKeyColor(globalKeyIndex, colorStrategy);
             }
         }
@@ -368,7 +423,8 @@ public partial class LightingEffectPage : PageBase
 
         public byte[] GetKeyColor(int globalKeyIndex)
         {
-            return KeyColors.TryGetValue(globalKeyIndex, out var rgb) ? rgb : new byte[] { 0x00, 0x00, 0x00 };
+            // Shared "off" instance avoids per-key allocations on the render path.
+            return KeyColors.TryGetValue(globalKeyIndex, out var rgb) ? rgb : Off;
         }
     }
 
@@ -509,13 +565,8 @@ public partial class LightingEffectPage : PageBase
     {
         int keyGlobalIndex = (packetIndex * keysPerPacket) + keyIndex;
 
-        return FrameScan(frameIndex, keyGlobalIndex);
-    }
-
-    private byte[] KeyScan(short frameIndex, int keyGlobalIndex)
-    {
-        bool isFrameMatchKeyIndex = keyGlobalIndex == frameIndex; // Example condition, adjust as needed
-        return isFrameMatchKeyIndex ? [0xFF, 0x00, 0x00] : [0x00, 0x00, 0x00];
+        // Use the same strategy the UI renders with, so sent packets match the preview.
+        return (currentStrategy ?? FrameScan)(frameIndex, keyGlobalIndex);
     }
 
     private byte[] FrameScan(short frameIndex, int keyGlobalIndex)
@@ -576,160 +627,9 @@ public partial class LightingEffectPage : PageBase
         return new(x, y);
     }
 
-    private static Vector2Int GetKeyPositionFromMatrixKey(string[,] matrixTable, string matrixKey)
-    {
-        for (int y = 0; y < matrixTable.GetLength(1); y++)
-        {
-            for (int x = 0; x < matrixTable.GetLength(0); x++)
-            {
-                // Matrix is horizontal y and vertical x.
-                if (matrixTable[x, y] == matrixKey)
-                {
-                    return new(x, y);
-                }
-            }
-        }
-        return new(-1, -1);
-    }
-
-    // Matrix is horizontal y and vertical x.
-    private readonly string[,] M708MatrixLightKeyTable =
-    {
-        {"L_BAR1",  "L_BAR2",   "L_BAR3",       "L_BAR4",       "L_BAR5",       "L_BAR6"},
-        {"L_BAR7",  "L_BAR8",   "L_BAR9",       "",             "",             ""},
-        {"ESC",     "TILDE",    "TAB",          "CAP",          "L_SHIFT",      "L_CTRL"},
-        {"F1",      "1",        "Q",            "A",            "CODE45(EU)",   "L_WIN"},
-        {"F2",      "2",        "W",            "S",            "Z",            "L_ALT"},
-        {"F3",      "3",        "E",            "D",            "X",            "SPACE1"},
-        {"F4",      "4",        "R",            "F",            "C",            "SPACE2"},
-        {"F5",      "5",        "T",            "G",            "V",            "SPACE3"},
-        {"F6",      "6",        "Y",            "H",            "B",            "SPACE4"},
-        {"F7",      "7",        "U",            "J",            "N",            "SPACE5"},
-        {"F8",      "8",        "I",            "K",            "M",            ""},
-        {"F9",      "9",        "O",            "L",            "COMMA",        "R_ALT"},
-        {"F10",     "0",        "P",            "SEMICOLON",    "DOT",          "FN"},
-        {"F11",     "MINUS",    "L_BRACKETS",   "APOSTROPHE",   "SLASH",        "'R_CTRL"},
-        {"F12",     "EQUAL",    "R_BRACKETS",   "CODE42(EU)",   "'R_SHIFT",     "L_ARROW"},
-        {"",        "BACKSPACE","BACKSLASH",    "ENTER",        "UP_ARROW",     "DN_ARROW"},
-        {"",        "INSERT",   "DEL",          "PGUP",         "PGDN",         "R_ARROW"},
-        {"R_BAR1",  "R_BAR2",   "R_BAR3",       "R_BAR4",       "R_BAR5",       "R_BAR6"},
-        {"R_BAR7",  "R_BAR8",   "R_BAR9",       "",             "",             ""}
-    };
-
-    private static readonly Dictionary<string, string> LayoutToMatrix = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Esc"] = "ESC",
-        ["~\\n`"] = "TILDE",
-        ["Tab"] = "TAB",
-        ["Caps Lock"] = "CAP",
-        ["L-Shift"] = "L_SHIFT",
-        ["L-Ctrl"] = "L_CTRL",
-        ["F1"] = "F1",
-        ["F2"] = "F2",
-        ["F3"] = "F3",
-        ["F4"] = "F4",
-        ["F5"] = "F5",
-        ["F6"] = "F6",
-        ["F7"] = "F7",
-        ["F8"] = "F8",
-        ["F9"] = "F9",
-        ["F10"] = "F10",
-        ["F11"] = "F11",
-        ["F12"] = "F12",
-
-        ["!\\n1"] = "1",
-        ["@\\n2"] = "2",
-        ["#\\n3"] = "3",
-        ["$\\n4"] = "4",
-        ["%\\n5"] = "5",
-        ["^\\n6"] = "6",
-        ["&\\n7"] = "7",
-        ["*\\n8"] = "8",
-        ["(\\n9"] = "9",
-        [")\\n0"] = "0",
-
-        ["Q"] = "Q",
-        ["W"] = "W",
-        ["E"] = "E",
-        ["R"] = "R",
-        ["T"] = "T",
-        ["Y"] = "Y",
-        ["U"] = "U",
-        ["I"] = "I",
-        ["O"] = "O",
-        ["P"] = "P",
-
-        ["A"] = "A",
-        ["S"] = "S",
-        ["D"] = "D",
-        ["F"] = "F",
-        ["G"] = "G",
-        ["H"] = "H",
-        ["J"] = "J",
-        ["K"] = "K",
-        ["L"] = "L",
-
-        ["Z"] = "Z",
-        ["X"] = "X",
-        ["C"] = "C",
-        ["V"] = "V",
-        ["B"] = "B",
-        ["N"] = "N",
-        ["M"] = "M",
-
-        ["_\\n-"] = "MINUS",
-        ["+\\n="] = "EQUAL",
-        ["{\\n["] = "L_BRACKETS",
-        ["}\\n]"] = "R_BRACKETS",
-        ["|\\n\\\\"] = "BACKSLASH",
-        [":\\n;"] = "SEMICOLON",
-        ["\\\"\\n'"] = "APOSTROPHE",
-        ["<\\n,"] = "COMMA",
-        [">\\n."] = "DOT",
-        ["?\\n/"] = "SLASH",
-
-        ["\\\\\\n|"] = "CODE45(EU)",
-        ["#\\n~"] = "CODE42(EU)",
-
-        ["bksp"] = "BACKSPACE",
-        ["Enter"] = "ENTER",
-        ["Insert"] = "INSERT",
-        ["Delete"] = "DEL",
-        ["PgUp"] = "PGUP",
-        ["PgDn"] = "PGDN",
-
-        ["L-Win"] = "L_WIN",
-        ["L-Alt"] = "L_ALT",
-        ["R-Alt"] = "R_ALT",
-        ["Fn"] = "FN",
-        ["R-Ctrl"] = "R_CTRL",
-        ["R-Shift"] = "R_SHIFT",
-
-        ["↑"] = "UP_ARROW",
-        ["↓"] = "DN_ARROW",
-        ["←"] = "L_ARROW",
-        ["→"] = "R_ARROW",
-
-        ["Space"] = "SPACE1",
-        [""] = "SPACE1"
-    };
-
-    public static string ConvertToMatrixKey(string layoutKey)
-    {
-        return layoutKey == null
-            ? throw new ArgumentNullException(nameof(layoutKey))
-            : LayoutToMatrix.TryGetValue(layoutKey.Trim(), out string matrixKey)
-            ? matrixKey
-            :
-        throw new KeyNotFoundException($"Unknown layout key: '{layoutKey}'.");
-    }
-
-    public static bool TryConvertToMatrixKey(string layoutKey, out string matrixKey)
-    {
-        matrixKey = string.Empty;
-
-        return layoutKey == null ? false : LayoutToMatrix.TryGetValue(layoutKey.Trim(), out matrixKey);
-    }
+    // The model-specific light-key matrix and layout->matrix map now live in the
+    // keyboard lighting profile (see ArmouryProtocol.Lighting). Resolve positions
+    // through 'lightingProfile' instead.
 
     #endregion
 }

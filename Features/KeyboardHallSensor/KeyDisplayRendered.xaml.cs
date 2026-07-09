@@ -13,6 +13,12 @@ public partial class KeyDisplayRendered : UserControl
     public byte G { get; set; }
     public byte B { get; set; }
 
+    // Reused for every color update so the 40 FPS animation doesn't allocate a
+    // fresh brush per key per frame. Per-frame allocations churned gen-0 GC and
+    // caused the occasional single-frame stutter.
+    private readonly SolidColorBrush foregroundBrush = new(Colors.Black);
+    private bool brushAttached;
+
     public KeyDisplayRendered(byte keycode, float w, float h, string label = "")
     {
         InitializeComponent();
@@ -44,11 +50,22 @@ public partial class KeyDisplayRendered : UserControl
 
     public void SetColor(byte r, byte g, byte b)
     {
+        // Skip redundant updates: most keys keep the same color frame-to-frame.
+        if (brushAttached && R == r && G == g && B == b)
+            return;
+
         R = r;
         G = g;
         B = b;
-        Color color = Color.FromRgb(r, g, b);
-        LabelText.Foreground = new SolidColorBrush(color);
+
+        // Mutating the existing brush's Color repaints without allocating.
+        foregroundBrush.Color = Color.FromRgb(r, g, b);
+
+        if (!brushAttached)
+        {
+            LabelText.Foreground = foregroundBrush;
+            brushAttached = true;
+        }
     }
     public byte[] GetColorBytes()
     {
