@@ -16,7 +16,7 @@ public partial class KeyDisplayRendered : UserControl
     // Reused for every color update so the 40 FPS animation doesn't allocate a
     // fresh brush per key per frame. Per-frame allocations churned gen-0 GC and
     // caused the occasional single-frame stutter.
-    private readonly SolidColorBrush foregroundBrush = new(Colors.Black);
+    private readonly SolidColorBrush brush = new(Colors.Black);
     private bool brushAttached;
 
     public KeyDisplayRendered(byte keycode, float w, float h, string label = "")
@@ -28,19 +28,11 @@ public partial class KeyDisplayRendered : UserControl
         Keycode = keycode;
         Label = label;
 
-        label = label.Replace("L-", "").Replace("R-", "");
-        if(label == "") label = "-----";
+        LabelText.Text = label;
+        if(label.Length == 1) LabelText.FontSize = 16;
 
-        string[] splits = label.Split(new[] { "\\n" }, StringSplitOptions.None);
-        if (splits.Length == 1)
-        {
-            LabelText.Text = label;
-            if(label.Length == 1) LabelText.FontSize = 16;
-        }
-        else
-        {
-            LabelText.Text = $"{splits[1]}  {splits[0]}";
-        }
+        if (label.Length > 0) LabelText.Foreground = brush;
+        else KeySurface.Background = brush;
     }
 
     public void SetText(string text)
@@ -59,11 +51,11 @@ public partial class KeyDisplayRendered : UserControl
         B = b;
 
         // Mutating the existing brush's Color repaints without allocating.
-        foregroundBrush.Color = Color.FromRgb(r, g, b);
+        brush.Color = Color.FromRgb(r, g, b);
 
         if (!brushAttached)
         {
-            LabelText.Foreground = foregroundBrush;
+            LabelText.Foreground = brush;
             brushAttached = true;
         }
     }

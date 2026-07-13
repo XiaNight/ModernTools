@@ -48,13 +48,13 @@ public static class DynamicPresets
             });
 
         // A bright bar sweeping left <-> right and bouncing.
-        yield return new FuncPreset("Scanner", Cat, 96,
+        yield return new FuncPreset("Scanner", Cat, 192,
             (f, fc, k) =>
             {
                 float phase = Phase(f, fc);
                 float bar = 1f - MathF.Abs(1f - (2f * phase)); // triangle 0 -> 1 -> 0
                 float dist = MathF.Abs(k.NormX - bar);
-                float v = Clamp01(1f - (dist * 6f));           // narrow bar
+                float v = Clamp01(1f - (dist * 20f));           // narrow bar
                 return HsvToRgb(0f, 1f, v);
             });
 

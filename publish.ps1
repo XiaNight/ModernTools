@@ -211,10 +211,18 @@ if ($invalidReason) {
     Write-Host "New version: $Version" -ForegroundColor Green
 
     # Persist the bump to the csproj so the compiled assembly matches the zip names.
-    $csprojText = Get-Content $mainProj -Raw
+    # Read/write via .NET with the file's detected encoding preserved (and rewritten
+    # as UTF-8 *with BOM*, the VS/csproj default). Using Get-Content/Set-Content without
+    # -Encoding would rewrite the file in the ANSI codepage on Windows PowerShell and
+    # corrupt non-ASCII characters like the copyright sign (C2 A9 -> lone A9).
+    $sr = New-Object System.IO.StreamReader($mainProj, $true)   # detect encoding from BOM
+    $csprojText = $sr.ReadToEnd()
+    $hadBom = $sr.CurrentEncoding.GetPreamble().Length -gt 0
+    $sr.Dispose()
     if ($csprojText -match '<InformationalVersion>(.*?)</InformationalVersion>') {
         $csprojText = $csprojText -replace '<InformationalVersion>.*?</InformationalVersion>', "<InformationalVersion>$Version</InformationalVersion>"
-        Set-Content -Path $mainProj -Value $csprojText -NoNewline
+        $enc = New-Object System.Text.UTF8Encoding($hadBom)     # keep BOM if the file had one
+        [System.IO.File]::WriteAllText($mainProj, $csprojText, $enc)
         Write-Host "Updated <InformationalVersion> in $mainProj." -ForegroundColor DarkGray
     }
     else {
@@ -334,11 +342,18 @@ Write-Host "Computing host assembly manifest..." -ForegroundColor Yellow
 $manifestDir = Join-Path $buildRoot '_host_manifest'
 if (Test-Path $manifestDir) { Remove-Item $manifestDir -Recurse -Force }
 New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
-& dotnet publish $mainProj -c $config -r $rid `
+# Capture output (stdout+stderr) instead of discarding it, so if the publish fails
+# the real dotnet/MSBuild diagnostics are shown instead of a bare "failed".
+$manifestLog = & dotnet publish $mainProj -c $config -r $rid `
     -p:SelfContained=false -p:PublishSingleFile=false -p:PublishReadyToRun=false `
     -p:SkipPluginPublish=true -p:DebugType=none -p:DebugSymbols=false `
-    -o $manifestDir | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Host manifest publish failed." }
+    -o $manifestDir 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n--- dotnet publish output (host manifest) ---" -ForegroundColor Red
+    $manifestLog | ForEach-Object { Write-Host $_ }
+    Write-Host "--- end output ---`n" -ForegroundColor Red
+    throw "Host manifest publish failed (dotnet exit $LASTEXITCODE). See output above."
+}
 $hostFiles = @{}
 Get-ChildItem $manifestDir -Recurse -File -Filter *.dll | ForEach-Object { $hostFiles[$_.Name] = $true }
 Write-Host "Host provides $($hostFiles.Count) assemblies." -ForegroundColor DarkGray
@@ -357,5 +372,18 @@ if ($parsed) {
     }
 }
 
-Write-Host "`n=== Done ===" -ForegroundColor Green
+# --- Success banner: clear the terminal, show a big PASS with the built version. ---
+Clear-Host
+$pass = @(
+    '██████   █████  ███████ ███████',
+    '██   ██ ██   ██ ██      ██     ',
+    '██████  ███████ ███████ ███████',
+    '██      ██   ██      ██      ██',
+    '██      ██   ██ ███████ ███████'
+)
+Write-Host ""
+$pass | ForEach-Object { Write-Host $_ -ForegroundColor Green }
+Write-Host ""
+Write-Host "        Building version: $Version" -ForegroundColor Cyan
+Write-Host ""
 $zips | ForEach-Object { Write-Host "  $_" -ForegroundColor White }

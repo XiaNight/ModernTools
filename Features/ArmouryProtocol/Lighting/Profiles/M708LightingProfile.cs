@@ -137,6 +137,26 @@ public sealed class M708LightingProfile : KeyboardLightingProfile
         ["→"] = "R_ARROW",
 
         ["Space"] = "SPACE1",
-        [""] = "SPACE1"
+        [""] = "SPACE1",
+
+        ["L-BAR1"] = "L_BAR1",
+        ["L-BAR2"] = "L_BAR2",
+        ["L-BAR3"] = "L_BAR3",
+        ["L-BAR4"] = "L_BAR4",
+        ["L-BAR5"] = "L_BAR5",
+        ["L-BAR6"] = "L_BAR6",
+        ["L-BAR7"] = "L_BAR7",
+        ["L-BAR8"] = "L_BAR8",
+        ["L-BAR9"] = "L_BAR9",
+
+        ["R-BAR1"] = "R_BAR1",
+        ["R-BAR2"] = "R_BAR2",
+        ["R-BAR3"] = "R_BAR3",
+        ["R-BAR4"] = "R_BAR4",
+        ["R-BAR5"] = "R_BAR5",
+        ["R-BAR6"] = "R_BAR6",
+        ["R-BAR7"] = "R_BAR7",
+        ["R-BAR8"] = "R_BAR8",
+        ["R-BAR9"] = "R_BAR9",
     };
 }

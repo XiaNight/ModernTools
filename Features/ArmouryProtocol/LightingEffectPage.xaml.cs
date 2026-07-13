@@ -6,6 +6,7 @@ using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
 using KeyboardHallSensor;
+using System.Reflection.Emit;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -42,24 +43,47 @@ namespace ArmouryProtocol;
 [PageInfo("Advanced Lighting", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
+    [Persist]
     [Config(key: "總共Frame數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Auto, Header = "3-1 Set Advance Effect (Layer) - Mode", Changed = nameof(FrameCountChanged))]
     private readonly short frameCount = 0x72;
-
+    
+    [Persist]
     [Config(key: "X數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
     private readonly byte xCount = 0x13;
-
+    
+    [Persist]
     [Config(key: "Y數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
     private readonly byte yCount = 0x06;
-
+    
+    [Persist]
     [Config(key: "Key數量", Min = 1, Header = "3-2 Set Advance Effect (Layer) - Data")]
     private readonly byte keyCount = 0x72;
-
+    
+    [Persist]
     [Config(key: "速度", Min = 0x00, Max = 0xfe, Header = "3-3 Set Advance Effect (Reactive)", Type = ConfigType.Hex)]
     private readonly byte reactiveSpeed = 0x30;
 
+    [Persist]
+    [Config(key: "Single/Double")]
+    private readonly ReactiveMode reactiveMode = ReactiveMode.Single;
+    
+    [Persist]
+    [Config(key: "Random")]
+    private readonly ReactiveRandom reactiveRand = ReactiveRandom.On;
+
+    [Persist]
+    [Config(key: "Color Level 1", Type = ConfigType.Hex)]
+    private readonly long reactiveColor1 = 0x000000;
+
+    [Persist]
+    [Config(key: "Color Level 2", Type = ConfigType.Hex)]
+    private readonly long reactiveColor2 = 0x000000;
+
+    [Persist]
     [Config(key: "亮度", Min = 1, Max = 100, Type = ConfigType.Slider)]
     private readonly byte reactiveBrightness = 100;
-
+    
+    [Persist]
     [Config(key: "亮度", Min = 1, Max = 100, Header = "3-4 Set Advance Effect (Layer) - Brightness", Type = ConfigType.Slider)]
     private readonly byte brightness = 50;
 
@@ -88,6 +112,11 @@ public partial class LightingEffectPage : PageBase
 
     // While sending, the preview scrubs to whichever frame is currently going out.
     private volatile bool sendPreviewActive;
+
+    // Re-send guard: cap how many times a single frame may be re-sent per upload so a
+    // persistently-failing frame can't loop forever.
+    private const int MaxFrameResends = 3;
+    private readonly Dictionary<int, int> frameResendCounts = new();
 
     // Frames the current effect spans: the preset's own count, or the manual
     // frame-count config for developer strategies (FrameCount == 0).
@@ -219,6 +248,7 @@ public partial class LightingEffectPage : PageBase
         DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToDevice;
         DeviceSelection.Instance.OnActiveDeviceDisconnected += OnActiveDeviceDisconnected;
         ProtocolService.OnCmdSent += HandleCmdSent;
+        ProtocolService.OnCmdResponse += HandleCmdResponse;
 
         BuildKeyboard();
         PopulatePresets();
@@ -329,6 +359,7 @@ public partial class LightingEffectPage : PageBase
             if (deviceInterface == null) return;
 
             ActiveInterface = deviceInterface.Connect(true);
+            ActiveInterface.OnDataReceived += ActiveInterface_OnDataReceived;
         }
         catch (Exception ex)
         {
@@ -337,8 +368,14 @@ public partial class LightingEffectPage : PageBase
         }
     }
 
+    private void ActiveInterface_OnDataReceived(ReadOnlyMemory<byte> arg1, DateTime arg2)
+    {
+        
+    }
+
     private void OnActiveDeviceDisconnected()
     {
+        ActiveInterface.OnDataReceived -= ActiveInterface_OnDataReceived;
         ActiveInterface = null;
     }
 
@@ -368,7 +405,12 @@ public partial class LightingEffectPage : PageBase
             float pw = def.W * unit;
             float ph = def.H * unit;
 
-            var display = new KeyDisplayRendered(0, pw, ph, def.Label);
+            bool isLED = def.Mods != null && def.Mods.Any(kv => (string.Compare(kv.Key, "d")) == 0 && (string.Compare(kv.Value, "true") == 0));
+
+            string displayName = ConvertToDisplayName(def.Label);
+            if (isLED) displayName = "";
+
+            var display = new KeyDisplayRendered(0, pw, ph, displayName);
             Canvas.SetLeft(display, px);
             Canvas.SetTop(display, py);
             KeyboardCanvas.Children.Add(display);
@@ -416,6 +458,23 @@ public partial class LightingEffectPage : PageBase
 
         KeyboardCanvas.Width = maxPxX + 8;
         KeyboardCanvas.Height = maxPxY + 8;
+    }
+
+    private string ConvertToDisplayName(string label)
+    {
+        string displayName = label;
+        displayName = displayName.Replace("L-", "").Replace("R-", "");
+        if(displayName == "") displayName = "-----";
+
+        string[] splits = displayName.Split(["\\n"], StringSplitOptions.None);
+        if (splits.Length == 1)
+        {
+            return displayName;
+        }
+        else
+        {
+            return $"{splits[1]}  {splits[0]}";
+        }
     }
 
     #endregion
@@ -511,6 +570,9 @@ public partial class LightingEffectPage : PageBase
             ShowPlayButton();
         }
 
+        // Fresh retry budget for this upload.
+        frameResendCounts.Clear();
+
         int checksum = 0;
         byte[] initialPacket = Construct3_1Mode();
         List<byte[]> frameBytes = Construct3_2Data(ref checksum);
@@ -518,7 +580,7 @@ public partial class LightingEffectPage : PageBase
         byte[] brightnessPacket = Construct3_4Brightness();
         byte[] applyPacket = Construct3_5Apply(checksum);
 
-        ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000);
+        ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000); 
 
         for (int framePacketId = 0; framePacketId < frameBytes.Count; framePacketId++)
         {
@@ -560,6 +622,69 @@ public partial class LightingEffectPage : PageBase
                 Dispatcher.BeginInvoke((Action)EndSendPreview);
                 break;
         }
+    }
+
+    // Fired (on the send worker thread) after a wait-for-response packet completes,
+    // carrying the keyboard's reply. The keyboard NAKs a frame whose final packet it
+    // couldn't process and asks us to re-send that whole frame.
+    private void HandleCmdResponse(ProtocolService.CmdData cmd, byte[] response)
+    {
+        byte[] sent = cmd.Cmd;
+
+        // Frame index comes from the packet we sent (C1 01 frameLo frameHi ...).
+        // Only 3-2 "Data" packets are re-sendable frames, and only their last packet
+        // is sent wait=true, so this only fires for a frame's final packet.
+        if (sent == null || sent.Length < 4 || sent[0] != 0xC1 || sent[1] != 0x01)
+            return;
+
+        // Error status comes from the keyboard's reply, not the packet we sent.
+        // The HID input report carries the report ID in byte 0 (the packet we send
+        // has none - WriteAsync adds it), so skip it to line the reply payload up
+        // with the marked offsets. NOTE: confirm offsets/values against the FW spec.
+        const int ReportIdSize = 1;
+        int statusHiIndex = ReportIdSize + 4;
+        int statusLoIndex = ReportIdSize + 5;
+        if (response == null || response.Length <= statusLoIndex)
+            return;
+
+        bool ff = response[statusHiIndex] == 0xFF;
+        bool aa = response[statusLoIndex] == 0xAA;
+        if (!(ff && aa))
+            return;
+
+        int frameIndex = sent[2] | (sent[3] << 8);
+
+        // Re-send on the UI thread so we don't race preset regeneration of frameDatas.
+        ResendFrame(frameIndex);
+    }
+
+    // Immediately re-queues an entire frame's packets ahead of the remaining upload,
+    // using the same wait rule as the normal send (last packet waits, so a repeated
+    // failure is reported and retried up to MaxFrameResends).
+    private void ResendFrame(int frameIndex)
+    {
+        if (ActiveInterface == null)
+            return;
+        if (frameIndex < 0 || frameIndex >= frameDatas.Count)
+            return;
+
+        int already = frameResendCounts.TryGetValue(frameIndex, out int n) ? n : 0;
+        if (already >= MaxFrameResends)
+        {
+            Debug.Log($"[Lighting] Frame {frameIndex} still failing after {already} re-sends; giving up.");
+            return;
+        }
+        frameResendCounts[frameIndex] = already + 1;
+
+        int discardChecksum = 0;
+        List<byte[]> packets = Construct3_2SingleFrame((short)frameIndex, ref discardChecksum);
+        for (int i = 0; i < packets.Count; i++)
+        {
+            // Same waiting rule as the normal send loop (framePacketId % 6 == 5).
+            ProtocolService.AppendCmdImmediate(ActiveInterface, packets[i], i % 6 == 5);
+        }
+
+        Debug.Log($"[Lighting] Re-sending frame {frameIndex} (attempt {already + 1}).");
     }
 
     private void ScrubToSendingFrame(int frameIndex)
@@ -667,7 +792,17 @@ public partial class LightingEffectPage : PageBase
     private List<byte[]> Construct3_3Reactive()
     {
         List<byte[]> dataList = new();
-        byte[] data = [0xC1, 0x02, 0x03, 0x00, reactiveSpeed, reactiveBrightness, 0x01, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        byte byte6 = (byte)(((byte)reactiveMode << 4) | (byte)reactiveRand);
+
+        byte color1R = (byte)((reactiveColor1 >> 16) & 0xFF);
+        byte color1G = (byte)((reactiveColor1 >> 8) & 0xFF);
+        byte color1B = (byte)(reactiveColor1 & 0xFF);
+
+        byte color2R = (byte)((reactiveColor2 >> 16) & 0xFF);
+        byte color2G = (byte)((reactiveColor2 >> 8) & 0xFF);
+        byte color2B = (byte)(reactiveColor2 & 0xFF);
+
+        byte[] data = [0xC1, 0x02, 0x03, 0x00, reactiveSpeed, reactiveBrightness, byte6, 0xFF, 0xFF, color1R, color1G, color1B, color2R, color2G, color2B, 0x00, 0x00, 0x00, 0x00, 0x00];
         dataList.Add(data);
         return dataList;
     }
@@ -723,4 +858,15 @@ public partial class LightingEffectPage : PageBase
     // through 'lightingProfile' instead.
 
     #endregion
+
+    private enum ReactiveMode : byte
+    {
+        Single = 0x0000,
+        Double = 0x0001,
+    }
+    private enum ReactiveRandom : byte
+    {
+        Off = 0x0000,
+        On = 0x0001,
+    }
 }

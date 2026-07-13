@@ -16,12 +16,10 @@
 			BorderThickness="0"
 			CornerRadius="6">
 		</Border>
-		<Border
-			ClipToBounds="True"
-			BorderThickness="0"
-			Margin="4,0,4,4"
-			Background="#33FFFFFF"
-			CornerRadius="6">
+		<Border x:Name="KeySurface"
+			ClipToBounds="True" Margin="4,0,4,4"
+			BorderThickness="0" CornerRadius="6"
+			Background="#33FFFFFF">
 			<Grid x:Name="ContentContainer">
 				<TextBlock x:Name="LabelText" Text="A"
 						   FontFamily="HYHeadLine-Medium" FontSize="12" FontWeight="Bold"
