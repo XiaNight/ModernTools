@@ -19,5 +19,8 @@ namespace Base.Helpers
                 return false;
             }
         }
+
+        public static byte LowByte(this short value) => (byte)(value & 0xFF);
+        public static byte HighByte(this short value) => (byte)((value >> 8) & 0xFF);
     }
 }

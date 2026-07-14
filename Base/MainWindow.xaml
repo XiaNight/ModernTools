@@ -21,285 +21,288 @@
         WindowStyle="None"
         Background="{DynamicResource ApplicationPageBackgroundThemeBrush}"
         d:Height="480" d:Width="960">
-    <Window.Resources>
-        <!-- Icon Styles -->
-        <Style x:Key="NavButtonStyle" TargetType="{x:Type ButtonBase}">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding" Value="12,12"/>
-            <Setter Property="Height" Value="48"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ButtonBase}">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
+	<Window.Resources>
+		<!-- Icon Styles -->
+		<Style x:Key="NavButtonStyle" TargetType="{x:Type ButtonBase}">
+			<Setter Property="Background" Value="Transparent"/>
+			<Setter Property="BorderThickness" Value="0"/>
+			<Setter Property="HorizontalContentAlignment" Value="Left"/>
+			<Setter Property="Padding" Value="12,12"/>
+			<Setter Property="Height" Value="48"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="{x:Type ButtonBase}">
+						<Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+							<ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+						</Border>
+						<ControlTemplate.Triggers>
+							<Trigger Property="IsMouseOver" Value="True">
+								<Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+							</Trigger>
+							<Trigger Property="IsPressed" Value="True">
+								<Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+							</Trigger>
+						</ControlTemplate.Triggers>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+		</Style>
+	</Window.Resources>
 
-    <Grid>
-        <Grid>
-            <Grid.RowDefinitions>
-                <!-- Menu Bar -->
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="2"/>
-                <RowDefinition Height="Auto"/>
-                <!-- Main Content -->
-                <RowDefinition Height="*"/>
-                <!-- Log Window -->
-                <RowDefinition Height="Auto"/>
-                <!-- Footer -->
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+	<Grid>
+		<Grid>
+			<Grid.RowDefinitions>
+				<!-- Menu Bar -->
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="2"/>
+				<RowDefinition Height="Auto"/>
+				<!-- Main Content -->
+				<RowDefinition Height="*"/>
+				<!-- Drag Bar -->
+				<RowDefinition Height="Auto"/>
+				<!-- Log Window -->
+				<RowDefinition Height="Auto"/>
+				<!-- Footer -->
+				<RowDefinition Height="Auto"/>
+			</Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+			<Grid Grid.Row="0" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
 
-            <!-- Top Menu Bar -->
-            <!-- Remember to set WindowChrome.SetIsHitTestVisibleInChrome individually. -->
-            <Grid x:Name="AppTitleBar" Grid.Row="0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="48"/>
-                    <ColumnDefinition Width="48"/>
-                    <ColumnDefinition Width="48"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+			<!-- Top Menu Bar -->
+			<!-- Remember to set WindowChrome.SetIsHitTestVisibleInChrome individually. -->
+			<Grid x:Name="AppTitleBar" Grid.Row="0">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="48"/>
+					<ColumnDefinition Width="48"/>
+					<ColumnDefinition Width="48"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="Auto"/>
+				</Grid.RowDefinitions>
 
-                <Image x:Name="AppIcon" Grid.Column="0" Margin="6, 0, 6, 0" Source="/Base;component/Assets/Icons/AppIcon_Flat_64.png" Width="40" Height="40">
-                    <Image.RenderTransform>
-                        <ScaleTransform ScaleX="1.0" ScaleY="1.0" CenterX="12" CenterY="12"/>
-                    </Image.RenderTransform>
-                </Image>
+				<Image x:Name="AppIcon" Grid.Column="0" Margin="6, 0, 6, 0" Source="/Base;component/Assets/Icons/AppIcon_Flat_64.png" Width="40" Height="40">
+					<Image.RenderTransform>
+						<ScaleTransform ScaleX="1.0" ScaleY="1.0" CenterX="12" CenterY="12"/>
+					</Image.RenderTransform>
+				</Image>
 
-                <Menu x:Name="MenuBar" Grid.Column="1" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                    <MenuItem Header="_File">
-                        <MenuItem Header="_New" InputGestureText="Ctrl+N"/>
-                        <MenuItem Header="_Open" InputGestureText="Ctrl+O"/>
-                        <Separator/>
-                        <MenuItem Header="_Exit" Click="Exit_Click"/>
-                    </MenuItem>
-                    <MenuItem Header="_Edit">
-                        <MenuItem Header="_Preference" InputGestureText="Ctrl+," Click="OpenPreferences"/>
-                    </MenuItem>
-                    <MenuItem Header="_Tools" x:Name="ToolsMenu">
-                    </MenuItem>
-                    <MenuItem Header="_View">
-                        <MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
-                        <MenuItem Header="Toggle _Log Window" Click="ToggleLog_Click"/>
-                    </MenuItem>
-                    <MenuItem Header="_Help">
-                        <MenuItem Header="_About" Click="ShowAbout"/>
-                        <MenuItem Header="Report a Problem..." Click="RedirectToFeedbackURL"/>
-                        <MenuItem Header="Suggest a Feature..." Click="RedirectToFeatureRequestURL"/>
-                    </MenuItem>
-                </Menu>
-                <StackPanel x:Name="TitleBarControls"
+				<Menu x:Name="MenuBar" Grid.Column="1" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+					<MenuItem Header="_File">
+						<MenuItem Header="_New" InputGestureText="Ctrl+N"/>
+						<MenuItem Header="_Open" InputGestureText="Ctrl+O"/>
+						<Separator/>
+						<MenuItem Header="_Exit" Click="Exit_Click"/>
+					</MenuItem>
+					<MenuItem Header="_Edit">
+						<MenuItem Header="_Preference" InputGestureText="Ctrl+," Click="OpenPreferences"/>
+					</MenuItem>
+					<MenuItem Header="_Tools" x:Name="ToolsMenu">
+					</MenuItem>
+					<MenuItem Header="_View">
+						<MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
+						<MenuItem Header="Toggle _Log Window" Click="ToggleLog_Click"/>
+					</MenuItem>
+					<MenuItem Header="_Help">
+						<MenuItem Header="_About" Click="ShowAbout"/>
+						<MenuItem Header="Report a Problem..." Click="RedirectToFeedbackURL"/>
+						<MenuItem Header="Suggest a Feature..." Click="RedirectToFeatureRequestURL"/>
+					</MenuItem>
+				</Menu>
+				<StackPanel x:Name="TitleBarControls"
                             HorizontalAlignment="Center" Orientation="Horizontal"
                             Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Grid.Row" Value="0"/>
-                            <Setter Property="Grid.Column" Value="2"/>
-                            <Setter Property="Grid.ColumnSpan" Value="1"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CurrentLayoutMode,
+					<StackPanel.Style>
+						<Style TargetType="StackPanel">
+							<Setter Property="Grid.Row" Value="0"/>
+							<Setter Property="Grid.Column" Value="2"/>
+							<Setter Property="Grid.ColumnSpan" Value="1"/>
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding CurrentLayoutMode,
                                          RelativeSource={RelativeSource AncestorType=Window}}"
                                          Value="{x:Static local:LayoutMode.Compact}">
-                                    <Setter Property="Grid.Row" Value="1"/>
-                                    <Setter Property="Grid.Column" Value="0"/>
-                                    <Setter Property="Grid.ColumnSpan" Value="6"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <ComboBox x:Name="PortComboBox" Grid.Column="2" Margin="5,4" VerticalAlignment="Stretch" MinWidth="200"/>
+									<Setter Property="Grid.Row" Value="1"/>
+									<Setter Property="Grid.Column" Value="0"/>
+									<Setter Property="Grid.ColumnSpan" Value="6"/>
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</StackPanel.Style>
+					<ComboBox x:Name="PortComboBox" Grid.Column="2" Margin="5,4" VerticalAlignment="Stretch" MinWidth="200"/>
 
-                    <Grid Grid.Column="4">
-                        <Button x:Name="ConnectButton" Margin="5,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Connect" Padding="8,0"/>
-                        <Button x:Name="DisconnectButton" Margin="5,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Disconnect" Padding="8,0" Visibility="Hidden"/>
-                    </Grid>
-                </StackPanel>
+					<Grid Grid.Column="4">
+						<Button x:Name="ConnectButton" Margin="5,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Connect" Padding="8,0"/>
+						<Button x:Name="DisconnectButton" Margin="5,4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Content="Disconnect" Padding="8,0" Visibility="Hidden"/>
+					</Grid>
+				</StackPanel>
 
-                <Grid Margin="4" VerticalAlignment="Stretch">
-                    <Grid.Style>
-                        <Style TargetType="Grid">
-                            <Setter Property="Grid.Row" Value="0"/>
-                            <Setter Property="Grid.Column" Value="3"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding CurrentLayoutMode,
+				<Grid Margin="4" VerticalAlignment="Stretch">
+					<Grid.Style>
+						<Style TargetType="Grid">
+							<Setter Property="Grid.Row" Value="0"/>
+							<Setter Property="Grid.Column" Value="3"/>
+							<Style.Triggers>
+								<DataTrigger Binding="{Binding CurrentLayoutMode,
                                          RelativeSource={RelativeSource AncestorType=Window}}"
                                          Value="{x:Static local:LayoutMode.Compact}">
-                                    <Setter Property="Grid.Row" Value="1"/>
-                                    <Setter Property="Grid.Column" Value="6"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Grid.Style>
-                    <Button x:Name="ConfigButton" VerticalAlignment="Stretch" ToolTip="Configuration" Click="ConfigButton_Click">
-                        <ui:FontIcon Glyph="&#xE90F;"  FontSize="18" FontFamily="Segoe Fluent Icons"/>
-                    </Button>
-                </Grid>
-            </Grid>
+									<Setter Property="Grid.Row" Value="1"/>
+									<Setter Property="Grid.Column" Value="6"/>
+								</DataTrigger>
+							</Style.Triggers>
+						</Style>
+					</Grid.Style>
+					<Button x:Name="ConfigButton" VerticalAlignment="Stretch" ToolTip="Configuration" Click="ConfigButton_Click">
+						<ui:FontIcon Glyph="&#xE90F;"  FontSize="18" FontFamily="Segoe Fluent Icons"/>
+					</Button>
+				</Grid>
+			</Grid>
 
-            <!-- Loading Bar -->
-            <Grid Grid.Row="1" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
-            <ProgressBar Grid.Row="1" IsIndeterminate="True" x:Name="PageLoadingBar" Visibility="Collapsed"
+			<!-- Loading Bar -->
+			<Grid Grid.Row="1" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"/>
+			<ProgressBar Grid.Row="1" IsIndeterminate="True" x:Name="PageLoadingBar" Visibility="Collapsed"
                          Background="{DynamicResource SystemControlBackgroundChromeLowBrush}">
-            </ProgressBar>
+			</ProgressBar>
 
-            <!-- Banners are added at runtime through BannerManager.Instance. -->
-            <StackPanel x:Name="BannerContainer" Grid.Row="2"/>
+			<!-- Banners are added at runtime through BannerManager.Instance. -->
+			<StackPanel x:Name="BannerContainer" Grid.Row="2"/>
 
-            <!-- Main Content Area with Navigation -->
-            <Grid Grid.Row="3">
-                <Grid.ColumnDefinitions>
-                    <!-- Navigation Panel -->
-                    <ColumnDefinition Width="Auto"/>
-                    <!-- Content -->
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+			<!-- Main Content Area with Navigation -->
+			<Grid Grid.Row="3">
+				<Grid.ColumnDefinitions>
+					<!-- Navigation Panel -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Content -->
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
 
-                <!-- Left Navigation Panel -->
-                <Grid Grid.Column="0" VerticalAlignment="Stretch">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <Border
+				<!-- Left Navigation Panel -->
+				<Grid Grid.Column="0" VerticalAlignment="Stretch">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+					<Border
                         Grid.Row="0" Grid.RowSpan="2"
                         Background="{DynamicResource NavigationViewDefaultPaneBackground}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
                         BorderThickness="0,0,4,0">
-                    </Border>
-                    <Button Grid.Row="0"
+					</Border>
+					<Button Grid.Row="0"
                             x:Name="NavToggleButton"
                             Click="ToggleNav_Click"
                             Style="{DynamicResource NavButtonStyle}"
                             ToolTip="Toggle Navigation Panel">
-                        <StackPanel Orientation="Horizontal">
-                            <ui:FontIcon Glyph="&#xE700;" FontSize="20" Margin="6,0" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                            <TextBlock x:Name="NavToggleText"
+						<StackPanel Orientation="Horizontal">
+							<ui:FontIcon Glyph="&#xE700;" FontSize="20" Margin="6,0" Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+							<TextBlock x:Name="NavToggleText"
                                            Text="" 
                                            Margin="0,0,0,0"
                                            VerticalAlignment="Center"
                                            Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                        </StackPanel>
-                    </Button>
+						</StackPanel>
+					</Button>
 
-                    <mtc:VerticalTabsManager x:Name="NavTabsManager" Grid.Row="1" Width="270"
+					<mtc:VerticalTabsManager x:Name="NavTabsManager" Grid.Row="1" Width="270"
                                              Margin="0,0,0,0" VerticalAlignment="Stretch"
                                              OpenWidth="270" ClosedWidth="60">
-                        <mtc:VerticalTabsManager.TopButtons>
-                            <mtc:NavigationExpander Text="Keyboard" Glyph="&#xE765;" OrderIndex="100"/>
-                            <mtc:NavigationExpander Text="Mouse" Glyph="&#xE962;" OrderIndex="100"/>
-                            <mtc:NavigationExpander Text="Audio" Glyph="&#xE8D6;" OrderIndex="100"/>
-                            <mtc:NavigationExpander Text="ATE" Glyph="&#xE707;" OrderIndex="100"/>
-                        </mtc:VerticalTabsManager.TopButtons>
+						<mtc:VerticalTabsManager.TopButtons>
+							<mtc:NavigationExpander Text="Keyboard" Glyph="&#xE765;" OrderIndex="100"/>
+							<mtc:NavigationExpander Text="Mouse" Glyph="&#xE962;" OrderIndex="100"/>
+							<mtc:NavigationExpander Text="Audio" Glyph="&#xE8D6;" OrderIndex="100"/>
+							<mtc:NavigationExpander Text="ATE" Glyph="&#xE707;" OrderIndex="100"/>
+						</mtc:VerticalTabsManager.TopButtons>
 
-                        <mtc:VerticalTabsManager.BottomButtons>
-                            <mtc:NavigationButton Text="Settings" Glyph="&#xE713;"/>
-                        </mtc:VerticalTabsManager.BottomButtons>
-                    </mtc:VerticalTabsManager>
+						<mtc:VerticalTabsManager.BottomButtons>
+							<mtc:NavigationButton Text="Settings" Glyph="&#xE713;"/>
+						</mtc:VerticalTabsManager.BottomButtons>
+					</mtc:VerticalTabsManager>
 
-                </Grid>
+				</Grid>
 
-                <!-- Main Content Frame -->
-                <Grid x:Name="ContentFrame" Grid.Column="1" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
-                </Grid>
-            </Grid>
+				<!-- Main Content Frame -->
+				<Grid x:Name="ContentFrame" Grid.Column="1" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
+				</Grid>
+			</Grid>
 
-            <!-- Bottom Log Window -->
-            <Grid Grid.Row="4" x:Name="LogPanel" Height="200" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <!-- Header -->
-                    <RowDefinition Height="*"/>
-                    <!-- Content -->
-                </Grid.RowDefinitions>
+			<!-- Bottom Log Window -->
+			<Grid Grid.Row="5" x:Name="LogPanel" Visibility="Collapsed">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<!-- Header -->
+					<RowDefinition Height="*"/>
+					<!-- Content -->
+				</Grid.RowDefinitions>
 
-                <!-- Log Header -->
-                <Border Grid.Row="0"
+				<!-- Log Header -->
+				<Border Grid.Row="0"
                         Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                         BorderThickness="0,1,0,0"
                         Padding="12,8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+					<Grid>
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="Auto"/>
+						</Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" 
+						<TextBlock Grid.Column="0" 
                                  Text="Output Log" 
                                  FontWeight="SemiBold"
                                  VerticalAlignment="Center"/>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="Clear" 
+						<StackPanel Grid.Column="1" Orientation="Horizontal">
+							<Button Content="Clear" 
                                     Click="ClearLog_Click"
                                     Style="{StaticResource AccentButtonStyle}"
                                     Margin="0,0,8,0"/>
-                            <Button Click="ToggleLog_Click"
+							<Button Click="ToggleLog_Click"
                                     ToolTip="Hide Log Window">
-                                <ui:FontIcon Glyph="&#xE70D;" FontSize="12"/>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+								<ui:FontIcon Glyph="&#xE70D;" FontSize="12"/>
+							</Button>
+						</StackPanel>
+					</Grid>
+				</Border>
 
-                <!-- Log Content -->
-                <Border Grid.Row="1" 
-                        Background="{DynamicResource SystemControlPageBackgroundBaseLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
-                        BorderThickness="0,1,0,0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" 
-                                HorizontalScrollBarVisibility="Auto">
-                        <TextBox x:Name="LogTextBox"
+				<!-- Log Content -->
+				<ScrollViewer Grid.Row="1"
+								  VerticalScrollBarVisibility="Auto" 
+								  HorizontalScrollBarVisibility="Auto"
+								  Background="{DynamicResource SystemControlPageBackgroundBaseLowBrush}"
+								  BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+					<TextBox x:Name="LogTextBox"
                                IsReadOnly="True"
                                TextWrapping="Wrap"
                                BorderThickness="0"
                                Background="Transparent"
                                Padding="12"
                                VerticalScrollBarVisibility="Auto"/>
-                    </ScrollViewer>
-                </Border>
-            </Grid>
+				</ScrollViewer>
+			</Grid>
+			<mtc:Footer x:Name="MainFooter" Grid.Row="6"/>
 
-            <mtc:Footer x:Name="MainFooter" Grid.Row="5"/>
-            <Grid.Effect>
-                <BlurEffect x:Name="LoadingBlur" Radius="20" d:Radius="0"/>
-            </Grid.Effect>
-        </Grid>
+			<!-- Drag Bar -->
+			<GridSplitter Grid.Row="4" Grid.ColumnSpan="1" Height="8" HorizontalAlignment="Stretch" ResizeDirection="Rows"/>
 
-        <Grid>
-            <mtc:ConfigDialog x:Name="ConfigDialog" d:Visibility="Collapsed">
+			<Grid.Effect>
+				<BlurEffect x:Name="LoadingBlur" Radius="20" d:Radius="0"/>
+			</Grid.Effect>
+		</Grid>
 
-            </mtc:ConfigDialog>
-            <mtc:LoadingCover x:Name="LoadingCover"
+		<Grid>
+			<mtc:ConfigDialog x:Name="ConfigDialog" d:Visibility="Collapsed">
+
+			</mtc:ConfigDialog>
+			<mtc:LoadingCover x:Name="LoadingCover"
                               IsOpen="True"
                               d:IsOpen="False"
                               IsIndeterminate="True"
                               Message="Loading, please wait..."/>
-        </Grid>
-    </Grid>
+		</Grid>
+	</Grid>
 </Window>

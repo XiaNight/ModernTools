@@ -1,6 +1,7 @@
 ﻿using Base.Core;
 using Base.Pages;
 using Base.Services;
+using Base.UI.Themes;
 using ModernWpf;
 using System.IO;
 using System.Reflection;
@@ -126,6 +127,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ThemeManager.Current.ApplicationTheme = currentTheme == ApplicationTheme.Light
             ? ApplicationTheme.Dark
             : ApplicationTheme.Light;
+
+        // Swap the custom colour palette (light/dark) to match the newly selected theme.
+        PaletteManager.Apply(ThemeManager.Current.ActualApplicationTheme);
 
         ThemeManager.Current.ActualApplicationThemeChanged += (s, ev) =>
         {

@@ -1,0 +1,31 @@
+﻿<UserControl x:Class="KeyboardHallSensor.KeyDisplayRendered"
+			 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+			 xmlns:local="clr-namespace:KeyboardHallSensor"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+			 mc:Ignorable="d" 
+			 d:DesignHeight="50" d:DesignWidth="50">
+	<Grid>
+		<Border
+			x:Name="MainBorder"
+			Width="{Binding Width, RelativeSource={RelativeSource AncestorType=UserControl}}"
+			Height="{Binding Height, RelativeSource={RelativeSource AncestorType=UserControl}}"
+			Background="{DynamicResource SystemControlPageBackgroundChromeLowBrush}"
+			BorderThickness="0"
+			CornerRadius="6">
+		</Border>
+		<Border x:Name="KeySurface"
+			ClipToBounds="True" Margin="4,0,4,4"
+			BorderThickness="0" CornerRadius="6"
+			Background="#33FFFFFF">
+			<Grid x:Name="ContentContainer">
+				<TextBlock x:Name="LabelText" Text="A"
+						   FontFamily="HYHeadLine-Medium" FontSize="12" FontWeight="Bold"
+						   Padding="0,4,0,0" HorizontalAlignment="Center"
+						   Foreground="#44000000"/>
+			</Grid>
+		</Border>
+	</Grid>
+</UserControl>

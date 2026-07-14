@@ -18,9 +18,30 @@ namespace Base.Core
         /// <summary>
         /// Render a hexadecimal text box. Applies to integer members (byte, short, int, long, ...).
         /// The user may type with or without a <c>0x</c> prefix; the prefix is inserted automatically
-        /// when the field loses focus.
+        /// when the field loses focus. The display is zero-padded to a full byte — 2 hex digits — so
+        /// values keep at least one leading zero (e.g. <c>0x00</c>, <c>0x01</c>, <c>0xFF</c>).
         /// </summary>
         Hex,
+
+        /// <summary>
+        /// Like <see cref="Hex"/>, but the display is zero-padded to 4 hex digits so leading zeros are
+        /// preserved (e.g. <c>0x0000</c> stays <c>0x0000</c>). Applies to integer members.
+        /// </summary>
+        Short,
+
+        /// <summary>
+        /// Like <see cref="Hex"/>, but the display is zero-padded to 6 hex digits, matching a packed
+        /// <c>0xRRGGBB</c> color. Leading zeros are preserved (e.g. <c>0x0000FF</c> stays
+        /// <c>0x0000FF</c>). Applies to integer members.
+        /// </summary>
+        Hex_RGB,
+
+        /// <summary>
+        /// Like <see cref="Hex"/>, but the display is zero-padded to 8 hex digits, matching a packed
+        /// <c>0xRRGGBBAA</c> color. Leading zeros are preserved (e.g. <c>0x000000FF</c> stays
+        /// <c>0x000000FF</c>). Applies to integer members.
+        /// </summary>
+        Hex_RGBA,
     }
 
     /// <summary>
@@ -91,6 +112,20 @@ namespace Base.Core
         /// </para>
         /// </summary>
         public string Condition { get; set; }
+
+        /// <summary>
+        /// Optional name of a parameterless method on the same object, invoked after the member's
+        /// value is changed through the config dialog. Use it to react to edits (refresh a view,
+        /// re-run a computation, ...). The callback fires only when the value actually changes, and
+        /// after any custom setter normalisation has been applied. May refer to a parameterless
+        /// method (searched up the type hierarchy, including non-public members). Unresolved names
+        /// are ignored.
+        /// <para>
+        /// C# attributes cannot take a delegate, so pass the method name — ideally with
+        /// <c>nameof</c>: <c>[Config(Changed = nameof(OnPortChanged))]</c>.
+        /// </para>
+        /// </summary>
+        public string Changed { get; set; }
 
         /// <summary>
         /// Optional regular expression used to validate string values. Ignored for non-string members.

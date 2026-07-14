@@ -36,7 +36,95 @@ $repo     = $PSScriptRoot
 $mainProj = Join-Path $repo 'ModernTools\ModernTools.csproj'
 $rid      = 'win-x64'
 $config   = 'Release'
-$appName  = 'ModernToolset'
+$appName   = 'ModernToolset'
+$distRoot  = Join-Path $repo 'dist'
+$stateFile = Join-Path $distRoot 'publish-versions.json'   # cache of last main / dev builds
+
+# =====================================================================================
+#  Version handling
+#  Format: V(Major)_(HotFix)_(Minor)  e.g. V01_00_01
+#  Significance (high -> low): Major > Minor > HotFix.
+#    - HotFix++  : bump HotFix, keep Minor.
+#    - Minor++   : bump Minor, reset HotFix.
+#    - Major++   : bump Major, reset Minor + HotFix.
+#  Major >= 90 (usually 99) denotes a dev build; main builds use Major < 90.
+#  Last built versions are cached in publish-versions.json (no directory scanning).
+# =====================================================================================
+
+function ConvertFrom-ModernVersion {
+    # Parse "V01_00_01" -> object, or $null if the string is not a valid version.
+    param([string]$Text)
+    if ($Text -and $Text.Trim() -match '^V(\d{2})_(\d{2})_(\d{2})$') {
+        return [pscustomobject]@{
+            Major  = [int]$Matches[1]
+            HotFix = [int]$Matches[2]
+            Minor  = [int]$Matches[3]
+        }
+    }
+    return $null
+}
+
+function ConvertTo-ModernVersionString {
+    param($V)
+    return ('V{0:D2}_{1:D2}_{2:D2}' -f $V.Major, $V.HotFix, $V.Minor)
+}
+
+function Test-IsDevVersion {
+    param($V)
+    return ($V.Major -ge 90)
+}
+
+function Compare-ModernVersion {
+    # Returns >0 if A>B, 0 if equal, <0 if A<B. Significance: Major > Minor > HotFix.
+    param($A, $B)
+    if ($A.Major -ne $B.Major) { return $A.Major  - $B.Major }
+    if ($A.Minor -ne $B.Minor) { return $A.Minor  - $B.Minor }
+    return $A.HotFix - $B.HotFix
+}
+
+function Get-VersionState {
+    # Read the last main / dev build versions from the cache file.
+    # Never throws: a missing folder/file, empty file, or corrupt JSON all yield an
+    # empty state (treated as "no history"), so a fresh checkout still builds fine.
+    param([string]$Path)
+    $state = [pscustomobject]@{ LastMain = $null; LastDev = $null }
+    try {
+        if ($Path -and (Test-Path -LiteralPath $Path -PathType Leaf)) {
+            $raw = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop
+            if ($raw -and $raw.Trim()) {
+                $j = $raw | ConvertFrom-Json -ErrorAction Stop
+                if ($j.lastMainBuild) { $state.LastMain = ConvertFrom-ModernVersion ([string]$j.lastMainBuild) }
+                if ($j.lastDevBuild)  { $state.LastDev  = ConvertFrom-ModernVersion ([string]$j.lastDevBuild) }
+            }
+        }
+    }
+    catch {
+        Write-Host "Warning: could not read version cache '$Path' ($($_.Exception.Message)); treating as no history." -ForegroundColor Yellow
+    }
+    return $state
+}
+
+function Save-VersionState {
+    # Never fatal: the build already succeeded, so a cache write problem is only a
+    # warning. Creates the parent folder if it is missing.
+    param([string]$Path, $State)
+    try {
+        $dir = Split-Path -Parent $Path
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null
+        }
+        $obj = [ordered]@{
+            lastMainBuild = if ($State.LastMain) { ConvertTo-ModernVersionString $State.LastMain } else { $null }
+            lastDevBuild  = if ($State.LastDev)  { ConvertTo-ModernVersionString $State.LastDev }  else { $null }
+        }
+        ($obj | ConvertTo-Json) | Set-Content -LiteralPath $Path -ErrorAction Stop
+        return $true
+    }
+    catch {
+        Write-Host "Warning: could not write version cache '$Path' ($($_.Exception.Message)); skipping." -ForegroundColor Yellow
+        return $false
+    }
+}
 
 # --- Resolve version from the csproj unless overridden ---
 if (-not $Version) {
@@ -48,6 +136,108 @@ if (-not $Version) {
         throw "Could not find <InformationalVersion> in $mainProj. Pass -Version explicitly."
     }
 }
+
+# --- Validate the version BEFORE building: it must parse and be strictly higher than
+#     the last recorded build on the SAME track (main vs dev). If not, offer to
+#     auto-increment (Y) or abort (n). ---
+$parsed = ConvertFrom-ModernVersion $Version
+$state  = Get-VersionState -Path $stateFile
+
+$isDev     = if ($parsed) { Test-IsDevVersion $parsed } else { $false }
+$lastSame  = if ($isDev) { $state.LastDev } else { $state.LastMain }
+$trackName = if ($isDev) { 'dev' } else { 'main' }
+
+$invalidReason = $null
+if (-not $parsed) {
+    $invalidReason = "'$Version' is not a valid version (expected V##_##_## e.g. V01_00_01)."
+}
+elseif ($lastSame -and (Compare-ModernVersion $parsed $lastSame) -le 0) {
+    $invalidReason = ("'{0}' is not higher than the last {1} build '{2}'." -f `
+        $Version, $trackName, (ConvertTo-ModernVersionString $lastSame))
+}
+
+if ($invalidReason) {
+    $prevStr = if ($lastSame) { ConvertTo-ModernVersionString $lastSame } else { '(none)' }
+    Write-Host ""
+    Write-Host "Previous version: $prevStr" -ForegroundColor Yellow
+    Write-Host "Current version:  $Version" -ForegroundColor Yellow
+    Write-Host $invalidReason -ForegroundColor Red
+
+    # No confirmation prompt: go straight to the increment menu (x aborts).
+
+    # Increment relative to the higher of (current, last same-track build) so the
+    # result is guaranteed to clear the last build on this track.
+    $base = $parsed
+    if ($lastSame -and (-not $base -or (Compare-ModernVersion $lastSame $base) -ge 0)) { $base = $lastSame }
+    if (-not $base) { $base = [pscustomobject]@{ Major = 1; HotFix = 0; Minor = 1 } }
+
+    $baseIsDev = Test-IsDevVersion $base
+    $baseMinor = [Math]::Max([int]$base.Minor, 1)   # Minor floor is 01, never 00
+
+    # Reset rules: HotFix++ keeps Minor; Minor++ resets HotFix; Major++ resets HotFix
+    # and sets Minor back to its 01 floor.
+    $hotfixNew = [pscustomobject]@{ Major = $base.Major; HotFix = $base.HotFix + 1; Minor = $baseMinor }
+    $minorNew  = [pscustomobject]@{ Major = $base.Major; HotFix = 0;                Minor = $baseMinor + 1 }
+
+    # Option 3 (Major): if this is a DEV build, LEAVE the dev track and become a main
+    # build - take the last main Major +1 (or 01 if none). On a main build, bump Major.
+    # Either way HotFix resets to 0 and Minor to its 01 floor.
+    if ($baseIsDev) {
+        $mainMajor = if ($state.LastMain) { $state.LastMain.Major + 1 } else { 1 }
+        $majorNew  = [pscustomobject]@{ Major = $mainMajor; HotFix = 0; Minor = 1 }
+    }
+    else {
+        $majorNew  = [pscustomobject]@{ Major = $base.Major + 1; HotFix = 0; Minor = 1 }
+    }
+    $majorNote = if ($baseIsDev) { '  (leaves dev -> main build)' } else { '' }
+
+    $new = $null
+    while (-not $new) {
+        Write-Host "`nIncrement which part? (base $(ConvertTo-ModernVersionString $base))" -ForegroundColor Cyan
+        Write-Host "  1. Hotfix: $(ConvertTo-ModernVersionString $hotfixNew)"
+        Write-Host "  2. Minor:  $(ConvertTo-ModernVersionString $minorNew)"
+        Write-Host "  3. Major:  $(ConvertTo-ModernVersionString $majorNew)$majorNote"
+        Write-Host "  x. Abort"
+        switch ((Read-Host "Choice").Trim().ToLower()) {
+            '1' { $new = $hotfixNew }
+            '2' { $new = $minorNew }
+            '3' { $new = $majorNew }
+            'x' { throw "Aborted by user (increment cancelled)." }
+            default { Write-Host "Please enter 1, 2, 3, or x." -ForegroundColor Yellow }
+        }
+    }
+
+    $Version = ConvertTo-ModernVersionString $new
+    Write-Host "New version: $Version" -ForegroundColor Green
+
+    # Persist the bump to the csproj so the compiled assembly matches the zip names.
+    # Read/write via .NET with the file's detected encoding preserved (and rewritten
+    # as UTF-8 *with BOM*, the VS/csproj default). Using Get-Content/Set-Content without
+    # -Encoding would rewrite the file in the ANSI codepage on Windows PowerShell and
+    # corrupt non-ASCII characters like the copyright sign (C2 A9 -> lone A9).
+    $sr = New-Object System.IO.StreamReader($mainProj, $true)   # detect encoding from BOM
+    $csprojText = $sr.ReadToEnd()
+    $hadBom = $sr.CurrentEncoding.GetPreamble().Length -gt 0
+    $sr.Dispose()
+    if ($csprojText -match '<InformationalVersion>(.*?)</InformationalVersion>') {
+        $csprojText = $csprojText -replace '<InformationalVersion>.*?</InformationalVersion>', "<InformationalVersion>$Version</InformationalVersion>"
+        $enc = New-Object System.Text.UTF8Encoding($hadBom)     # keep BOM if the file had one
+        [System.IO.File]::WriteAllText($mainProj, $csprojText, $enc)
+        Write-Host "Updated <InformationalVersion> in $mainProj." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Note: no <InformationalVersion> tag in csproj to update; using $Version for this build only." -ForegroundColor Yellow
+    }
+
+    $parsed    = $new
+    $isDev     = Test-IsDevVersion $parsed
+    $trackName = if ($isDev) { 'dev' } else { 'main' }
+}
+
+if ($isDev) {
+    Write-Host "Note: Major $($parsed.Major) (>=90) - this is a DEV build." -ForegroundColor Magenta
+}
+
 Write-Host "ModernToolset publish - version $Version" -ForegroundColor Cyan
 
 # --- Plugin projects (Plugins subfolder name => project path) ---
@@ -64,7 +254,6 @@ $plugins = [ordered]@{
     'MCPServer'            = 'Features\MCPServer\MCPServer.csproj'
 }
 
-$distRoot  = Join-Path $repo 'dist'
 $buildRoot = Join-Path $distRoot 'build'
 
 function Publish-Bundle {
@@ -153,11 +342,18 @@ Write-Host "Computing host assembly manifest..." -ForegroundColor Yellow
 $manifestDir = Join-Path $buildRoot '_host_manifest'
 if (Test-Path $manifestDir) { Remove-Item $manifestDir -Recurse -Force }
 New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
-& dotnet publish $mainProj -c $config -r $rid `
+# Capture output (stdout+stderr) instead of discarding it, so if the publish fails
+# the real dotnet/MSBuild diagnostics are shown instead of a bare "failed".
+$manifestLog = & dotnet publish $mainProj -c $config -r $rid `
     -p:SelfContained=false -p:PublishSingleFile=false -p:PublishReadyToRun=false `
     -p:SkipPluginPublish=true -p:DebugType=none -p:DebugSymbols=false `
-    -o $manifestDir | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Host manifest publish failed." }
+    -o $manifestDir 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "`n--- dotnet publish output (host manifest) ---" -ForegroundColor Red
+    $manifestLog | ForEach-Object { Write-Host $_ }
+    Write-Host "--- end output ---`n" -ForegroundColor Red
+    throw "Host manifest publish failed (dotnet exit $LASTEXITCODE). See output above."
+}
 $hostFiles = @{}
 Get-ChildItem $manifestDir -Recurse -File -Filter *.dll | ForEach-Object { $hostFiles[$_.Name] = $true }
 Write-Host "Host provides $($hostFiles.Count) assemblies." -ForegroundColor DarkGray
@@ -166,5 +362,33 @@ $zips = @()
 if ($Mode -in @('both', 'standalone')) { $zips += Publish-Bundle -ModeName 'standalone'           -SelfContained $true }
 if ($Mode -in @('both', 'framework'))  { $zips += Publish-Bundle -ModeName 'framework-dependent'   -SelfContained $false }
 
-Write-Host "`n=== Done ===" -ForegroundColor Green
+# --- Record this build in the version cache so the next run can check quickly.
+#     Failures here only warn (see Save-VersionState) - the build has already been
+#     produced, so we never fail the run just because the cache couldn't be updated. ---
+if ($parsed) {
+    if ($isDev) { $state.LastDev = $parsed } else { $state.LastMain = $parsed }
+    if (Save-VersionState -Path $stateFile -State $state) {
+        Write-Host "Recorded $Version as last $trackName build in $stateFile." -ForegroundColor DarkGray
+    }
+}
+
+# --- Success banner: clear the terminal, show a big PASS with the built version. ---
+Clear-Host
+$pass = @(
+    '██████   █████  ███████ ███████',
+    '██   ██ ██   ██ ██      ██     ',
+    '██████  ███████ ███████ ███████',
+    '██      ██   ██      ██      ██',
+    '██      ██   ██ ███████ ███████'
+)
+Write-Host ""
+$pass | ForEach-Object { Write-Host $_ -ForegroundColor Green }
+Write-Host ""
+Write-Host "        Building version: $Version" -ForegroundColor Cyan
+Write-Host ""
 $zips | ForEach-Object { Write-Host "  $_" -ForegroundColor White }
+
+# --- Pause so the window stays open when double-clicked / auto-closing shells. ---
+Write-Host "`nPress any key to close..." -ForegroundColor DarkGray
+try   { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
+catch { Read-Host | Out-Null }   # fallback for hosts without RawUI (e.g. ISE)

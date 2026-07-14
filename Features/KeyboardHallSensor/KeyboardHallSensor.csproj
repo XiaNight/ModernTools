@@ -13,7 +13,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\Base\Base.csproj" >
+	  <None Remove="Config\M708.txt" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\Base\Base.csproj">
 			<Private>false</Private>
 			<ExcludeAssets>runtime</ExcludeAssets>
 		</ProjectReference>
@@ -22,6 +26,9 @@
 	<ItemGroup>
 		<Content Include="Config\keyboard_layout.txt">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Config\M708.txt">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</Content>
 	</ItemGroup>
 
@@ -39,9 +46,7 @@
 
 		<MakeDir Directories="$(PublishDir)..\..\Config" Condition="!Exists('$(PublishDir)..\..\Config')" />
 
-		<Copy
-			SourceFiles="@(PluginFiles)"
-			DestinationFiles="@(PluginFiles->'$(PublishDir)..\..\Config\%(RecursiveDir)%(Filename)%(Extension)')" />
+		<Copy SourceFiles="@(PluginFiles)" DestinationFiles="@(PluginFiles->'$(PublishDir)..\..\Config\%(RecursiveDir)%(Filename)%(Extension)')" />
 
 		<RemoveDir Directories="$(PublishDir)Config" Condition="Exists('$(PublishDir)Config')" />
 	</Target>

@@ -1,92 +1,98 @@
 ﻿<base:PageBase x:Class="ArmouryProtocol.LightingEffectPage"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:ArmouryProtocol"
-             xmlns:base="clr-namespace:Base.Pages;assembly=Base"
-             mc:Ignorable="d" 
-             d:DesignHeight="450" d:DesignWidth="800" d:Background="White">
-    <Grid Margin="12">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+			 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+			 xmlns:local="clr-namespace:ArmouryProtocol"
+			 xmlns:cts="clr-namespace:Base.UI.Controls;assembly=Base"
+			 xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+			 mc:Ignorable="d" 
+			 d:DesignHeight="720" d:DesignWidth="1280" d:Background="White">
+	<Grid Margin="12">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="Auto"/>
+		</Grid.RowDefinitions>
+		<Grid Grid.Row="0">
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="Auto"/>
+				<ColumnDefinition Width="8"/>
+				<ColumnDefinition Width="*"/>
+			</Grid.ColumnDefinitions>
+			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="8"/>
+				<RowDefinition Height="Auto"/>
+			</Grid.RowDefinitions>
+			<TextBlock Grid.Column="0" Text="Effect" VerticalAlignment="Center"/>
+			<ComboBox x:Name="PresetSelector" Grid.Column="2" Width="240" DisplayMemberPath="Name">
+				<ComboBox.GroupStyle>
+					<GroupStyle>
+						<GroupStyle.HeaderTemplate>
+							<DataTemplate>
+								<TextBlock Text="{Binding Name}" FontWeight="Bold" Opacity="0.6" Margin="0,4,0,2"/>
+							</DataTemplate>
+						</GroupStyle.HeaderTemplate>
+					</GroupStyle>
+				</ComboBox.GroupStyle>
+			</ComboBox>
+			<TextBlock Grid.Column="0" Grid.Row="2" Text="Interactive" VerticalAlignment="Center"/>
+			<ComboBox x:Name="InteractiveSelector" Grid.Column="2" Grid.Row="2" Width="240" SelectedIndex="0" SelectionChanged="InteractiveSelector_SelectionChanged">
+				<ComboBoxItem Content="Reactive"/>
+				<ComboBoxItem Content="Ripple"/>
+			</ComboBox>
+		</Grid>
+		<Grid Grid.Row="1">
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="*"/>
+				<ColumnDefinition Width="Auto"/>
+			</Grid.ColumnDefinitions>
+			<ScrollViewer Grid.Column="0" x:Name="KeyboardContainer"  HorizontalScrollBarVisibility ="Auto" VerticalScrollBarVisibility="Auto">
+				<Canvas x:Name="KeyboardCanvas" Margin="8">
 
-        <TextBlock
-            Text="Send Armoury RGB Lighting test frames to the currently selected device."
-            Opacity="0.9"
-            Margin="0,0,0,10" />
+				</Canvas>
+			</ScrollViewer>
+			<Grid Grid.Column="1" Width="200" Visibility="Collapsed">
+				<cts:ColorPicker/>
+			</Grid>
+		</Grid>
+		<Grid Grid.Row="2" HorizontalAlignment="Stretch">
+			<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0">
+				<Grid Width="36" Margin="4,0"></Grid>
+				<Button x:Name="PreviousButton"  Width="80" Height="30" Margin="4,0">
+					<ui:FontIcon Glyph="&#xE892;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+				<Button x:Name="PlayButton" Width="80" Height="30" Margin="4,0" Visibility="Collapsed">
+					<ui:FontIcon Glyph="&#xE768;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+				<Button x:Name="PauseButton" Width="80" Height="30" Margin="4,0">
+					<ui:FontIcon Glyph="&#xE769;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+				<Button x:Name="NextButton" Width="80" Height="30" Margin="4,0">
+					<ui:FontIcon Glyph="&#xE893;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+				<Button x:Name="RepeatAllButton" Width="36" Height="30" Margin="4,0">
+					<ui:FontIcon Glyph="&#xE8EE;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+				<Button x:Name="RepeatOffButton" Width="36" Height="30" Margin="4,0" Visibility="Collapsed">
+					<ui:FontIcon Glyph="&#xF5E7;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+				</Button>
 
-        <Border Grid.Row="1" Padding="12" CornerRadius="6" BorderThickness="1" BorderBrush="#33FFFFFF">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                    <TextBlock Text="Target HID interface" FontWeight="SemiBold" Margin="0,0,0,6" />
-
-                    <UniformGrid Columns="2" Margin="0,0,0,8">
-                        <TextBlock VerticalAlignment="Center" Text="Usage Page (hex)" />
-                        <TextBox x:Name="UsagePageTextBox" Text="FF00" Width="140" />
-
-                        <TextBlock VerticalAlignment="Center" Text="Usage Id (hex)" />
-                        <TextBox x:Name="UsageIdTextBox" Text="0001" Width="140" />
-                    </UniformGrid>
-                    
-                    <TextBlock Text="If blank, the page will try to use the first HID interface on the selected device." Opacity="0.7" TextWrapping="Wrap"/>
-
-                    <UniformGrid Columns="3" Margin="0,0,0,8">
-                        <TextBlock VerticalAlignment="Center" Text="Save Profile" />
-                        <Button x:Name="SaveButton" Content="Save" Width="90"/>
-                        <TextBox x:Name="SaveTextBox" Text="01" Margin="6 0"/>
-                        
-                        <TextBlock VerticalAlignment="Center" Text="Erase Profile"/>
-                        <Button x:Name="EraseButton" Content="Erase" Width="90"/>
-
-                    </UniformGrid>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1">
-                    <TextBlock Text="Effect parameters" FontWeight="SemiBold" Margin="0,0,0,6" />
-
-                    <UniformGrid Columns="2" Margin="0,0,0,8">
-                        <TextBlock VerticalAlignment="Center" Text="Frame count" />
-                        <TextBox x:Name="FrameCountTextBox" Text="60" Width="140" />
-
-                        <TextBlock VerticalAlignment="Center" Text="Command interval (ms, supports decimals)" />
-                        <TextBox x:Name="IntervalMsTextBox" Text="10" Width="140" />
-
-                        <TextBlock VerticalAlignment="Center" Text="RGB change speed (step)" />
-                        <TextBox x:Name="StepTextBox" Text="64" Width="140" />
-                    </UniformGrid>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,4,0,0">
-                        <Button x:Name="SendOnceButton" Content="Send one frame" Width="140" Margin="0,0,8,0" />
-                        <Button x:Name="StartButton" Content="Start" Width="90" Margin="0,0,8,0" />
-                        <Button x:Name="StopButton" Content="Stop" Width="90" IsEnabled="False" />
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                        <TextBlock Text="Elapsed:" Opacity="0.8"/>
-                        <TextBlock x:Name="ElapsedTextBlock" Text="00:00:00.000" Margin="6,0,0,0" FontFamily="Consolas" Opacity="0.9"/>
-                    </StackPanel>
-
-                    <TextBlock x:Name="StatusTextBlock" Text="Idle" Margin="0,6,0,0" Opacity="0.8" TextWrapping="Wrap"/>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="2" Margin="0,12,0,0" Padding="12" CornerRadius="6" BorderThickness="1" BorderBrush="#33FFFFFF">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Top" Text="Last sent" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <TextBox x:Name="LastSentTextBox" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" />
-                </ScrollViewer>
-            </DockPanel>
-        </Border>
-    </Grid>
+			</StackPanel>
+		</Grid>
+		<Grid Grid.Row="3" HorizontalAlignment="Stretch">
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="*"/>
+				<ColumnDefinition Width="80"/>
+			</Grid.ColumnDefinitions>
+			<Slider x:Name="TimelineSlider" Grid.Column="0" Minimum="1"
+					IsSnapToTickEnabled="True" TickFrequency="1" TickPlacement="BottomRight"/>
+			<TextBlock x:Name="CurrentFrameText" Grid.Column="1" Text="0"
+					   VerticalAlignment="Center" HorizontalAlignment="Center"
+					   FontSize="18"/>
+		</Grid>
+	</Grid>
 </base:PageBase>

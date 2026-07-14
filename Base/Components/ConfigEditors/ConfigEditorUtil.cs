@@ -37,12 +37,44 @@ internal static class ConfigEditorUtil
         return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
     }
 
-    public static string FormatHex(object value)
+    /// <summary>
+    /// Formats a value as a <c>0x</c>-prefixed hexadecimal string. When <paramref name="minDigits"/>
+    /// is positive the digits are left-padded with zeros to that width, preserving leading zeros
+    /// (used by the <see cref="ConfigType.Short"/> / <see cref="ConfigType.Hex_RGB"/> /
+    /// <see cref="ConfigType.Hex_RGBA"/> modes); otherwise leading zeros are collapsed.
+    /// </summary>
+    public static string FormatHex(object value, int minDigits = 0)
     {
-        if (value == null) return "0x0";
-        try { return string.Format(CultureInfo.InvariantCulture, "0x{0:X}", value); }
+        if (value == null)
+            return "0x" + (minDigits > 0 ? new string('0', minDigits) : "0");
+
+        try
+        {
+            string digits = string.Format(CultureInfo.InvariantCulture, "{0:X}", value);
+            if (minDigits > 0 && digits.Length < minDigits)
+                digits = digits.PadLeft(minDigits, '0');
+            return "0x" + digits;
+        }
         catch { return FormatValue(value); }
     }
+
+    /// <summary><c>true</c> when the config type is one of the hexadecimal editor modes.</summary>
+    public static bool IsHex(ConfigType type)
+        => type is ConfigType.Hex or ConfigType.Short or ConfigType.Hex_RGB or ConfigType.Hex_RGBA;
+
+    /// <summary>
+    /// Number of hex digits the display is zero-padded to for a given mode. Plain
+    /// <see cref="ConfigType.Hex"/> pads to 2 (a full byte, e.g. <c>0x00</c> / <c>0x01</c>); the
+    /// wider modes pad further. Returns 0 for non-hex modes.
+    /// </summary>
+    public static int HexDigits(ConfigType type) => type switch
+    {
+        ConfigType.Hex => 2,
+        ConfigType.Short => 4,
+        ConfigType.Hex_RGB => 6,
+        ConfigType.Hex_RGBA => 8,
+        _ => 0,
+    };
 
     #endregion
 
