@@ -163,33 +163,33 @@ if ($invalidReason) {
     Write-Host "Current version:  $Version" -ForegroundColor Yellow
     Write-Host $invalidReason -ForegroundColor Red
 
-    $ans = Read-Host "Auto-increment the version? (Y/n)"
-    if ($ans -notmatch '^(y|yes|)$') {   # anything other than Y / Enter aborts
-        throw "Aborted by user (version not incremented)."
-    }
+    # No confirmation prompt: go straight to the increment menu (x aborts).
 
     # Increment relative to the higher of (current, last same-track build) so the
     # result is guaranteed to clear the last build on this track.
     $base = $parsed
     if ($lastSame -and (-not $base -or (Compare-ModernVersion $lastSame $base) -ge 0)) { $base = $lastSame }
-    if (-not $base) { $base = [pscustomobject]@{ Major = 1; HotFix = 0; Minor = 0 } }
+    if (-not $base) { $base = [pscustomobject]@{ Major = 1; HotFix = 0; Minor = 1 } }
 
     $baseIsDev = Test-IsDevVersion $base
+    $baseMinor = [Math]::Max([int]$base.Minor, 1)   # Minor floor is 01, never 00
 
-    # Reset rules: HotFix++ keeps Minor; Minor++ resets HotFix; Major++ resets both.
-    $hotfixNew = [pscustomobject]@{ Major = $base.Major; HotFix = $base.HotFix + 1; Minor = $base.Minor }
-    $minorNew  = [pscustomobject]@{ Major = $base.Major; HotFix = 0;                Minor = $base.Minor + 1 }
+    # Reset rules: HotFix++ keeps Minor; Minor++ resets HotFix; Major++ resets HotFix
+    # and sets Minor back to its 01 floor.
+    $hotfixNew = [pscustomobject]@{ Major = $base.Major; HotFix = $base.HotFix + 1; Minor = $baseMinor }
+    $minorNew  = [pscustomobject]@{ Major = $base.Major; HotFix = 0;                Minor = $baseMinor + 1 }
 
-    # Major on a DEV build rolls onto the MAIN track: take the last main Major, +1, and
-    # turn this into a main build. On a main build, just bump Major normally.
+    # Option 3 (Major): if this is a DEV build, LEAVE the dev track and become a main
+    # build - take the last main Major +1 (or 01 if none). On a main build, bump Major.
+    # Either way HotFix resets to 0 and Minor to its 01 floor.
     if ($baseIsDev) {
         $mainMajor = if ($state.LastMain) { $state.LastMain.Major + 1 } else { 1 }
-        $majorNew  = [pscustomobject]@{ Major = $mainMajor; HotFix = 0; Minor = 0 }
+        $majorNew  = [pscustomobject]@{ Major = $mainMajor; HotFix = 0; Minor = 1 }
     }
     else {
-        $majorNew  = [pscustomobject]@{ Major = $base.Major + 1; HotFix = 0; Minor = 0 }
+        $majorNew  = [pscustomobject]@{ Major = $base.Major + 1; HotFix = 0; Minor = 1 }
     }
-    $majorNote = if ($baseIsDev) { '  (dev -> main build)' } else { '' }
+    $majorNote = if ($baseIsDev) { '  (leaves dev -> main build)' } else { '' }
 
     $new = $null
     while (-not $new) {
@@ -387,3 +387,8 @@ Write-Host ""
 Write-Host "        Building version: $Version" -ForegroundColor Cyan
 Write-Host ""
 $zips | ForEach-Object { Write-Host "  $_" -ForegroundColor White }
+
+# --- Pause so the window stays open when double-clicked / auto-closing shells. ---
+Write-Host "`nPress any key to close..." -ForegroundColor DarkGray
+try   { $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown') }
+catch { Read-Host | Out-Null }   # fallback for hosts without RawUI (e.g. ISE)

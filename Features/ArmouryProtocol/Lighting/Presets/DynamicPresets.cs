@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Base.Framework.Utilities;
 using static ArmouryProtocol.Lighting.ColorMath;
 
 namespace ArmouryProtocol.Lighting.Presets;
@@ -58,16 +59,46 @@ public static class DynamicPresets
                 return HsvToRgb(0f, 1f, v);
             });
 
-        // Brightness rings pulsing outward from the center.
-        yield return new FuncPreset("Radial Ripple", Cat, 120,
+        // Water caustics: a Voronoi (Worley) cell network whose sample space is
+        // domain-warped by smooth value noise, so the bright cell-edge veins ripple
+        // like light on a pool floor. Time enters as a circular path (cos/sin of the
+        // phase) through the warp noise, so the animation loops seamlessly.
+        yield return new FuncPreset("Caustics", Cat, 480,
             (f, fc, k) =>
             {
-                float v = 0.5f + (0.5f * MathF.Sin(((k.Radius * 3f) - Phase(f, fc)) * TwoPi));
+                float caustic = CausticBrightness(k.MatrixX / 4.0f, k.MatrixY / 4.0f, Phase(f, fc));
+                float v = caustic; // faint teal base + bright veins
                 return HsvToRgb(160f, 1f, Clamp01(v));
             });
 
         // Hue rotates around the center like a pinwheel.
         yield return new FuncPreset("Pinwheel", Cat, 120,
             (f, fc, k) => HsvToRgb((k.AngleTurns + Phase(f, fc)) * 360f, 1f, 1f));
+    }
+
+    // --- Caustics composition ---------------------------------------------------
+
+    // Brightness (0..1) of the caustic network at a position and phase.
+    // Composes the Base noise primitives: Perlin domain-warp feeding a Voronoi lookup.
+    private static float CausticBrightness(float px, float py, float phase)
+    {
+        // Time as a circular path through noise space -> seamless loop.
+        float ang = phase * TwoPi;
+        float c = MathF.Cos(ang) * 0.6f;
+        float s = MathF.Sin(ang) * 0.6f;
+
+        // Domain warp with Perlin, then look up cellular (Voronoi) noise.
+        const float warpFreq = 1.3f;
+        const float warpAmp = 0.9f;
+        float wx = Noise.Perlin((px * warpFreq) + 11.3f + c, (py * warpFreq) + 4.7f + s);
+        float wy = Noise.Perlin((px * warpFreq) + 23.1f - s, (py * warpFreq) + 9.2f + c);
+        float qx = px + (warpAmp * ((wx * 2f) - 1f));
+        float qy = py + (warpAmp * ((wy * 2f) - 1f));
+
+        (float f1, float f2) = Noise.Voronoi(qx, qy);
+
+        // Bright thin veins along the cell borders (where f2 ~ f1).
+        float veins = 1f - Clamp01((f2 - f1) / 0.50f);
+        return veins * veins; // sharpen
     }
 }

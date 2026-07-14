@@ -6,7 +6,6 @@ using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
 using KeyboardHallSensor;
-using System.Reflection.Emit;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -44,21 +43,21 @@ namespace ArmouryProtocol;
 public partial class LightingEffectPage : PageBase
 {
     [Persist]
-    [Config(key: "總共Frame數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Auto, Header = "3-1 Set Advance Effect (Layer) - Mode", Changed = nameof(FrameCountChanged))]
+    [Config(key: "總共Frame數量", Description = "Follow Device XY鍵位表", Min = 1, Header = "3-1 Set Advance Effect (Layer) - Mode", Changed = nameof(FrameCountChanged))]
     private readonly short frameCount = 0x72;
-    
+
     [Persist]
     [Config(key: "X數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
     private readonly byte xCount = 0x13;
-    
+
     [Persist]
     [Config(key: "Y數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
     private readonly byte yCount = 0x06;
-    
+
     [Persist]
     [Config(key: "Key數量", Min = 1, Header = "3-2 Set Advance Effect (Layer) - Data")]
     private readonly byte keyCount = 0x72;
-    
+
     [Persist]
     [Config(key: "速度", Min = 0x00, Max = 0xfe, Header = "3-3 Set Advance Effect (Reactive)", Type = ConfigType.Hex)]
     private readonly byte reactiveSpeed = 0x30;
@@ -66,23 +65,43 @@ public partial class LightingEffectPage : PageBase
     [Persist]
     [Config(key: "Single/Double")]
     private readonly ReactiveMode reactiveMode = ReactiveMode.Single;
-    
+
     [Persist]
     [Config(key: "Random")]
     private readonly ReactiveRandom reactiveRand = ReactiveRandom.On;
 
     [Persist]
-    [Config(key: "Color Level 1", Type = ConfigType.Hex)]
-    private readonly long reactiveColor1 = 0x000000;
+    [Config(key: "Color 1", Type = ConfigType.Hex_RGB)]
+    private readonly long reactiveColor1 = 0xFFFFFF;
 
     [Persist]
-    [Config(key: "Color Level 2", Type = ConfigType.Hex)]
-    private readonly long reactiveColor2 = 0x000000;
+    [Config(key: "Color 2", Type = ConfigType.Hex_RGB)]
+    private readonly long reactiveColor2 = 0xFFFFFF;
 
     [Persist]
     [Config(key: "亮度", Min = 1, Max = 100, Type = ConfigType.Slider)]
     private readonly byte reactiveBrightness = 100;
+
+    [Persist]
+    [Config(key: "速度", Min = 0x00, Max = 0xfe, Header = "3-3 Set Advance Effect (Ripple)", Type = ConfigType.Hex)]
+    private readonly byte rippleSpeed = 0x30;
+
+    [Persist]
+    [Config(key: "亮度", Min = 1, Max = 100, Type = ConfigType.Slider)]
+    private readonly byte rippleBrightness = 100;
+
+    [Persist]
+    [Config(key: "Random")]
+    private readonly bool rippleRandom = true;
+
+    [Persist]
+    [Config(key: "寬度")]
+    private readonly RippleWidth rippleWidth = RippleWidth.Wide;
     
+    [Persist]
+    [Config(key: "Color", Type = ConfigType.Hex_RGB)]
+    private readonly long rippleColor1 = 0xFFFFFF;
+
     [Persist]
     [Config(key: "亮度", Min = 1, Max = 100, Header = "3-4 Set Advance Effect (Layer) - Brightness", Type = ConfigType.Slider)]
     private readonly byte brightness = 50;
@@ -106,8 +125,10 @@ public partial class LightingEffectPage : PageBase
     public List<FrameData> frameDatas = new();
     private LightingPreset currentPreset;
 
+    private InteractiveMode currentselectedInteractiveMode;
+
     //- Animation Player
-    private DispatcherTimer animationTimer;
+    private readonly DispatcherTimer animationTimer;
     private bool repeatAll = true;
 
     // While sending, the preview scrubs to whichever frame is currently going out.
@@ -299,6 +320,11 @@ public partial class LightingEffectPage : PageBase
         }
     }
 
+    private void InteractiveSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        currentselectedInteractiveMode = (InteractiveMode)InteractiveSelector.SelectedIndex;
+    }
+
     // Rebuilds every frame's colors from the current preset.
     // EVERY addressable key index (0..keyCount-1) is generated and stored - including
     // keys with no on-screen keycap and matrix cells not present in the layout - so the
@@ -370,7 +396,7 @@ public partial class LightingEffectPage : PageBase
 
     private void ActiveInterface_OnDataReceived(ReadOnlyMemory<byte> arg1, DateTime arg2)
     {
-        
+
     }
 
     private void OnActiveDeviceDisconnected()
@@ -464,17 +490,10 @@ public partial class LightingEffectPage : PageBase
     {
         string displayName = label;
         displayName = displayName.Replace("L-", "").Replace("R-", "");
-        if(displayName == "") displayName = "-----";
+        if (displayName == "") displayName = "-----";
 
         string[] splits = displayName.Split(["\\n"], StringSplitOptions.None);
-        if (splits.Length == 1)
-        {
-            return displayName;
-        }
-        else
-        {
-            return $"{splits[1]}  {splits[0]}";
-        }
+        return splits.Length == 1 ? displayName : $"{splits[1]}  {splits[0]}";
     }
 
     #endregion
@@ -576,11 +595,16 @@ public partial class LightingEffectPage : PageBase
         int checksum = 0;
         byte[] initialPacket = Construct3_1Mode();
         List<byte[]> frameBytes = Construct3_2Data(ref checksum);
-        List<byte[]> reactiveBytes = Construct3_3Reactive();
+        List<byte[]> reactiveBytes = currentselectedInteractiveMode switch
+        {
+            InteractiveMode.Reactive => Construct3_3Reactive(),
+            InteractiveMode.Ripple => Construct3_3Ripple(),
+            _ => Construct3_3Reactive()
+        };
         byte[] brightnessPacket = Construct3_4Brightness();
         byte[] applyPacket = Construct3_5Apply(checksum);
 
-        ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000); 
+        ProtocolService.AppendCmdTimeout(ActiveInterface, initialPacket, true, 5000);
 
         for (int framePacketId = 0; framePacketId < frameBytes.Count; framePacketId++)
         {
@@ -615,11 +639,11 @@ public partial class LightingEffectPage : PageBase
         {
             case 0x01: // 3-2 Data: frame index is little-endian at [2], [3].
                 int frameIndex = bytes[2] | (bytes[3] << 8);
-                Dispatcher.BeginInvoke((Action)(() => ScrubToSendingFrame(frameIndex)));
+                Dispatcher.BeginInvoke(() => ScrubToSendingFrame(frameIndex));
                 break;
 
             case 0x04: // 3-5 Apply: the upload has finished.
-                Dispatcher.BeginInvoke((Action)EndSendPreview);
+                Dispatcher.BeginInvoke(EndSendPreview);
                 break;
         }
     }
@@ -807,6 +831,31 @@ public partial class LightingEffectPage : PageBase
         return dataList;
     }
 
+    /*
+     * C1 02 05 02 64 32 01 FF 01 01 64 00 00 00 00 00 00 00 00
+     * C1 02 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+     * C1 02 05 00 00 00 00 00 00 00 00 00 00
+     */
+    private List<byte[]> Construct3_3Ripple()
+    {
+        List<byte[]> dataList = new();
+
+        byte rippleRandom = this.rippleRandom ? (byte)0x01 : (byte)0x00;
+        byte colorR = (byte)((rippleColor1 >> 16) & 0xFF);
+        byte colorG = (byte)((rippleColor1 >> 8) & 0xFF);
+        byte colorB = (byte)(rippleColor1 & 0xFF);
+
+        byte[] data1 = [0xC1, 0x02, 0x05, 0x02, rippleSpeed, rippleBrightness, rippleRandom, 0xFF, (byte)rippleWidth, 0x01, 0x64, colorR, colorG, colorB];
+        byte[] data2 = [0xC1, 0x02, 0x05, 0x01];
+        byte[] data3 = [0xC1, 0x02, 0x05, 0x00];
+
+        dataList.Add(data1);
+        dataList.Add(data2);
+        dataList.Add(data3);
+
+        return dataList;
+    }
+
     private byte[] Construct3_4Brightness()
     {
         return [0xC1, 0x03, 0x00, 0x00, brightness];
@@ -830,11 +879,7 @@ public partial class LightingEffectPage : PageBase
         int keyGlobalIndex = (packetIndex * keysPerPacket) + keyIndex;
 
         // Read the already-generated frame so what's sent exactly matches the preview.
-        if (frameIndex >= 0 && frameIndex < frameDatas.Count)
-        {
-            return frameDatas[frameIndex].GetKeyColor(keyGlobalIndex);
-        }
-        return [0x00, 0x00, 0x00];
+        return frameIndex >= 0 && frameIndex < frameDatas.Count ? frameDatas[frameIndex].GetKeyColor(keyGlobalIndex) : [0x00, 0x00, 0x00];
     }
 
     #endregion
@@ -859,6 +904,12 @@ public partial class LightingEffectPage : PageBase
 
     #endregion
 
+    private enum InteractiveMode : int
+    {
+        Reactive = 0,
+        Ripple = 1,
+    }
+
     private enum ReactiveMode : byte
     {
         Single = 0x0000,
@@ -868,5 +919,11 @@ public partial class LightingEffectPage : PageBase
     {
         Off = 0x0000,
         On = 0x0001,
+    }
+    private enum RippleWidth : byte
+    {
+        Narrow = 0x00,
+        Normal = 0x01,
+        Wide = 0x02,
     }
 }
