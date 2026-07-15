@@ -49,7 +49,6 @@
 	<Resource Include="Assets\Icons\AppIcon_512.png" />
 	<Resource Include="Assets\Icons\AppIcon_64.png" />
 	<Content Include="UI\Themes\Brushes.xaml" />
-	<Content Include="UI\Themes\Generic.xaml" />
 	<Content Include="UI\Themes\Palette.Dark.xaml" />
 	<Content Include="UI\Themes\Palette.Light.xaml" />
 	<Resource Include="Keyboard.ico" />
@@ -59,7 +58,6 @@
 	<Resource Include="Assets\Icons\AppIcon_Flat_512.png" />
 	<Resource Include="Assets\Icons\AppIcon_Flat_64.png" />
 	<Resource Include="UI\Themes\Brushes.xaml" />
-	<Resource Include="UI\Themes\Generic.xaml" />
 	<Resource Include="UI\Themes\Palette.Dark.xaml" />
 	<Resource Include="UI\Themes\Palette.Light.xaml" />
   </ItemGroup>

@@ -17,16 +17,11 @@ using System.Windows.Interop;
 
 namespace Gamepad
 {
-    public partial class GamepadFeature : UserControl
-    {
-        public GamepadFeature() { InitializeComponent(); }
-    }
 
     [PageInfo("Gamepad", Glyph = "\uE7FC", NavOrder = 0,
         Description = "Windows HID over GATT does not reflect the true BLE report rate, as the platform abstracts or fakes updates.")]
-    public class GamepadPage : PageBase
+    public partial class GamepadPage : PageBase
     {
-        private GamepadFeature page;
         protected PeripheralInterface ActiveInterface { get; private set; }
 
         public int X { get; private set; } = 32768;
@@ -79,8 +74,6 @@ namespace Gamepad
         private ChartRenderMode renderMode = ChartRenderMode.Line;
         private bool isChartPaused = false;
         private FullWindowChart fullWindowChart = null;
-        private ScatterChartControl XYChart;
-        private FastStripChartControl StripChart;
 
         // Mapping
         private bool mappingReady = false;
@@ -121,10 +114,6 @@ namespace Gamepad
         public override void Awake()
         {
             base.Awake();
-            page = new();
-
-            XYChart = page.XYChart;
-            StripChart = page.StripChart;
 
             DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
             DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
@@ -134,54 +123,54 @@ namespace Gamepad
                 ConnectToInterface();
             }
 
-            page.StripChart.Start(); 
-            page.StripChart.MaxY = 1200;
+            StripChart.Start(); 
+            StripChart.MaxY = 1200;
 
 
-            page.ResetCharts.Click += (_, _) =>
+            ResetCharts.Click += (_, _) =>
             {
                 Clear();
             };
 
-            page.AutoFit.Click += (_, _) =>
+            AutoFit.Click += (_, _) =>
             {
-                bool enabled = page.AutoFit.IsChecked ?? false;
+                bool enabled = AutoFit.IsChecked ?? false;
                 XYChart.AutoFit = enabled;
                 StripChart.AutoFit = enabled;
             };
 
-            page.PauseButton.Click += (_, _) =>
+            PauseButton.Click += (_, _) =>
             {
-                isChartPaused = page.PauseButton.IsChecked ?? false;
+                isChartPaused = PauseButton.IsChecked ?? false;
             };
 
-            page.RecordButton.Click += (_, _) =>
+            RecordButton.Click += (_, _) =>
             {
-                bool recording = page.RecordButton.IsChecked ?? false;
+                bool recording = RecordButton.IsChecked ?? false;
                 if (recording) StartRecording();
                 else StopRecording();
             };
 
-            page.HeavyVibrationButton.Click += (_, _) =>
+            HeavyVibrationButton.Click += (_, _) =>
             {
                 SetToVibrate(65535, 0, 1000);
             };
 
-            page.LightVibrationButton.Click += (_, _) =>
+            LightVibrationButton.Click += (_, _) =>
             {
                 SetToVibrate(0, 65535, 1000);
             };
 
-            page.TriggerVibrationButton.Click += (_, _) =>
+            TriggerVibrationButton.Click += (_, _) =>
             {
-                isTriggerVibrationMode = page.TriggerVibrationButton.IsChecked ?? false;
+                isTriggerVibrationMode = TriggerVibrationButton.IsChecked ?? false;
                 if (!isTriggerVibrationMode)
                 {
                     StopVibration();
                 }
             };
 
-            page.RenderModeButton.Click += (_, _) =>
+            RenderModeButton.Click += (_, _) =>
             {
                 // Cycle through render modes
                 renderMode = renderMode switch
@@ -196,12 +185,12 @@ namespace Gamepad
             };
             SetRenderMode(renderMode);
 
-            page.FullWindowChart.Click += (_, _) =>
+            FullWindowChart.Click += (_, _) =>
             {
                 if (fullWindowChart != null)
                 {
                     fullWindowChart.Focus();
-                    page.FullWindowChart.IsChecked = true;
+                    FullWindowChart.IsChecked = true;
                     return;
                 }
 
@@ -224,9 +213,9 @@ namespace Gamepad
                 SetChartType(chartType);
                 SetRenderMode(renderMode);
 
-                page.StripChartContainer.Visibility = Visibility.Collapsed;
-                page.XYChartContainer.Visibility = Visibility.Collapsed;
-                page.FullWindowText.Visibility = Visibility.Visible;
+                StripChartContainer.Visibility = Visibility.Collapsed;
+                XYChartContainer.Visibility = Visibility.Collapsed;
+                FullWindowText.Visibility = Visibility.Visible;
 
                 fullWindowChart.Loaded += (_, _) =>
                 {
@@ -237,18 +226,18 @@ namespace Gamepad
                 {
                     fullWindowChart = null;
 
-                    page.FullWindowChart.IsChecked = false;
-                    page.FullWindowText.Visibility = Visibility.Collapsed;
+                    FullWindowChart.IsChecked = false;
+                    FullWindowText.Visibility = Visibility.Collapsed;
 
                     // Assign update chart target
-                    XYChart = page.XYChart;
-                    StripChart = page.StripChart;
+                    XYChart = XYChart;
+                    StripChart = StripChart;
                     SetChartType(chartType);
                     SetRenderMode(renderMode);
                 };
             };
 
-            page.ReportRateSettingBtn.Click += (_, _) =>
+            ReportRateSettingBtn.Click += (_, _) =>
             {
                 StackPanel stackPanel = new() { Orientation = Orientation.Vertical };
 
@@ -288,18 +277,16 @@ namespace Gamepad
                 _ = dialog.ShowAsync();
             };
 
-            page.ChartType.SelectionChanged += (_, _) => SetChartType((ChartType)page.ChartType.SelectedIndex);
-            SetChartType((ChartType)page.ChartType.SelectedIndex);
+            ChartTypeDropdown.SelectionChanged += (_, _) => SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
+            SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
             tickChartData = (t) => StripChart.Tick(t);
-
-            root.Children.Add(page);
         }
 
         public override void ThemeChanged()
         {
             base.ThemeChanged();
             UpdateGamepadController();
-            page.GamepadController.UpdateAllVisuals();
+            GamepadController.UpdateAllVisuals();
         }
 
         protected override void OnEnable()
@@ -317,7 +304,7 @@ namespace Gamepad
             {
                 StopVibration();
                 isTriggerVibrationMode = false;
-                page.TriggerVibrationButton.IsChecked = false;
+                TriggerVibrationButton.IsChecked = false;
             }
         }
 
@@ -325,13 +312,13 @@ namespace Gamepad
         {
             base.Update();
 
-            page.TimestampText.Text = ((lastTimestamp - startTime) / 10000).ToString("0.#");
+            TimestampText.Text = ((lastTimestamp - startTime) / 10000).ToString("0.#");
 
             if (ActiveInterface != null && ActiveInterface.IsDeviceConnected)
             {
                 bool hasData = DecodeBytes();
 
-                page.ReportRateText.Text = reportRateSmoothed.ToString("0.#");
+                ReportRateText.Text = reportRateSmoothed.ToString("0.#");
 
                 if (hasData)
                 {
@@ -353,9 +340,9 @@ namespace Gamepad
         private void SetChartType(ChartType chartIndex)
         {
             chartType = chartIndex;
-            page.XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-            page.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-            page.ChartsCanvas.Visibility = fullWindowChart == null ? Visibility.Visible : Visibility.Collapsed;
+            XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+            StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+            ChartsCanvas.Visibility = fullWindowChart == null ? Visibility.Visible : Visibility.Collapsed;
 
             if (fullWindowChart != null)
             {
@@ -363,7 +350,7 @@ namespace Gamepad
                 fullWindowChart.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            page.RecordButton.IsEnabled = chartType <= ChartType.RT;
+            RecordButton.IsEnabled = chartType <= ChartType.RT;
 
             StripChart.Clear();
             XYChart.Clear();
@@ -576,75 +563,75 @@ namespace Gamepad
 
         private void UpdateGamepadController()
         {
-            page.LeftJoyStick.SetStick(Xf, Yf);
-            page.RightJoyStick.SetStick(RXf, RYf);
-            page.LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
-            page.RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
+            LeftJoyStick.SetStick(Xf, Yf);
+            RightJoyStick.SetStick(RXf, RYf);
+            LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
+            RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
 
-            page.GamepadController.LeftStickX = Xf;
-            page.GamepadController.LeftStickY = Yf;
-            page.GamepadController.RightStickX = RXf;
-            page.GamepadController.RightStickY = RYf;
+            GamepadController.LeftStickX = Xf;
+            GamepadController.LeftStickY = Yf;
+            GamepadController.RightStickX = RXf;
+            GamepadController.RightStickY = RYf;
 
-            page.GamepadController.LT = LTf / 255f;
-            page.GamepadController.RT = RTf / 255f;
+            GamepadController.LT = LTf / 255f;
+            GamepadController.RT = RTf / 255f;
 
-            page.GamepadController.A = ButtonStates[(int)ButtonMap.A];
-            page.GamepadController.B = ButtonStates[(int)ButtonMap.B];
-            page.GamepadController.X = ButtonStates[(int)ButtonMap.XBtn];
-            page.GamepadController.Y = ButtonStates[(int)ButtonMap.YBtn];
+            GamepadController.A = ButtonStates[(int)ButtonMap.A];
+            GamepadController.B = ButtonStates[(int)ButtonMap.B];
+            GamepadController.X = ButtonStates[(int)ButtonMap.XBtn];
+            GamepadController.Y = ButtonStates[(int)ButtonMap.YBtn];
 
-            page.GamepadController.DpadDown = ButtonStates[(int)ButtonMap.DpadDown];
-            page.GamepadController.DpadRight = ButtonStates[(int)ButtonMap.DpadRight];
-            page.GamepadController.DpadLeft = ButtonStates[(int)ButtonMap.DpadLeft];
-            page.GamepadController.DpadUp = ButtonStates[(int)ButtonMap.DpadUp];
+            GamepadController.DpadDown = ButtonStates[(int)ButtonMap.DpadDown];
+            GamepadController.DpadRight = ButtonStates[(int)ButtonMap.DpadRight];
+            GamepadController.DpadLeft = ButtonStates[(int)ButtonMap.DpadLeft];
+            GamepadController.DpadUp = ButtonStates[(int)ButtonMap.DpadUp];
 
-            page.GamepadController.LB = ButtonStates[(int)ButtonMap.LB];
-            page.GamepadController.RB = ButtonStates[(int)ButtonMap.RB];
-            page.GamepadController.View = ButtonStates[(int)ButtonMap.Menu];
-            page.GamepadController.Menu = ButtonStates[(int)ButtonMap.Start];
-            page.GamepadController.LeftStickKnob = ButtonStates[(int)ButtonMap.LeftStickKnob];
-            page.GamepadController.RightStickKnob = ButtonStates[(int)ButtonMap.RightStickKnob];
+            GamepadController.LB = ButtonStates[(int)ButtonMap.LB];
+            GamepadController.RB = ButtonStates[(int)ButtonMap.RB];
+            GamepadController.View = ButtonStates[(int)ButtonMap.Menu];
+            GamepadController.Menu = ButtonStates[(int)ButtonMap.Start];
+            GamepadController.LeftStickKnob = ButtonStates[(int)ButtonMap.LeftStickKnob];
+            GamepadController.RightStickKnob = ButtonStates[(int)ButtonMap.RightStickKnob];
         }
 
         private void UpdateButtons()
         {
             // Counters
-            page.B0.SetCounter(buttonCounter[(int)ButtonMap.A]);
-            page.B1.SetCounter(buttonCounter[(int)ButtonMap.B]);
-            page.B2.SetCounter(buttonCounter[(int)ButtonMap.XBtn]);
-            page.B3.SetCounter(buttonCounter[(int)ButtonMap.YBtn]);
-            page.B4.SetCounter(buttonCounter[(int)ButtonMap.LB]);
-            page.B5.SetCounter(buttonCounter[(int)ButtonMap.RB]);
-            page.B6.SetCounter(buttonCounter[(int)ButtonMap.Menu]);
-            page.B9.SetCounter(buttonCounter[(int)ButtonMap.Start]);
-            page.B10.SetCounter(buttonCounter[(int)ButtonMap.LeftStickKnob]);
-            page.B11.SetCounter(buttonCounter[(int)ButtonMap.RightStickKnob]);
-            page.B12.SetCounter(buttonCounter[(int)ButtonMap.DpadUp]);
-            page.B13.SetCounter(buttonCounter[(int)ButtonMap.DpadDown]);
-            page.B14.SetCounter(buttonCounter[(int)ButtonMap.DpadLeft]);
-            page.B15.SetCounter(buttonCounter[(int)ButtonMap.DpadRight]);
+            B0.SetCounter(buttonCounter[(int)ButtonMap.A]);
+            B1.SetCounter(buttonCounter[(int)ButtonMap.B]);
+            B2.SetCounter(buttonCounter[(int)ButtonMap.XBtn]);
+            B3.SetCounter(buttonCounter[(int)ButtonMap.YBtn]);
+            B4.SetCounter(buttonCounter[(int)ButtonMap.LB]);
+            B5.SetCounter(buttonCounter[(int)ButtonMap.RB]);
+            B6.SetCounter(buttonCounter[(int)ButtonMap.Menu]);
+            B9.SetCounter(buttonCounter[(int)ButtonMap.Start]);
+            B10.SetCounter(buttonCounter[(int)ButtonMap.LeftStickKnob]);
+            B11.SetCounter(buttonCounter[(int)ButtonMap.RightStickKnob]);
+            B12.SetCounter(buttonCounter[(int)ButtonMap.DpadUp]);
+            B13.SetCounter(buttonCounter[(int)ButtonMap.DpadDown]);
+            B14.SetCounter(buttonCounter[(int)ButtonMap.DpadLeft]);
+            B15.SetCounter(buttonCounter[(int)ButtonMap.DpadRight]);
 
             // States
-            page.B0.SetValue(ButtonStates[(int)ButtonMap.A]);
-            page.B1.SetValue(ButtonStates[(int)ButtonMap.B]);
-            page.B2.SetValue(ButtonStates[(int)ButtonMap.XBtn]);
-            page.B3.SetValue(ButtonStates[(int)ButtonMap.YBtn]);
-            page.B4.SetValue(ButtonStates[(int)ButtonMap.LB]);
-            page.B5.SetValue(ButtonStates[(int)ButtonMap.RB]);
-            page.B6.SetValue(ButtonStates[(int)ButtonMap.Menu]);
-            page.B9.SetValue(ButtonStates[(int)ButtonMap.Start]);
-            page.B10.SetValue(ButtonStates[(int)ButtonMap.LeftStickKnob]);
-            page.B11.SetValue(ButtonStates[(int)ButtonMap.RightStickKnob]);
-            page.B12.SetValue(ButtonStates[(int)ButtonMap.DpadUp]);
-            page.B13.SetValue(ButtonStates[(int)ButtonMap.DpadDown]);
-            page.B14.SetValue(ButtonStates[(int)ButtonMap.DpadLeft]);
-            page.B15.SetValue(ButtonStates[(int)ButtonMap.DpadRight]);
-            page.LeftTrigger.SetValue(LT);
-            page.RightTrigger.SetValue(RT);
+            B0.SetValue(ButtonStates[(int)ButtonMap.A]);
+            B1.SetValue(ButtonStates[(int)ButtonMap.B]);
+            B2.SetValue(ButtonStates[(int)ButtonMap.XBtn]);
+            B3.SetValue(ButtonStates[(int)ButtonMap.YBtn]);
+            B4.SetValue(ButtonStates[(int)ButtonMap.LB]);
+            B5.SetValue(ButtonStates[(int)ButtonMap.RB]);
+            B6.SetValue(ButtonStates[(int)ButtonMap.Menu]);
+            B9.SetValue(ButtonStates[(int)ButtonMap.Start]);
+            B10.SetValue(ButtonStates[(int)ButtonMap.LeftStickKnob]);
+            B11.SetValue(ButtonStates[(int)ButtonMap.RightStickKnob]);
+            B12.SetValue(ButtonStates[(int)ButtonMap.DpadUp]);
+            B13.SetValue(ButtonStates[(int)ButtonMap.DpadDown]);
+            B14.SetValue(ButtonStates[(int)ButtonMap.DpadLeft]);
+            B15.SetValue(ButtonStates[(int)ButtonMap.DpadRight]);
+            LeftTrigger.SetValue(LT);
+            RightTrigger.SetValue(RT);
 
-            page.LeftTrigger.SetCounter(zCounter);
-            page.RightTrigger.SetCounter(rZCounter);
+            LeftTrigger.SetCounter(zCounter);
+            RightTrigger.SetCounter(rZCounter);
         }
 
         [AppMenuItem("Vibration/Both", true)]
@@ -678,7 +665,7 @@ namespace Gamepad
         private void ToggleTriggerVibrationMode()
         {
             isTriggerVibrationMode = !isTriggerVibrationMode;
-            page.TriggerVibrationButton.IsChecked = isTriggerVibrationMode;
+            TriggerVibrationButton.IsChecked = isTriggerVibrationMode;
             if (!isTriggerVibrationMode)
             {
                 StopVibration();
@@ -740,14 +727,14 @@ namespace Gamepad
             hidHasRT = false;
             lastGamepadIndex = FindGamepadIndex();
 
-            page.IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
+            IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
 
-            page.IndexPanel.Visibility = Visibility.Visible;
-            page.ConnectedPanel.Visibility = Visibility.Collapsed;
-            page.RecordButton.IsEnabled = true;
-            page.HeavyVibrationButton.IsEnabled = true;
-            page.LightVibrationButton.IsEnabled = true;
-            page.TriggerVibrationButton.IsEnabled = true;
+            IndexPanel.Visibility = Visibility.Visible;
+            ConnectedPanel.Visibility = Visibility.Collapsed;
+            RecordButton.IsEnabled = true;
+            HeavyVibrationButton.IsEnabled = true;
+            LightVibrationButton.IsEnabled = true;
+            TriggerVibrationButton.IsEnabled = true;
         }
 
         private void DisconnectInterface()
@@ -762,13 +749,13 @@ namespace Gamepad
             ActiveInterface.OnDataReceived -= Parse;
             ActiveInterface = null;
 
-            page.IndexPanel.Visibility = Visibility.Collapsed;
-            page.ConnectedPanel.Visibility = Visibility.Visible;
-            page.RecordButton.IsEnabled = false;
-            page.HeavyVibrationButton.IsEnabled = false;
-            page.LightVibrationButton.IsEnabled = false;
-            page.TriggerVibrationButton.IsEnabled = false;
-            page.TriggerVibrationButton.IsChecked = false;
+            IndexPanel.Visibility = Visibility.Collapsed;
+            ConnectedPanel.Visibility = Visibility.Visible;
+            RecordButton.IsEnabled = false;
+            HeavyVibrationButton.IsEnabled = false;
+            LightVibrationButton.IsEnabled = false;
+            TriggerVibrationButton.IsEnabled = false;
+            TriggerVibrationButton.IsChecked = false;
             isTriggerVibrationMode = false;
         }
 
@@ -995,10 +982,10 @@ namespace Gamepad
 
             StripChart.Clear();
             XYChart.Clear();
-            page.LeftJoyStick.Clear();
-            page.RightJoyStick.Clear();
-            page.RightTrigger.Clear();
-            page.LeftTrigger.Clear();
+            LeftJoyStick.Clear();
+            RightJoyStick.Clear();
+            RightTrigger.Clear();
+            LeftTrigger.Clear();
             leftJoyStick.Reset();
             rightJoyStick.Reset();
 
@@ -1058,9 +1045,9 @@ namespace Gamepad
             }
 
             isRecording = true;
-            page.ChartType.IsEnabled = false;
-            page.AutoFit.IsEnabled = false;
-            page.PauseButton.IsEnabled = false;
+            ChartTypeDropdown.IsEnabled = false;
+            AutoFit.IsEnabled = false;
+            PauseButton.IsEnabled = false;
         }
 
         private void WriteRecord(DateTime time)
@@ -1094,9 +1081,9 @@ namespace Gamepad
                 System.Diagnostics.Debug.WriteLine($"Error stopping recording: {ex.Message}");
             }
 
-            page.ChartType.IsEnabled = true;
-            page.AutoFit.IsEnabled = true;
-            page.PauseButton.IsEnabled = true;
+            ChartTypeDropdown.IsEnabled = true;
+            AutoFit.IsEnabled = true;
+            PauseButton.IsEnabled = true;
 
             isRecording = false;
         }

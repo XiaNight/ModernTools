@@ -10,7 +10,7 @@ namespace Base.Components;
 /// <summary>
 /// Text-box based editor for string, integer, floating-point and hexadecimal members. The concrete
 /// behaviour (input filtering, parsing, formatting) is selected from the bound member's type and the
-/// <see cref="ConfigAttribute.Type"/> hint.
+/// <see cref="FieldAttribute.Type"/> hint.
 /// </summary>
 public partial class ConfigInputField : UserControl, IConfigEditor
 {

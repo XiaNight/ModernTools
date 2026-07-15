@@ -1,7 +1,6 @@
 ﻿using Base.Core;
 using Base.Helpers;
 using Base.UI.Themes;
-using ModernWpf;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
@@ -21,11 +20,10 @@ public partial class App : Application
         string app_name = Util.GetAssemblyAttribute<AssemblyProductAttribute>(a => a.Product);
 
         LocalAppDataStore.Init("ASUS", app_name);
-        ApplicationTheme theme = LocalAppDataStore.Instance.Get("Theme", ApplicationTheme.Light);
-        ThemeManager.Current.ApplicationTheme = theme;
 
-        // Sync the custom colour palette to the restored theme (the resource tree defaults to light).
-        PaletteManager.Apply(ThemeManager.Current.ActualApplicationTheme);
+        // Apply the saved appearance (theme + accent) before the window is created so there is no
+        // light-frame flash. ThemeService re-applies later once the window exists.
+        ThemeController.Apply(ThemeController.LoadSaved());
 
         var window = new Base.MainWindow();
         window.Show();

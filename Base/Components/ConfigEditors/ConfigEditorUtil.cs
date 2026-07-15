@@ -80,7 +80,7 @@ internal static class ConfigEditorUtil
 
     #region Parsing / validation
 
-    public static bool TryParseNumeric(string text, Type type, ConfigAttribute attr, out object value, out string error)
+    public static bool TryParseNumeric(string text, Type type, FieldAttribute attr, out object value, out string error)
     {
         value = null;
         error = null;
@@ -107,7 +107,7 @@ internal static class ConfigEditorUtil
         return CheckRange(d, attr, out error);
     }
 
-    public static bool TryParseHex(string text, Type type, ConfigAttribute attr, out object value, out string error)
+    public static bool TryParseHex(string text, Type type, FieldAttribute attr, out object value, out string error)
     {
         value = null;
         error = null;
@@ -158,7 +158,7 @@ internal static class ConfigEditorUtil
         return CheckRange(d, attr, out error);
     }
 
-    public static bool TryParseText(string text, Type type, ConfigAttribute attr, out object value, out string error)
+    public static bool TryParseText(string text, Type type, FieldAttribute attr, out object value, out string error)
     {
         value = null;
         error = null;
@@ -208,7 +208,7 @@ internal static class ConfigEditorUtil
         }
     }
 
-    public static bool CheckRange(double d, ConfigAttribute attr, out string error)
+    public static bool CheckRange(double d, FieldAttribute attr, out string error)
     {
         error = null;
         if (attr.HasMin && d < attr.Min)

@@ -217,16 +217,14 @@
 							<mtc:NavigationExpander Text="Audio" Glyph="&#xE8D6;" OrderIndex="100"/>
 							<mtc:NavigationExpander Text="ATE" Glyph="&#xE707;" OrderIndex="100"/>
 						</mtc:VerticalTabsManager.TopButtons>
-
-						<mtc:VerticalTabsManager.BottomButtons>
-							<mtc:NavigationButton Text="Settings" Glyph="&#xE713;"/>
-						</mtc:VerticalTabsManager.BottomButtons>
+						<!-- The Settings tab is discovered from SettingsPage's [PageInfo(NavAlignment = 1)]
+						     and added to the bottom section automatically; no static button needed. -->
 					</mtc:VerticalTabsManager>
 
 				</Grid>
 
 				<!-- Main Content Frame -->
-				<Grid x:Name="ContentFrame" Grid.Column="1" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
+				<Grid x:Name="ContentFrame" Grid.Column="1" Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
 				</Grid>
 			</Grid>
 

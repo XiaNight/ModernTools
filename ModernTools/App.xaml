@@ -6,12 +6,13 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <!-- Nominal brand default; the actual accent (ROG red / anniversary gold / system)
+                     is set at runtime by ThemeController based on the selected ThemeMode. -->
                 <ui:ThemeResources AccentColor="#FF1929"/>
-                <ui:ThemeResources AccentColor="#EEBe38"/>
                 <ui:XamlControlsResources />
                 <ui:ThemeResources RequestedTheme="Dark" />
                 <ui:ThemeResources RequestedTheme="Light" />
-                <ResourceDictionary Source="/Base;component/UI/Themes/Generic.xaml"/>
+                <ResourceDictionary Source="/Base;component/UI/Themes/Brushes.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

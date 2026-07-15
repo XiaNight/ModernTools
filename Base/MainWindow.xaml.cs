@@ -52,6 +52,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Debug.OnLog += LogMessage;
 
+        // Subscribe once so the window frame and every behaviour react whenever the *actual* theme or
+        // accent changes — this covers live Windows light/dark and accent changes while in Auto mode.
+        // (Registering here, not per-toggle, avoids the handler leak the old toggle had.)
+        ThemeManager.Current.ActualApplicationThemeChanged += (s, e) => OnThemeChangedExternally();
+        ThemeManager.Current.ActualAccentColorChanged += (s, e) => OnThemeChangedExternally();
+
         // Make the banner system available project-wide, then surface any startup banners.
         BannerManager.Init(BannerContainer);
         if (System.Diagnostics.Debugger.IsAttached)
@@ -123,27 +129,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void ToggleTheme_Click(object sender, RoutedEventArgs e)
     {
-        var currentTheme = ThemeManager.Current.ApplicationTheme;
-        ThemeManager.Current.ApplicationTheme = currentTheme == ApplicationTheme.Light
-            ? ApplicationTheme.Dark
-            : ApplicationTheme.Light;
+        // Flip light/dark through the theme service so the Settings choice stays in sync. The
+        // Black-Gold and Auto modes are selected from the Settings page; this menu toggle only swaps
+        // the two plain themes.
+        ThemeMode next = ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark
+            ? ThemeMode.Light
+            : ThemeMode.Dark;
 
-        // Swap the custom colour palette (light/dark) to match the newly selected theme.
-        PaletteManager.Apply(ThemeManager.Current.ActualApplicationTheme);
+        ThemeService.Instance.SetMode(next);
+        LogMessage($"Theme changed to {next}.");
+    }
 
-        ThemeManager.Current.ActualApplicationThemeChanged += (s, ev) =>
-        {
-            foreach (WpfBehaviour wpfObject in registeredWpfObjects)
-            {
-                if (wpfObject.IsEnabled)
-                    wpfObject?.ThemeChanged();
-            }
-        };
-
-        LocalAppDataStore.Instance.Set("Theme", ThemeManager.Current.ApplicationTheme);
+    /// <summary>
+    /// Re-applies the window-frame colour and notifies every enabled behaviour that the theme
+    /// (light/dark or accent) changed. Called by <see cref="Base.UI.Themes.ThemeService"/> after a
+    /// manual change and by the ModernWpf theme/accent-changed events (e.g. Windows changes in Auto).
+    /// </summary>
+    public void OnThemeChangedExternally()
+    {
         ApplyImmersiveDarkMode();
+        BroadcastThemeChanged();
+    }
 
-        LogMessage($"Theme changed to {ThemeManager.Current.ApplicationTheme}.");
+    /// <summary>Notifies every enabled behaviour that the theme changed so it can refresh its visuals.</summary>
+    public void BroadcastThemeChanged()
+    {
+        foreach (WpfBehaviour wpfObject in registeredWpfObjects)
+        {
+            if (wpfObject != null && wpfObject.IsEnabled)
+                wpfObject.ThemeChanged();
+        }
     }
 
     private void ToggleLog_Click(object sender, RoutedEventArgs e)
@@ -182,7 +197,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
         await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
 
-        SelectTabIndex(0);
+        // Choose the landing page from the user's setting. "Last" reopens the most-recently visited
+        // page (persisted across sessions by RecentPagesService); anything else — or no history —
+        // falls back to Home. Selecting Home by type is robust against nav-order collisions (several
+        // pages declare NavOrder = 0) and tab discovery order.
+        bool landed = false;
+        if (StartupSettings.Instance.Landing == LandingPage.Last)
+        {
+            string lastPage = RecentPagesService.Items.FirstOrDefault()?.Title;
+            if (!string.IsNullOrWhiteSpace(lastPage))
+                landed = NavigateTo(lastPage);
+        }
+
+        if (!landed && !SelectPageByType(typeof(HomePage)))
+            SelectTabIndex(0);
+
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
 
         startupSw.Stop();
@@ -273,6 +302,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         // Fired before the window actually closes.
         // You can cancel shutdown by setting e.Cancel = true.
         Debug.Log("MainWindow is closing");
+
+        // Persist app / feature-wide settings alongside each behaviour's own [Persist] fields.
+        SettingRegistry.Instance.SaveAll();
+
         foreach (WpfBehaviour wpfObject in registeredWpfObjects)
         {
             wpfObject?.OnApplicationQuit(e);
@@ -391,6 +424,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Selects (and lazily instantiates) the page of the given type, provided a navigation tab
+    /// was registered for it. Returns false when no matching tab exists.
+    /// </summary>
+    public bool SelectPageByType(Type pageType)
+    {
+        if (pageType == null) return false;
+        if (!lazyPageTabMap.ContainsKey(pageType)) return false;
+        SelectPageLazy(pageType);
+        return true;
+    }
+
+    /// <summary>
     /// Instantiates a lazy page on first access and then navigates to it.
     /// Subsequent calls reuse the already-created instance.
     /// </summary>
@@ -461,6 +506,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
+
+        // Record the visit so the Home page can surface a real "Recent Pages" list.
+        // Home and Settings are excluded — Home is self-referential, and Settings is a
+        // destination users reach deliberately, not something worth resurfacing as "recent".
+        if (page is not HomePage and not SettingsPage)
+            RecentPagesService.Record(page.PageName, page.Description, page.Glyph);
     }
 
     public void ReloadPage()
@@ -558,16 +609,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             jobs[t] = LoadingCover.RentJob(1f);
 
         // All singleton instantiations in one dispatcher call instead of N separate round-trips.
+        List<WpfBehaviour> created = new(singletonTypes.Length);
         await Dispatcher.InvokeAsync(() =>
         {
             foreach (var t in singletonTypes)
             {
                 var closedBase = openBase.MakeGenericType(t);
                 var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                _ = prop?.GetValue(null);
+                if (prop?.GetValue(null) is WpfBehaviour instance)
+                    created.Add(instance);
                 jobs[t].Finish();
             }
         }, DispatcherPriority.Send);
+
+        // Catalogue [Setting] members directly off the freshly-created singletons. Doing it here (with
+        // the instances in hand) is deterministic — it does not depend on the asynchronous
+        // RegisterWpfObject drain that fills registeredWpfObjects. Metadata + persisted values only;
+        // no editor UI is built until the Settings page is opened.
+        SettingRegistry.Instance.Build(created);
     }
 
     #endregion
@@ -595,9 +654,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public void SelectTabIndex(int index)
     {
+        // Push Bottom first so Top buttons are popped (and walked) first — index 0 must be the
+        // top-most tab, not the first bottom tab. A stack is LIFO, so the last push wins.
         Stack<IEnumerable<INavigationItem>> stack = new();
-        stack.Push(NavTabsManager.TopButtons);
         stack.Push(NavTabsManager.BottomButtons);
+        stack.Push(NavTabsManager.TopButtons);
         int walk = 0;
 
         while (stack.Count > 0)
@@ -645,6 +706,74 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Navigates to a destination by name (used by the Home quick-access tiles).
+    /// Matches a leaf tab first; if the name refers to a navigation group (expander),
+    /// expands it and selects its first leaf page. Returns false when nothing matched.
+    /// </summary>
+    public bool NavigateTo(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (SelectTabByName(name)) return true;
+
+        if (TryFindExpander(NavTabsManager.TopButtons, name, out NavigationExpander expander)
+            || TryFindExpander(NavTabsManager.BottomButtons, name, out expander))
+        {
+            try { expander.Expand(); } catch { /* not yet loaded — selecting the leaf is enough */ }
+
+            NavigationButton leaf = FindFirstLeaf(expander);
+            if (leaf != null)
+            {
+                leaf.Click();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindExpander(IEnumerable<INavigationItem> items, string name, out NavigationExpander expander)
+    {
+        foreach (INavigationItem item in items)
+        {
+            if (item is NavigationExpander e)
+            {
+                if (string.Equals(e.Text, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    expander = e;
+                    return true;
+                }
+                if (TryFindExpander(e.Items, name, out expander))
+                    return true;
+            }
+        }
+        expander = null;
+        return false;
+    }
+
+    private static NavigationButton FindFirstLeaf(NavigationExpander expander)
+    {
+        foreach (INavigationItem item in expander.Items)
+        {
+            if (item is NavigationButton b)
+                return b;
+            if (item is NavigationExpander e)
+            {
+                NavigationButton nested = FindFirstLeaf(e);
+                if (nested != null)
+                    return nested;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Opens the output log panel (used by the Home quick-access tile).</summary>
+    public void ShowLog()
+    {
+        isLogVisible = true;
+        LogPanel.Visibility = Visibility.Visible;
     }
 
     public IEnumerable<string> ListTabs()
