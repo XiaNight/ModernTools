@@ -146,7 +146,19 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             i++;
         }
 
-        if (index >= 0) Dispatcher.Invoke(() => Main.PortComboBox.SelectedIndex = index);
+        if (index < 0) return; // last device not present — fall back to no selection (normal startup)
+
+        bool autoConnect = StartupSettings.Instance.AutoConnectLastDevice;
+        Device target = lastConnectedDevice;
+
+        Dispatcher.Invoke(() =>
+        {
+            Main.PortComboBox.SelectedIndex = index;
+
+            // Reconnect the last-used device only when the user opted in and it is actually available.
+            if (autoConnect && target != null && target.IsAvailable)
+                Connect(target);
+        });
     }
 
     private void PreviewDeviceSelection(object sender, MouseButtonEventArgs e)

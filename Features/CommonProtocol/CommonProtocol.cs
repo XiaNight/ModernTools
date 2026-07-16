@@ -1,4 +1,5 @@
 ﻿using Base.Core;
+using Base.Protocol;
 using Base.Services;
 using Base.Services.Peripheral;
 using CommonProtocol.Protocols.GetInfo;

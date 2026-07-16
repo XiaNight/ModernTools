@@ -20,7 +20,7 @@ Detail lives close to the code. Read `Base/CLAUDE.md` before touching framework-
 
 ## Conventions
 
-Target `net8.0-windows` / C# 12, `<Nullable>disable</Nullable>`. Formatting is enforced by `.editorconfig`: **tabs**, Allman braces, file-scoped namespaces, explicit types (no `var`), CRLF, no final newline. Match it.
+Target `net8.0-windows` / C# 12, `<Nullable>disable</Nullable>`. Formatting is enforced by `.editorconfig`: **tabs**, Allman braces, file-scoped namespaces, explicit types (no `var`), CRLF, no final newline. Match it. Full coding conventions — formatting plus project patterns (commands, logging, async, persistence, theming in code) — are in `docs/coding-conventions.md`.
 
 ## Building & debugging
 

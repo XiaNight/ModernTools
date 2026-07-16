@@ -1,0 +1,35 @@
+<UserControl x:Class="QuickScan.QuickScanGroupControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:QuickScan"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d"
+             d:DesignWidth="900">
+    <!-- A container for sub-indexed protocols (e.g. Get FW Info idx 0..7). The group
+         itself runs nothing; each child row is an independently scanned entry. -->
+    <Grid Margin="0,4,0,2">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <CheckBox x:Name="MasterCheck" Grid.Column="0" IsChecked="True"
+				   MinWidth="32" MinHeight="16"
+                  VerticalAlignment="Top" HorizontalAlignment="Center" Margin="6,0,0,0"
+                  ToolTip="Enable or disable every protocol in this group"
+                  Checked="MasterCheck_Checked" Unchecked="MasterCheck_Unchecked"/>
+
+        <Expander x:Name="GroupExpander" Grid.Column="1" IsExpanded="True">
+            <Expander.Header>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="GroupName" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="GroupHint" Opacity="0.6" FontSize="11"
+                               Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Expander.Header>
+            <StackPanel x:Name="ChildPanel" Margin="0,4,0,6"/>
+        </Expander>
+    </Grid>
+</UserControl>

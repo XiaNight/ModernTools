@@ -44,7 +44,7 @@ public partial class LightingEffectPage : PageBase
 {
     [Persist]
     [Config(key: "總共Frame數量", Description = "Follow Device XY鍵位表", Min = 1, Header = "3-1 Set Advance Effect (Layer) - Mode", Changed = nameof(FrameCountChanged))]
-    private readonly short frameCount = 0x72;
+    private readonly ushort frameCount = 0x72;
 
     [Persist]
     [Config(key: "X數量", Description = "Follow Device XY鍵位表", Min = 1, Type = ConfigType.Hex)]
@@ -337,7 +337,7 @@ public partial class LightingEffectPage : PageBase
 
         for (int frame = 0; frame < count; frame++)
         {
-            FrameData frameData = new((short)frame);
+            FrameData frameData = new((ushort)frame);
 
             for (int globalKeyIndex = 0; globalKeyIndex < keyCount; globalKeyIndex++)
             {
@@ -551,10 +551,10 @@ public partial class LightingEffectPage : PageBase
     {
         private static readonly byte[] Off = { 0x00, 0x00, 0x00 };
 
-        public readonly short frameIndex;
+        public readonly ushort frameIndex;
         public Dictionary<int, byte[]> KeyColors { get; set; } = new();
 
-        public FrameData(short index)
+        public FrameData(ushort index)
         {
             this.frameIndex = index;
         }
@@ -701,7 +701,7 @@ public partial class LightingEffectPage : PageBase
         frameResendCounts[frameIndex] = already + 1;
 
         int discardChecksum = 0;
-        List<byte[]> packets = Construct3_2SingleFrame((short)frameIndex, ref discardChecksum);
+        List<byte[]> packets = Construct3_2SingleFrame((ushort)frameIndex, ref discardChecksum);
         for (int i = 0; i < packets.Count; i++)
         {
             // Same waiting rule as the normal send loop (framePacketId % 6 == 5).
@@ -754,7 +754,7 @@ public partial class LightingEffectPage : PageBase
         List<byte[]> dataList = new();
 
         int activeFrameCount = ActiveFrameCount;
-        for (short currentFrameIndex = 0; currentFrameIndex < activeFrameCount; currentFrameIndex++)
+        for (ushort currentFrameIndex = 0; currentFrameIndex < activeFrameCount; currentFrameIndex++)
         {
             dataList.AddRange(Construct3_2SingleFrame(currentFrameIndex, ref checksum));
         }
@@ -762,14 +762,14 @@ public partial class LightingEffectPage : PageBase
         return dataList;
     }
 
-    private List<byte[]> Construct3_2SingleFrame(short currentFrameIndex, ref int checksum)
+    private List<byte[]> Construct3_2SingleFrame(ushort currentFrameIndex, ref int checksum)
     {
         byte remainingKeys = keyCount;
-        short requiredPackets = (short)Math.Ceiling((double)keyCount / keysPerPacket);
+        ushort requiredPackets = (ushort)Math.Ceiling((double)keyCount / keysPerPacket);
 
         List<byte[]> frameDataList = new(requiredPackets);
 
-        for (short packetIndex = 0; packetIndex < requiredPackets; packetIndex++)
+        for (ushort packetIndex = 0; packetIndex < requiredPackets; packetIndex++)
         {
             byte packetState = packetIndex switch
             {
@@ -786,7 +786,7 @@ public partial class LightingEffectPage : PageBase
         return frameDataList;
     }
 
-    private byte[] Construct3_2SinglePacket(short currentFrameIndex, in byte packetState, in int packetIndex, in byte remainingKeys, ref int checksum)
+    private byte[] Construct3_2SinglePacket(ushort currentFrameIndex, in byte packetState, in int packetIndex, in byte remainingKeys, ref int checksum)
     {
         int headerSize = 6;
 
@@ -874,7 +874,7 @@ public partial class LightingEffectPage : PageBase
     /// <param name="frameIndex">Current frame index in all frames.</param>
     /// <param name="packetIndex">Current packet index in a single frame.</param>
     /// <param name="keyIndex">Current key index in a single packet.</param>
-    private byte[] GetKeyRGB(short frameIndex, byte packetIndex, byte keyIndex)
+    private byte[] GetKeyRGB(ushort frameIndex, byte packetIndex, byte keyIndex)
     {
         int keyGlobalIndex = (packetIndex * keysPerPacket) + keyIndex;
 
