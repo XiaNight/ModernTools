@@ -1107,7 +1107,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         {
             try
             {
-                var newInterface = deviceInterface.Connect();
+                var newInterface = deviceInterface.Connect(useAsyncRead: true);
                 if (newInterface == null) continue;
 
                 connectedInterfaces.Add(newInterface);

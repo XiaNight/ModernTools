@@ -444,7 +444,7 @@ public partial class ProtocolStressTest : PageBase
             return null;
         }
 
-        var iface = detail.Connect(false);
+        var iface = detail.Connect(true);
         if (iface == null)
         {
             SetStatus("Failed to open interface.");
