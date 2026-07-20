@@ -67,7 +67,7 @@ public partial class QuickScanEntryControl : UserControl
 	{
 		byte[] hex = ParseHex(IdxBox.Text);
 		if (Entry != null) Entry.Index = hex.Length >= 2 ? BitConverter.ToUInt16(hex, 0) : (ushort)0;
-    }
+	}
 
 	private void DataBox_LostFocus(object sender, RoutedEventArgs e)
 	{

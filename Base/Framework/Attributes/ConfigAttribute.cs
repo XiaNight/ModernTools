@@ -42,6 +42,18 @@ namespace Base.Core
 		/// <c>0x000000FF</c>). Applies to integer members.
 		/// </summary>
 		Hex_RGBA,
+
+		/// <summary>
+		/// Render a text box with a <c>Browse…</c> button that opens a single-selection file picker.
+		/// The chosen file's full path is written back to the member. Applies to string members.
+		/// </summary>
+		File,
+
+		/// <summary>
+		/// Render a text box with a <c>Browse…</c> button that opens a single-selection folder picker.
+		/// The chosen folder's full path is written back to the member. Applies to string members.
+		/// </summary>
+		Folder,
 	}
 
 	/// <summary>
