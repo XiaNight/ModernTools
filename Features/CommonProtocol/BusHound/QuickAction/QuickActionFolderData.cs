@@ -1,8 +1,8 @@
-namespace Base.UI.Pages;
-
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+
+namespace CommonProtocol.BusHound.QuickAction;
 
 /// <summary>
 /// Serializable data model for a Quick Action folder.

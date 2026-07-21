@@ -1,4 +1,4 @@
-<ui:ContentDialog x:Class="CommonProtocol.ProtocolTestEditDialog"
+<ui:ContentDialog x:Class="CommonProtocol.BusHound.ProtocolTest.ProtocolTestEditDialog"
 				  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 				  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
 				  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -38,14 +38,32 @@
 				   FontSize="11"
 				   Opacity="0.7"
 				   TextWrapping="Wrap"
-				   Margin="0,0,0,12"/>
+				   Margin="0,0,0,6"/>
+
+		<!-- Record: fires the request and streams received packets into the expected field -->
+		<ui:SimpleStackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+			<Button x:Name="RecordButton">
+				<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
+					<ui:FontIcon x:Name="RecordIcon" Glyph="&#xE7C8;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+					<TextBlock x:Name="RecordButtonText" Text="Record"/>
+				</ui:SimpleStackPanel>
+			</Button>
+			<TextBlock x:Name="RecordStatusText"
+					   VerticalAlignment="Center"
+					   FontSize="12"
+					   Opacity="0.8"/>
+		</ui:SimpleStackPanel>
+
+		<CheckBox x:Name="TrailingWildcardCheck"
+				  Content="Allow extra trailing bytes (treated as wildcard)"
+				  IsChecked="True"
+				  Margin="0,0,0,12"/>
 
 		<TextBlock Text="Total timeout (ms)" FontWeight="SemiBold" Margin="0,0,0,4"/>
 		<ui:NumberBox x:Name="TimeoutBox"
 					  Minimum="0"
 					  Maximum="600000"
-					  Value="1000"
-					  SpinButtonPlacementMode="Compact"
+					  Value="10"
 					  HorizontalAlignment="Left"
 					  MinWidth="160"
 					  Margin="0,0,0,4"/>

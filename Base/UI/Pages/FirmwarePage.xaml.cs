@@ -22,7 +22,6 @@ namespace Base.Pages;
 /// </summary>
 [PageInfo("Firmware Update",
 	Glyph = "\uE777",           // UpdateRestore (Segoe Fluent Icons).
-	ShortName = "FW",
 	Description = "Browse and run Device Firmware Update packages.",
 	ShowDeviceSelection = false)]
 public partial class FirmwarePage : PageBase, INotifyPropertyChanged

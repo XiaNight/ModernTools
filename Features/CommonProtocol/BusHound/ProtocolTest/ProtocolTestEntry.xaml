@@ -1,10 +1,10 @@
-﻿<UserControl x:Class="CommonProtocol.ProtocolTestEntry"
+﻿<UserControl x:Class="CommonProtocol.BusHound.ProtocolTest.ProtocolTestEntry"
 			 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
 			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
 			 xmlns:ui="http://schemas.modernwpf.com/2019"
-			 xmlns:local="clr-namespace:CommonProtocol"
+			 xmlns:local="clr-namespace:CommonProtocol.BusHound.ProtocolTest"
 			 mc:Ignorable="d" 
 			 d:DesignHeight="80" d:DesignWidth="800">
 	<UserControl.Resources>
@@ -27,6 +27,7 @@
 			<Grid.ColumnDefinitions>
 				<ColumnDefinition Width="Auto"/>
 				<ColumnDefinition Width="Auto"/>
+				<ColumnDefinition Width="Auto"/>
 				<!-- Send -->
 				<ColumnDefinition Width="*"/>
 				<!-- Name -->
@@ -36,6 +37,7 @@
 				<!-- Delete -->
 			</Grid.ColumnDefinitions>
 			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
 				<RowDefinition Height="Auto"/>
 				<RowDefinition Height="Auto"/>
 			</Grid.RowDefinitions>
@@ -49,24 +51,32 @@
 					ToolTip="Send all commands">
 				<ui:FontIcon Glyph="&#xE768;" FontSize="18" FontFamily="Segoe Fluent Icons"/>
 			</Button>
-			
+
 			<!-- Verdict badge -->
 			<Border x:Name="Badge" Grid.Row="0" Grid.Column="1"
-					Width="52" CornerRadius="4" Margin="4,0"
+					Width="86" CornerRadius="4" Margin="4,0"
 					VerticalAlignment="Stretch" Background="{StaticResource SkipBg}">
-				<TextBlock x:Name="BadgeText" Text="—" FontWeight="SemiBold" FontSize="14"
+				<TextBlock x:Name="BadgeText" Text="MISSMATCH" FontWeight="SemiBold" FontSize="14"
+						   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+			</Border>
+			
+			<!-- Response Time badge -->
+			<Border x:Name="ResponseTime" Grid.Row="0" Grid.Column="2"
+					Width="56" CornerRadius="4" Margin="4,0"
+					VerticalAlignment="Stretch" Background="{StaticResource SkipBg}">
+				<TextBlock x:Name="ResponseTimeText" Text="123ms" FontWeight="SemiBold" FontSize="14"
 						   HorizontalAlignment="Center" VerticalAlignment="Center"/>
 			</Border>
 
 			<!-- Name text box -->
 			<TextBox x:Name="NameBox"
-					 Grid.Column="2" Grid.Row="0"
+					 Grid.Column="3" Grid.Row="0"
 					 FontSize="12"
 					 VerticalContentAlignment="Center"
 					 Margin="4,0"
 					 MinWidth="80"/>
 
-			<!-- Preview block (truncated, clickable -> opens popup) -->
+			<!-- Preview block (truncated, clickable -> opens read-only view) -->
 			<TextBlock x:Name="PreviewBlock"
 					   Grid.Column="0" Grid.Row="1" Grid.ColumnSpan="5"
 					   FontFamily="Consolas"
@@ -75,12 +85,24 @@
 					   TextTrimming="CharacterEllipsis"
 					   Margin="4,4,4,0"
 					   Cursor="Hand"
-					   ToolTip="Click to view/edit full commands"
-					   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+					   ToolTip="Click to view request and response bytes"
+					   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+			<!-- Received summary (populated after a run) -->
+			<TextBlock x:Name="ReceivedBlock"
+					   Grid.Column="0" Grid.Row="2" Grid.ColumnSpan="5"
+					   FontFamily="Consolas"
+					   FontSize="12"
+					   VerticalAlignment="Center"
+					   TextTrimming="CharacterEllipsis"
+					   Margin="4,2,4,0"
+					   Cursor="Hand"
+					   ToolTip="Click to view request and response bytes"
+					   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
 
 			<!-- Edit button -->
 			<Button x:Name="EditButton"
-					Grid.Column="3" Grid.Row="0"
+					Grid.Column="4" Grid.Row="0"
 					Padding="8 6"
 					Margin="4,0"
 					VerticalAlignment="Stretch"
@@ -90,7 +112,7 @@
 
 			<!-- Delete button -->
 			<Button x:Name="DeleteButton"
-					Grid.Column="4" Grid.Row="0"
+					Grid.Column="5" Grid.Row="0"
 					Padding="8 6"
 					Margin="4,0"
 					VerticalAlignment="Stretch"

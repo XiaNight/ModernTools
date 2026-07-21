@@ -1,31 +1,27 @@
-﻿namespace Base.UI.Pages;
-
-using Base.Core;
+﻿using Base.Core;
 using Base.Framework.Utilities;
+using Base.Helpers;
 using Base.Pages;
 using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
+using CommonProtocol.BusHound.QuickAction;
 using Microsoft.Win32;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Base.Helpers;
-using static Base.UI.Pages.ASUSBusHoundPage.BusListener;
+
+namespace CommonProtocol.BusHound;
+
 
 [PageInfo("Bus Hound", Glyph = "\uEE6F",
     Description = "ASUS Bus Hound is a software that allows you to control your ASUS laptop's fans and performance modes. This page provides integration with ASUS Hound, allowing you to monitor and adjust your laptop's performance settings directly from this application.")]
@@ -504,7 +500,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         var listener = busListeners.FirstOrDefault(l => l.Name == name);
         if (listener != null)
         {
-            if (!listener.ReceivedData.TryDequeue(out MemoryData item)) return null;
+            if (!listener.ReceivedData.TryDequeue(out BusListener.MemoryData item)) return null;
             string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
             return new ApiResponse
             {
@@ -531,7 +527,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         if (listener != null)
         {
             List<object> allData = new();
-            while (listener.ReceivedData.TryDequeue(out MemoryData item))
+            while (listener.ReceivedData.TryDequeue(out BusListener.MemoryData item))
             {
                 string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
                 allData.Add(

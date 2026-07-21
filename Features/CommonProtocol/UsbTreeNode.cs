@@ -1,4 +1,4 @@
-namespace Base.UI.Pages;
+namespace CommonProtocol;
 
 using System.Collections.ObjectModel;
 

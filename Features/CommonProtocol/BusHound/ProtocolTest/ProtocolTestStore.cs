@@ -1,4 +1,4 @@
-namespace CommonProtocol;
+namespace CommonProtocol.BusHound.ProtocolTest;
 
 using System.Collections.Generic;
 using Base.Core;
@@ -12,9 +12,9 @@ public static class ProtocolTestStore
 {
 	private const string KEY_TESTS = "BusHound.ProtocolTests";
 
-	public static List<ProtocolTest> GetAll()
-		=> LocalAppDataStore.Instance.Get<List<ProtocolTest>>(KEY_TESTS) ?? new List<ProtocolTest>();
+	public static List<TestProtocol> GetAll()
+		=> LocalAppDataStore.Instance.Get<List<TestProtocol>>(KEY_TESTS) ?? new List<TestProtocol>();
 
-	public static void SaveAll(List<ProtocolTest> tests)
-		=> LocalAppDataStore.Instance.Set(KEY_TESTS, tests ?? new List<ProtocolTest>());
+	public static void SaveAll(List<TestProtocol> tests)
+		=> LocalAppDataStore.Instance.Set(KEY_TESTS, tests ?? new List<TestProtocol>());
 }

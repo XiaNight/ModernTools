@@ -1,6 +1,6 @@
 ﻿using Base.Protocol;
 
-namespace CommonProtocol.Protocols.GetInfo;
+namespace CommonProtocol.Protocols;
 
 // 請求軟硬體資訊
 internal class BasicInfo : Structure
