@@ -230,6 +230,8 @@ public sealed class GeneratedPageManager : WpfBehaviourSingleton<GeneratedPageMa
 		try
 		{
 			GeneratedPageDefinition sample = BuiltInSample.Create();
+			sample.CreatedUtc = DateTime.UtcNow;
+			sample.ModifiedUtc = sample.CreatedUtc;
 			store.Save(sample);
 			RegisterInternal(sample);
 			Debug.Log("[AiComposer] Seeded built-in sample page.");
