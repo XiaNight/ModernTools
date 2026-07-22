@@ -4,6 +4,9 @@
     <Platform Name="x64" />
   </Configurations>
   <Folder Name="/Feature/">
+    <Project Path="Features/AiComposer/AiComposer.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="Features/MCPServer/MCPServer.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
