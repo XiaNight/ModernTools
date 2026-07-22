@@ -18,7 +18,7 @@ namespace QuickScan;
 /// </summary>
 [PageInfo("Quick Scan",
 	Glyph = "\uE721",
-	ShortName = "Quick Scan",
+	ShortName = "QSN",
 	Description = "Scan a model's Get protocols and report pass/fail.",
 	Path = ["Keyboard"])]
 public partial class QuickScanPage : PageBase
