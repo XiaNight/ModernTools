@@ -34,6 +34,7 @@
 
 	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
 		<ProjectReference Include="..\Base\Base.csproj" />
+		<ProjectReference Include="..\Features\AiComposer\AiComposer.csproj" />
 		<ProjectReference Include="..\Features\Audio\Audio.csproj" />
 		<ProjectReference Include="..\Features\CommonProtocol\CommonProtocol.csproj" />
 		<ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
@@ -55,6 +56,7 @@
 		<Exec Command="dotnet msbuild ..\Features\MouseATE\MouseATE.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\QuickScan\QuickScan.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\MCPServer\MCPServer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\AiComposer\AiComposer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 	</Target>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Release'">

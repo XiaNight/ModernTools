@@ -1,0 +1,124 @@
+<base:PageBase x:Class="AiComposer.UI.AiComposerPage"
+			 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:local="clr-namespace:AiComposer.UI"
+			 xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+			 mc:Ignorable="d"
+			 d:DesignHeight="700" d:DesignWidth="1100">
+	<Grid Margin="12">
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="*"/>
+		</Grid.RowDefinitions>
+
+		<!-- Header -->
+		<StackPanel Grid.Row="0" Margin="0,0,0,10">
+			<TextBlock Text="AI Composer" FontSize="22" FontWeight="SemiBold"
+					   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+			<TextBlock TextWrapping="Wrap" Margin="0,2,0,0"
+					   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+					   Text="Author a page from XAML + C#, then create it into the navigation. Pages are compiled at runtime, persisted, and reloaded on restart. This is the local test harness for the whole loop."/>
+		</StackPanel>
+
+		<Grid Grid.Row="1">
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="260"/>
+				<ColumnDefinition Width="*"/>
+			</Grid.ColumnDefinitions>
+
+			<!-- Existing pages -->
+			<Grid Grid.Column="0" Margin="0,0,12,0">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="*"/>
+					<RowDefinition Height="Auto"/>
+				</Grid.RowDefinitions>
+				<TextBlock Grid.Row="0" Text="Generated pages" FontWeight="SemiBold" Margin="0,0,0,6"
+						   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+				<Border Grid.Row="1" BorderThickness="1" CornerRadius="4"
+						BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+						Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+					<ListBox x:Name="PagesList" BorderThickness="0" Background="Transparent"
+							 DisplayMemberPath="Title"
+							 SelectionChanged="PagesList_SelectionChanged"/>
+				</Border>
+				<Button Grid.Row="2" x:Name="NewButton" Content="New / clear editor" Margin="0,8,0,0"
+						HorizontalAlignment="Stretch" Padding="0,6" Click="New_Click"/>
+			</Grid>
+
+			<!-- Editor -->
+			<Grid Grid.Column="1">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="*"/>
+					<RowDefinition Height="Auto"/>
+				</Grid.RowDefinitions>
+
+				<!-- Metadata -->
+				<Grid Grid.Row="0" Margin="0,0,0,8">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="*"/>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+					<StackPanel Grid.Column="0" Margin="0,0,8,0">
+						<TextBlock Text="Title" Opacity="0.8"/>
+						<TextBox x:Name="TitleBox"/>
+					</StackPanel>
+					<StackPanel Grid.Column="1" Margin="0,0,8,0" Width="120">
+						<TextBlock Text="Glyph (e.g. )" Opacity="0.8"/>
+						<TextBox x:Name="GlyphBox"/>
+					</StackPanel>
+					<StackPanel Grid.Column="2" Margin="0,0,8,0" Width="140">
+						<TextBlock Text="Group" Opacity="0.8"/>
+						<TextBox x:Name="GroupBox"/>
+					</StackPanel>
+					<StackPanel Grid.Column="3" Width="80">
+						<TextBlock Text="Order" Opacity="0.8"/>
+						<TextBox x:Name="OrderBox"/>
+					</StackPanel>
+				</Grid>
+
+				<!-- Actions -->
+				<StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+					<Button x:Name="CreateButton" Content="Create page" Padding="14,6" Click="Create_Click"/>
+					<Button x:Name="UpdateButton" Content="Update page" Margin="8,0,0,0" Padding="14,6" Click="Update_Click"/>
+					<Button x:Name="DeleteButton" Content="Delete page" Margin="8,0,0,0" Padding="14,6" Click="Delete_Click"/>
+					<Button x:Name="ValidateButton" Content="Validate (no save)" Margin="8,0,0,0" Padding="14,6" Click="Validate_Click"/>
+					<Button x:Name="SampleButton" Content="Load sample template" Margin="8,0,0,0" Padding="14,6" Click="Sample_Click"/>
+				</StackPanel>
+
+				<!-- Source editors -->
+				<TabControl Grid.Row="2" x:Name="EditorTabs" Background="Transparent">
+					<TabItem Header="XAML">
+						<TextBox x:Name="XamlEditor" AcceptsReturn="True" AcceptsTab="True"
+								 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+								 TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas"
+								 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"/>
+					</TabItem>
+					<TabItem Header="C#">
+						<TextBox x:Name="CsharpEditor" AcceptsReturn="True" AcceptsTab="True"
+								 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+								 TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas"
+								 Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"/>
+					</TabItem>
+				</TabControl>
+
+				<!-- Status -->
+				<Border Grid.Row="3" Margin="0,8,0,0" Padding="10" CornerRadius="4" BorderThickness="1"
+						BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+						Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+					<TextBox x:Name="StatusText" IsReadOnly="True" BorderThickness="0" Background="Transparent"
+							 TextWrapping="Wrap" MaxHeight="140" VerticalScrollBarVisibility="Auto"
+							 FontFamily="Cascadia Mono, Consolas" Text="Ready."
+							 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+				</Border>
+			</Grid>
+		</Grid>
+	</Grid>
+</base:PageBase>
