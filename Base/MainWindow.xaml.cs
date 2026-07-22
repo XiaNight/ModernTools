@@ -520,6 +520,83 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         currentPage?.Enable();
     }
 
+    /// <summary>
+    /// Registers a page instance created at runtime — outside the startup [PageInfo] reflection
+    /// scan — and adds a navigation tab bound to that specific instance. Unlike the type-keyed lazy
+    /// path (<see cref="SelectPageLazy"/>), this supports many pages that share one CLR type, each
+    /// distinguished by the instance. The returned <see cref="INavigationItem"/> lets the caller
+    /// update the tab (Text / Glyph) in place later. The page is registered as a behaviour so it
+    /// receives Awake / theme / quit callbacks, exactly like an attributed page.
+    /// </summary>
+    public INavigationItem RegisterDynamicPage(
+        PageBase page,
+        string text,
+        string[] path,
+        string glyph,
+        string secondaryGlyph = "",
+        string shortName = "",
+        int order = int.MaxValue,
+        PageBase.NavigationAlignment alignment = PageBase.NavigationAlignment.Front)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        INavigationItem tab = alignment == PageBase.NavigationAlignment.Back
+            ? NavTabsManager.AddBottom(text, path, glyph, secondaryGlyph, shortName, order)
+            : NavTabsManager.AddTop(text, path, glyph, secondaryGlyph, shortName, order);
+
+        RegisterWpfObject(page);
+        navPageMap[page] = tab;
+        tab.OnClick += () => SelectPage(page);
+        return tab;
+    }
+
+    /// <summary>
+    /// Removes a page previously added with <see cref="RegisterDynamicPage"/>: drops its navigation
+    /// tab (including from a nested group), forgets its behaviour registration, and disables it. If
+    /// it is the current page, navigation falls back to Home (or the first tab). Used by dynamic
+    /// features to delete a page or to destroy-and-recreate one on edit.
+    /// </summary>
+    public void UnregisterDynamicPage(PageBase page)
+    {
+        if (page == null) return;
+
+        if (currentPage == page)
+        {
+            currentPage = null;
+            if (!SelectPageByType(typeof(HomePage)))
+                SelectTabIndex(0);
+        }
+
+        if (navPageMap.TryGetValue(page, out INavigationItem tab))
+        {
+            RemoveNavItem(NavTabsManager.TopButtons, tab);
+            RemoveNavItem(NavTabsManager.BottomButtons, tab);
+            navPageMap.Remove(page);
+        }
+
+        page.Disable();
+        registeredWpfObjects.Remove(page);
+    }
+
+    /// <summary>
+    /// Removes <paramref name="target"/> from the given navigation collection, descending into
+    /// expanders. Returns true once removed so the search can stop.
+    /// </summary>
+    private static bool RemoveNavItem(IList<INavigationItem> items, INavigationItem target)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (ReferenceEquals(items[i], target))
+            {
+                items.RemoveAt(i);
+                return true;
+            }
+            if (items[i] is NavigationExpander expander && RemoveNavItem(expander.Items, target))
+                return true;
+        }
+        return false;
+    }
+
     #endregion
 
     #region WpfBehaviour Assigning
