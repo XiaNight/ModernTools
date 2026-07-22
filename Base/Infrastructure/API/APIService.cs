@@ -23,6 +23,18 @@ namespace Base.Services.APIService
         public string Path { get; } = Normalize(path);
         public bool RequireMainThread { get; } = requireMainThread;
 
+        /// <summary>
+        /// Optional human-facing description of the endpoint. When set it is preferred over the
+        /// method's XML <c>&lt;summary&gt;</c> as the documentation surfaced to API/MCP clients.
+        /// </summary>
+        public string? Description { get; set; }
+
+        /// <summary>
+        /// Optional short summary of the endpoint. Purely informational; the XML <c>&lt;summary&gt;</c>
+        /// is used automatically when neither this nor <see cref="Description"/> is supplied.
+        /// </summary>
+        public string? Summary { get; set; }
+
         internal static string Normalize(string p)
         {
             if (string.IsNullOrWhiteSpace(p)) return "/";
@@ -51,6 +63,15 @@ namespace Base.Services.APIService
         public ParameterInfo[] Parameters = Array.Empty<ParameterInfo>();
         public bool IsStatic;
         public bool RequireMainThread;
+
+        /// <summary>Resolved endpoint description (attribute override, else XML summary).</summary>
+        public string? Description;
+
+        /// <summary>The method's XML summary text, if any.</summary>
+        public string? Summary;
+
+        /// <summary>Per-parameter documentation from XML <c>&lt;param&gt;</c> tags (name → text).</summary>
+        public IReadOnlyDictionary<string, string>? ParamDocs;
     }
 
     public sealed class ApiResponse
@@ -77,6 +98,10 @@ namespace Base.Services.APIService
 
         private readonly ConcurrentDictionary<(string verb, string path), List<Route>> routes = new();
         private readonly object sync = new();
+
+        // XML documentation loaded from the endpoints' assemblies, used to describe routes and
+        // expand DTO property docs in the /api/v1/schema manifest. Rebuilt with the route table.
+        private XmlDocStore xmlDocs = new();
 
         public bool IsRunning { get; private set; }
         public int Port { get; private set; }
@@ -366,7 +391,7 @@ namespace Base.Services.APIService
         // -------------------------------------------------------
         // Helpers
         // -------------------------------------------------------
-        private static bool ShouldTreatAsComplex(Type t)
+        internal static bool ShouldTreatAsComplex(Type t)
         {
             return t == typeof(string) ? false : t.IsPrimitive ? false : (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true;
         }
@@ -508,6 +533,7 @@ namespace Base.Services.APIService
         private void BuildRouteTable(IEnumerable<Assembly> assemblies)
         {
             routes.Clear();
+            xmlDocs = new XmlDocStore();
 
             static IEnumerable<Type> SafeGetTypes(Assembly a)
             {
@@ -531,11 +557,11 @@ namespace Base.Services.APIService
                 {
                     var get = m.GetCustomAttribute<GETAttribute>(true);
                     if (get != null)
-                        AddRoute("GET", BuildFullPath(get.Path, t, m), m, t, get.RequireMainThread);
+                        AddRoute("GET", BuildFullPath(get.Path, t, m), m, t, get);
 
                     var post = m.GetCustomAttribute<POSTAttribute>(true);
                     if (post != null)
-                        AddRoute("POST", BuildFullPath(post.Path, t, m), m, t, post.RequireMainThread);
+                        AddRoute("POST", BuildFullPath(post.Path, t, m), m, t, post);
                 }
             }
         }
@@ -595,12 +621,56 @@ namespace Base.Services.APIService
             return list.ToArray();
         }
 
-        private void AddRoute(string verb, string path, MethodInfo m, Type declaring, bool requireMainThread)
+        /// <summary>
+        /// Returns a structured manifest describing every route: verb, path, resolved description,
+        /// a JSON Schema for the accepted inputs, and (when derivable) an output schema. This is the
+        /// documentation surfaced to MCP clients; it complements the string-based <see cref="ListRoute"/>.
+        /// </summary>
+        public object[] ListSchema()
+        {
+            var list = new List<object>();
+            foreach (var bucket in routes)
+            {
+                foreach (var r in bucket.Value)
+                {
+                    var descriptor = new Dictionary<string, object>
+                    {
+                        ["verb"] = r.Verb,
+                        ["path"] = r.Path,
+                        ["handler"] = $"{r.DeclaringType.FullName}.{r.Method.Name}",
+                        ["requireMainThread"] = r.RequireMainThread,
+                        ["static"] = r.IsStatic,
+                        ["description"] = r.Description ?? $"[{r.Verb}] {r.Path}",
+                        ["inputSchema"] = ApiSchema.BuildInputSchema(r.Parameters, r.ParamDocs, xmlDocs),
+                    };
+
+                    if (!string.IsNullOrWhiteSpace(r.Summary))
+                        descriptor["summary"] = r.Summary;
+
+                    var output = ApiSchema.BuildOutputSchema(r.Method.ReturnType);
+                    if (output != null)
+                        descriptor["outputSchema"] = output;
+
+                    list.Add(descriptor);
+                }
+            }
+            list.Sort((a, b) => string.CompareOrdinal(
+                (string)((Dictionary<string, object>)a)["path"] + ((Dictionary<string, object>)a)["verb"],
+                (string)((Dictionary<string, object>)b)["path"] + ((Dictionary<string, object>)b)["verb"]));
+            return list.ToArray();
+        }
+
+        private void AddRoute(string verb, string path, MethodInfo m, Type declaring, HttpMethodAttribute attr)
         {
             var key = (
                 verb.ToUpperInvariant(),
                 HttpMethodAttribute.Normalize(path).ToLowerInvariant()
             );
+
+            // Resolve documentation: XML docs provide the fallback, the attribute wins when set.
+            xmlDocs.EnsureAssemblyLoaded(declaring.Assembly);
+            var methodDoc = xmlDocs.GetMethodDoc(m);
+            var summary = methodDoc?.Summary;
 
             var route = new Route
             {
@@ -610,7 +680,10 @@ namespace Base.Services.APIService
                 DeclaringType = declaring,
                 Parameters = m.GetParameters(),
                 IsStatic = m.IsStatic,
-                RequireMainThread = requireMainThread,
+                RequireMainThread = attr.RequireMainThread,
+                Summary = summary,
+                Description = !string.IsNullOrWhiteSpace(attr.Description) ? attr.Description : summary,
+                ParamDocs = methodDoc?.Params,
             };
             routes.AddOrUpdate(key,
                 _ => new List<Route> { route },

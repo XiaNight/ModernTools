@@ -61,5 +61,16 @@ namespace API
         {
             return APIService.Instance.ListRoute();
         }
+
+        /// <summary>
+        /// Returns a structured documentation manifest for every registered route — verb, path,
+        /// description and a JSON Schema for the accepted inputs (and outputs where known). Intended
+        /// for MCP clients so tools carry real descriptions and schemas instead of parsed strings.
+        /// </summary>
+        [GET("schema", false)]
+        private object[] Schema()
+        {
+            return APIService.Instance.ListSchema();
+        }
     }
 }

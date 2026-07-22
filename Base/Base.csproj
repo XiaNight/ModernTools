@@ -11,6 +11,9 @@
 	<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 	<EnableDynamicLoading>true</EnableDynamicLoading>
 	<ApplicationIcon>Keyboard.ico</ApplicationIcon>
+	<!-- Emit XML docs so endpoint <summary>/<param> comments flow into the /api/v1/schema manifest. -->
+	<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	<NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
