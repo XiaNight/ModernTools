@@ -164,10 +164,43 @@ namespace Base.Services
 			queueSignal.Release();
 		}
 
+		/// <summary>
+		/// Sends a single frame through the serialized command queue and asynchronously
+		/// returns the device's reply (or null if none arrives within <paramref name="timeoutMs"/>).
+		/// The frame is the full request bytes (Command, Key, Index, Data); no extra
+		/// parameters are appended. This is the entry point a scan loop awaits per command.
+		/// </summary>
+		public static Task<byte[]> SendAsync(Peripheral.PeripheralInterface device, byte[] frame, int timeoutMs = DefaultWaitTimeoutMs, CancellationToken ct = default)
+		{
+			if (device == null) return Task.FromResult<byte[]>(null);
+			if (frame == null || frame.Length == 0) return Task.FromResult<byte[]>(null);
+
+			Start();
+
+			TaskCompletionSource<byte[]> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			if (ct.CanBeCanceled)
+				ct.Register(static state => ((TaskCompletionSource<byte[]>)state).TrySetCanceled(), tcs);
+
+			CmdData item = new(device, frame, wait: true, timeoutMs, Array.Empty<byte>(), tcs);
+			pendingCommands.Enqueue(item);
+			try
+			{
+				OnCmdQueued?.Invoke(item);
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
+				Debug.Log(e);
+			}
+			queueSignal.Release();
+			return tcs.Task;
+		}
+
 		public static void ClearCmd()
 		{
-			while (priorityCommands.TryDequeue(out _)) { }
-			while (pendingCommands.TryDequeue(out _)) { }
+			// Complete any awaiting SendAsync callers so a queue flush never leaves them hung.
+			while (priorityCommands.TryDequeue(out CmdData priority)) priority.Completion?.TrySetResult(null);
+			while (pendingCommands.TryDequeue(out CmdData pending)) pending.Completion?.TrySetResult(null);
 
 			while (queueSignal.CurrentCount > 0)
 			{
@@ -224,6 +257,9 @@ namespace Base.Services
 							try { OnCmdResponse?.Invoke(cmd, response); }
 							catch (Exception e) { Log($"[HID] Exception in OnCmdResponse handler: {e.Message}"); }
 						}
+
+						// Complete any awaiting SendAsync caller (null == timeout/failure).
+						cmd.Completion?.TrySetResult(response);
 					}
 				}
 			}
@@ -300,12 +336,16 @@ namespace Base.Services
 		public readonly struct CmdData
 		{
 			public CmdData(Peripheral.PeripheralInterface device, byte[] cmd, bool wait, int timeoutMs, byte[] parameter)
+				: this(device, cmd, wait, timeoutMs, parameter, null) { }
+
+			public CmdData(Peripheral.PeripheralInterface device, byte[] cmd, bool wait, int timeoutMs, byte[] parameter, TaskCompletionSource<byte[]> completion)
 			{
 				Device = device;
 				Cmd = cmd;
 				Wait = wait;
 				Parameter = parameter ?? Array.Empty<byte>();
 				TimeoutMs = timeoutMs;
+				Completion = completion;
 			}
 
 			public Peripheral.PeripheralInterface Device { get; }
@@ -313,6 +353,9 @@ namespace Base.Services
 			public byte[] Parameter { get; }
 			public bool Wait { get; }
 			public int TimeoutMs { get; }
+			// When set, the worker completes this after the command is processed, carrying
+			// the device reply (or null on timeout/failure). Lets a caller await one command.
+			public TaskCompletionSource<byte[]> Completion { get; }
 		}
 	}
 }

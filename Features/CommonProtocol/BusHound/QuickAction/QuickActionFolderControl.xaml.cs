@@ -1,5 +1,3 @@
-namespace Base.UI.Pages;
-
 using Microsoft.Win32;
 using System;
 using System.IO;
@@ -7,6 +5,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+
+namespace CommonProtocol.BusHound.QuickAction;
 
 /// <summary>
 /// A collapsible folder control that groups <see cref="QuickActionEntryControl"/> items.
@@ -17,7 +17,7 @@ public partial class QuickActionFolderControl : UserControl
     private QuickActionFolderData data;
 
     /// <summary>Raised when any data in the folder (name, entries) changes so the parent can persist.</summary>
-    public event Action? DataChanged;
+    public event Action DataChanged;
 
     /// <summary>Raised when the user requests deletion of the whole folder.</summary>
     public event Action<QuickActionFolderControl>? DeleteRequested;

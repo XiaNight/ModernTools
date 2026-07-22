@@ -30,6 +30,9 @@
     <Project Path="Features/MouseATE/MouseATE.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
+    <Project Path="Features/QuickScan/QuickScan.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
   </Folder>
   <Project Path="Base/Base.csproj">
     <Platform Solution="*|x64" Project="x64" />

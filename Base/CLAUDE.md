@@ -25,6 +25,8 @@ Pages appear in navigation purely by being a concrete `PageBase` decorated with 
 
 `[PageInfo]` fields: `PageName` (ctor arg), `Glyph` / `SecondaryGlyph` (Segoe Fluent), `ShortName`, `Description`, `Path` (`string[]` for nested nav grouping, e.g. `["Keyboard", "Hall Effect"]`), `NavOrder` (default `int.MaxValue`; negative hides the tab), `NavAlignment` (0 = top, 1 = bottom), `ShowDeviceSelection` (default true).
 
+**Always write `Glyph` / `SecondaryGlyph` as a C# escape sequence — `Glyph = ""` — never as a raw pasted icon character.** These are Segoe Fluent icons in the Private Use Area (U+E000–U+F8FF); code-editor fonts (Cascadia, Consolas) have no glyph for that range, so a pasted character shows as an empty box or garbles on save/encoding. The `\uXXXX` form is unambiguous, diff-friendly, and matches every other page. Find codepoints in the Windows "Character Map" app or the Segoe Fluent Icons reference.
+
 Example:
 ```csharp
 [PageInfo("Generic Mouse Analyzer", Path = ["Mouse"])]
@@ -51,6 +53,7 @@ ModernWPF (`ModernWpfUI` 0.9.6) is the UI toolkit; XAML namespace `xmlns:ui="htt
 ## Infrastructure & services
 
 - **Devices** — `Base/Modules/DeviceSelection.cs` (`DeviceSelection.Instance.ActiveDevice`, `OnActiveDeviceConnected`); peripheral transports in `Base/Infrastructure/Peripheral/` (`HidInterface`, `UsbInterface`, `BLEInterface`, `BTInterface`, `PeripheralInterface`).
+- **Protocol** — `Base/Infrastructure/Protocol/` (namespace `Base.Protocol`): the shared, declarative device-protocol machinery. `Structure` + `Data<T>`/`ByteData`/… map reply bytes to fields; `Listener` matches an incoming frame by Command/Key and parses registered structures; `ProtocolFrame` builds request frames (`[Command, Key, Index, Data]`); `ProtocolValidator`/`ScanResult`/`ScanFailure` judge a reply (`Structural`/`ValidRange`/`ExactMatch`) and record why it failed. Send a single framed request and await its reply with `ProtocolService.SendAsync(device, frame, timeoutMs, ct)`, which rides the same serialized command queue as `AppendCmd`.
 - **Logging** — `Debug` static logger in `Base/Application/Services/LogService.cs`.
 - **Persistence** — `Base/Core/LocalAppDataStore.cs` (JSON store under `%AppData%\ASUS`); fields marked `[Persist]` are auto-saved/restored by the page lifecycle.
 - **HTTP API** — `Base/Infrastructure/API/` auto-registers endpoints (also proxied by the `MCPServer` feature).

@@ -8,1141 +8,1138 @@ using ModernWpf.Controls;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 
-namespace Gamepad
+namespace Gamepad;
+
+
+[PageInfo("Gamepad", Glyph = "\uE7FC", NavOrder = 0,
+    Description = "Windows HID over GATT does not reflect the true BLE report rate, as the platform abstracts or fakes updates.")]
+public partial class GamepadPage : PageBase
 {
+    protected PeripheralInterface ActiveInterface { get; private set; }
 
-    [PageInfo("Gamepad", Glyph = "\uE7FC", NavOrder = 0,
-        Description = "Windows HID over GATT does not reflect the true BLE report rate, as the platform abstracts or fakes updates.")]
-    public partial class GamepadPage : PageBase
+    public int X { get; private set; } = 32768;
+    public int Y { get; private set; } = 32768;
+    public int RX { get; private set; } = 32768;
+    public int RY { get; private set; } = 32768;
+    public byte LT { get; private set; } = 0;
+    public byte RT { get; private set; } = 0;
+
+    public short Xf => NormalizeUnsigned(X);
+    public short Yf => NormalizeUnsigned(Y);
+    public short RXf => NormalizeUnsigned(RX);
+    public short RYf => NormalizeUnsigned(RY);
+    public byte LTf => LT;
+    public byte RTf => RT;
+
+    // JoyStick
+    private readonly JoyStickMinMax leftJoyStick = new();
+    private readonly JoyStickMinMax rightJoyStick = new();
+
+    // Current state of the buttons (0/1)
+    private const int BUTTON_COUNT = 32;
+    public bool[] ButtonStates { get; private set; } = new bool[BUTTON_COUNT];
+    private readonly int[] buttonCounter = new int[BUTTON_COUNT];
+    private int zCounter = 0;
+    private int rZCounter = 0;
+    private int lastGamepadIndex = -1;
+
+    private readonly ConcurrentQueue<Data> unprocessedDatas = new();
+
+    // Report Rate
+    private readonly ConcurrentQueue<long> timestamps = new();
+    private float reportRateSmoothed = 0;
+    private long startTime = DateTime.UtcNow.Ticks;
+    private long lastTimestamp = DateTime.UtcNow.Ticks;
+    private float reportRate = 0f;
+    private float reportRateRaw = 0f;
+    private float momentum = 0;
+    private int noDataCounter = 0;
+
+    // Report Rate Trigger
+    private float reportRateTriggerThreshold = 500;
+    private bool isReportRateTriggered = false;
+    private bool isReportRateTriggerEnabled = false;
+
+    // Chart
+    private Action<long> appendChartData = (_) => { }; // Add data point to chart
+    private Action<long> tickChartData;
+    private ChartType chartType = 0;
+    private ChartRenderMode renderMode = ChartRenderMode.Line;
+    private bool isChartPaused = false;
+    private FullWindowChart fullWindowChart = null;
+
+    // Mapping
+    private bool mappingReady = false;
+    private readonly List<(ushort usagePage, ushort usage, Action<int> setter)> axisMap = [];
+    private bool hasHat = false;
+    private bool hidHasLT = false;
+    private bool hidHasRT = false;
+
+    // Trigger Vibration Mode
+    private bool isTriggerVibrationMode = false;
+    private byte prevVibLT = 0;
+    private byte prevVibRT = 0;
+
+    // Recording
+    private bool isRecording = false;
+    private delegate string AddRecordDataDelegate(DateTime time);
+    private AddRecordDataDelegate addRecordData;
+    private StreamWriter recordFileStream;
+
+    public enum ButtonMap
     {
-        protected PeripheralInterface ActiveInterface { get; private set; }
+        A = 0,
+        B = 1,
+        XBtn = 2,
+        YBtn = 3,
+        LB = 4,
+        RB = 5,
+        Menu = 6,
+        Start = 7,
+        LeftStickKnob = 8,
+        RightStickKnob = 9,
+        DpadUp = 10,
+        DpadDown = 11,
+        DpadLeft = 12,
+        DpadRight = 13,
+    }
 
-        public int X { get; private set; } = 32768;
-        public int Y { get; private set; } = 32768;
-        public int RX { get; private set; } = 32768;
-        public int RY { get; private set; } = 32768;
-        public byte LT { get; private set; } = 0;
-        public byte RT { get; private set; } = 0;
+    public GamepadPage()
+    {
+        InitializeComponent();
+    }
 
-        public short Xf => NormalizeUnsigned(X);
-        public short Yf => NormalizeUnsigned(Y);
-        public short RXf => NormalizeUnsigned(RX);
-        public short RYf => NormalizeUnsigned(RY);
-        public byte LTf => LT;
-        public byte RTf => RT;
+    public override void Awake()
+    {
+        base.Awake();
 
-        // JoyStick
-        private JoyStickMinMax leftJoyStick = new();
-        private JoyStickMinMax rightJoyStick = new();
+        DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
+        DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
 
-        // Current state of the buttons (0/1)
-        private const int BUTTON_COUNT = 32;
-        public bool[] ButtonStates { get; private set; } = new bool[BUTTON_COUNT];
-        private readonly int[] buttonCounter = new int[BUTTON_COUNT];
-        private int zCounter = 0;
-        private int rZCounter = 0;
-        private int lastGamepadIndex = -1;
-
-        private readonly ConcurrentQueue<Data> unprocessedDatas = new();
-
-        // Report Rate
-        private readonly ConcurrentQueue<long> timestamps = new();
-        private float reportRateSmoothed = 0;
-        private long startTime = DateTime.UtcNow.Ticks;
-        private long lastTimestamp = DateTime.UtcNow.Ticks;
-        private float reportRate = 0f;
-        private float reportRateRaw = 0f;
-        private float momentum = 0;
-        private int noDataCounter = 0;
-
-        // Report Rate Trigger
-        private float reportRateTriggerThreshold = 500;
-        private bool isReportRateTriggered = false;
-        private bool isReportRateTriggerEnabled = false;
-
-        // Chart
-        private Action<long> appendChartData = (_) => { }; // Add data point to chart
-        private Action<long> tickChartData;
-        private ChartType chartType = 0;
-        private ChartRenderMode renderMode = ChartRenderMode.Line;
-        private bool isChartPaused = false;
-        private FullWindowChart fullWindowChart = null;
-
-        // Mapping
-        private bool mappingReady = false;
-        private readonly List<(ushort usagePage, ushort usage, Action<int> setter)> axisMap = [];
-        private bool hasHat = false;
-        private bool hidHasLT = false;
-        private bool hidHasRT = false;
-
-        // Trigger Vibration Mode
-        private bool isTriggerVibrationMode = false;
-        private byte prevVibLT = 0;
-        private byte prevVibRT = 0;
-
-        // Recording
-        private bool isRecording = false;
-        private delegate string AddRecordDataDelegate(DateTime time);
-        private AddRecordDataDelegate addRecordData;
-        private StreamWriter recordFileStream;
-
-        public enum ButtonMap
+        if (DeviceSelection.Instance.ActiveDevice != null)
         {
-            A = 0,
-            B = 1,
-            XBtn = 2,
-            YBtn = 3,
-            LB = 4,
-            RB = 5,
-            Menu = 6,
-            Start = 7,
-            LeftStickKnob = 8,
-            RightStickKnob = 9,
-            DpadUp = 10,
-            DpadDown = 11,
-            DpadLeft = 12,
-            DpadRight = 13,
+            ConnectToInterface();
         }
 
-        public override void Awake()
+        StripChart.Start();
+        StripChart.MaxY = 1200;
+
+        ResetCharts.Click += (_, _) =>
         {
-            base.Awake();
+            Clear();
+        };
 
-            DeviceSelection.Instance.OnActiveDeviceConnected += ConnectToInterface;
-            DeviceSelection.Instance.OnActiveDeviceDisconnected += DisconnectInterface;
-
-            if(DeviceSelection.Instance.ActiveDevice != null)
-            {
-                ConnectToInterface();
-            }
-
-            StripChart.Start(); 
-            StripChart.MaxY = 1200;
-
-
-            ResetCharts.Click += (_, _) =>
-            {
-                Clear();
-            };
-
-            AutoFit.Click += (_, _) =>
-            {
-                bool enabled = AutoFit.IsChecked ?? false;
-                XYChart.AutoFit = enabled;
-                StripChart.AutoFit = enabled;
-            };
-
-            PauseButton.Click += (_, _) =>
-            {
-                isChartPaused = PauseButton.IsChecked ?? false;
-            };
-
-            RecordButton.Click += (_, _) =>
-            {
-                bool recording = RecordButton.IsChecked ?? false;
-                if (recording) StartRecording();
-                else StopRecording();
-            };
-
-            HeavyVibrationButton.Click += (_, _) =>
-            {
-                SetToVibrate(65535, 0, 1000);
-            };
-
-            LightVibrationButton.Click += (_, _) =>
-            {
-                SetToVibrate(0, 65535, 1000);
-            };
-
-            TriggerVibrationButton.Click += (_, _) =>
-            {
-                isTriggerVibrationMode = TriggerVibrationButton.IsChecked ?? false;
-                if (!isTriggerVibrationMode)
-                {
-                    StopVibration();
-                }
-            };
-
-            RenderModeButton.Click += (_, _) =>
-            {
-                // Cycle through render modes
-                renderMode = renderMode switch
-                {
-                    ChartRenderMode.Line => ChartRenderMode.Dot,
-                    ChartRenderMode.Dot => ChartRenderMode.Combined,
-                    ChartRenderMode.Combined => ChartRenderMode.Line,
-                    _ => ChartRenderMode.Combined,
-                };
-
-                SetRenderMode(renderMode);
-            };
-            SetRenderMode(renderMode);
-
-            FullWindowChart.Click += (_, _) =>
-            {
-                if (fullWindowChart != null)
-                {
-                    fullWindowChart.Focus();
-                    FullWindowChart.IsChecked = true;
-                    return;
-                }
-
-                // Set chart to other monitor by getting the current monitor index of this window and adding 1 (next monitor)
-                int targetMonitorIndex = 1;
-                var hwnd = new WindowInteropHelper(Main).Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
-                    targetMonitorIndex = Array.IndexOf(System.Windows.Forms.Screen.AllScreens, screen) + 1;
-                    targetMonitorIndex = targetMonitorIndex % System.Windows.Forms.Screen.AllScreens.Length;
-                }
-
-                fullWindowChart = new FullWindowChart(targetMonitorIndex);
-                fullWindowChart.Show();
-
-                // Assign update chart target
-                XYChart = fullWindowChart.XYChart;
-                StripChart = fullWindowChart.StripChart;
-                SetChartType(chartType);
-                SetRenderMode(renderMode);
-
-                StripChartContainer.Visibility = Visibility.Collapsed;
-                XYChartContainer.Visibility = Visibility.Collapsed;
-                FullWindowText.Visibility = Visibility.Visible;
-
-                fullWindowChart.Loaded += (_, _) =>
-                {
-                    SetChartType(chartType);
-                };
-
-                fullWindowChart.OnClosedEvent += () =>
-                {
-                    fullWindowChart = null;
-
-                    FullWindowChart.IsChecked = false;
-                    FullWindowText.Visibility = Visibility.Collapsed;
-
-                    // Assign update chart target
-                    XYChart = XYChart;
-                    StripChart = StripChart;
-                    SetChartType(chartType);
-                    SetRenderMode(renderMode);
-                };
-            };
-
-            ReportRateSettingBtn.Click += (_, _) =>
-            {
-                StackPanel stackPanel = new() { Orientation = Orientation.Vertical };
-
-                // Rate Input
-                TextBox rateInput = new() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
-                stackPanel.Children.Add(rateInput);
-
-                // Enable Checkbox
-                CheckBox enableCheckbox = new() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
-                stackPanel.Children.Add(enableCheckbox);
-
-                // Dialog
-                ContentDialog dialog = new()
-                {
-                    Title = "Report Rate Trigger Threshold",
-                    Content = stackPanel,
-                    PrimaryButtonText = "Save",
-                    CloseButtonText = "Cancel"
-                };
-
-                dialog.PrimaryButtonClick += (_, _) =>
-                {
-                    if (dialog.Content is StackPanel sp)
-                    {
-                        if (sp.Children[0] is TextBox tb && float.TryParse(tb.Text, out float threshold))
-                        {
-                            reportRateTriggerThreshold = threshold;
-                        }
-
-                        if (sp.Children[1] is CheckBox cb)
-                        {
-                            isReportRateTriggerEnabled = cb.IsChecked == true;
-                        }
-                    }
-                };
-
-                _ = dialog.ShowAsync();
-            };
-
-            ChartTypeDropdown.SelectionChanged += (_, _) => SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
-            SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
-            tickChartData = (t) => StripChart.Tick(t);
-        }
-
-        public override void ThemeChanged()
+        AutoFit.Click += (_, _) =>
         {
-            base.ThemeChanged();
-            UpdateGamepadController();
-            GamepadController.UpdateAllVisuals();
-        }
+            bool enabled = AutoFit.IsChecked ?? false;
+            XYChart.AutoFit = enabled;
+            StripChart.AutoFit = enabled;
+        };
 
-        protected override void OnEnable()
+        PauseButton.Click += (_, _) =>
         {
-            base.OnEnable();
-            //Clear();
-        }
+            isChartPaused = PauseButton.IsChecked ?? false;
+        };
 
-        protected override void OnDisable()
+        RecordButton.Click += (_, _) =>
         {
-            base.OnDisable();
+            bool recording = RecordButton.IsChecked ?? false;
+            if (recording) StartRecording();
+            else StopRecording();
+        };
 
-            if (isRecording) StopRecording();
-            if (isTriggerVibrationMode)
-            {
-                StopVibration();
-                isTriggerVibrationMode = false;
-                TriggerVibrationButton.IsChecked = false;
-            }
-        }
-
-        protected override void Update()
+        HeavyVibrationButton.Click += (_, _) =>
         {
-            base.Update();
+            SetToVibrate(65535, 0, 1000);
+        };
 
-            TimestampText.Text = ((lastTimestamp - startTime) / 10000).ToString("0.#");
-
-            if (ActiveInterface != null && ActiveInterface.IsDeviceConnected)
-            {
-                bool hasData = DecodeBytes();
-
-                ReportRateText.Text = reportRateSmoothed.ToString("0.#");
-
-                if (hasData)
-                {
-                    UpdateGamepadController();
-                }
-                UpdateButtons();
-                if (ButtonStates[(int)ButtonMap.Menu] && ButtonStates[(int)ButtonMap.Start])
-                {
-                    Clear();
-                }
-
-                if (isTriggerVibrationMode && lastGamepadIndex >= 0)
-                {
-                    ApplyTriggerVibration();
-                }
-            }
-        }
-
-        private void SetChartType(ChartType chartIndex)
+        LightVibrationButton.Click += (_, _) =>
         {
-            chartType = chartIndex;
-            XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-            StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-            ChartsCanvas.Visibility = fullWindowChart == null ? Visibility.Visible : Visibility.Collapsed;
+            SetToVibrate(0, 65535, 1000);
+        };
 
-            if (fullWindowChart != null)
-            {
-                fullWindowChart.XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-                fullWindowChart.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            RecordButton.IsEnabled = chartType <= ChartType.RT;
-
-            StripChart.Clear();
-            XYChart.Clear();
-
-            appendChartData = chartType switch
-            {
-                ChartType.ReportRate => (l) => StripChart.AddSample(reportRate, l),
-                ChartType.SmoothedReportRate => (l) => StripChart.AddSample(reportRateSmoothed, l),
-                ChartType.X => (l) => StripChart.AddSample(Xf, l),
-                ChartType.Y => (l) => StripChart.AddSample(Yf, l),
-                ChartType.RX => (l) => StripChart.AddSample(RXf, l),
-                ChartType.RY => (l) => StripChart.AddSample(RYf, l),
-                ChartType.LT => (l) => StripChart.AddSample(LTf, l),
-                ChartType.RT => (l) => StripChart.AddSample(RTf, l),
-                ChartType.LeftStick => (_) => XYChart.AddSample(new(X, -Y)),
-                ChartType.RightStick => (_) => XYChart.AddSample(new(RX, -RY)),
-                _ => (_) => { }
-            };
-
-            addRecordData = chartType switch
-            {
-                ChartType.ReportRate => time => $"{time:HH:mm:ss.fff},{reportRate}",
-                ChartType.SmoothedReportRate => time => $"{time:HH:mm:ss.fff},{reportRateSmoothed}",
-                ChartType.X => time => $"{time:HH:mm:ss.fff},{Xf}",
-                ChartType.Y => time => $"{time:HH:mm:ss.fff},{Yf}",
-                ChartType.RX => time => $"{time:HH:mm:ss.fff},{RXf}",
-                ChartType.RY => time => $"{time:HH:mm:ss.fff},{RYf}",
-                ChartType.LT => time => $"{time:HH:mm:ss.fff},{LTf}",
-                ChartType.RT => time => $"{time:HH:mm:ss.fff},{RTf}",
-                _ => time => ""
-            };
-
-            switch (chartType)
-            {
-                case ChartType.ReportRate:
-                case ChartType.SmoothedReportRate:
-                    StripChart.MaxY = 10000; StripChart.MinY = 0;
-                    StripChart.AxisYLabelCount = 5;
-                    break;
-                case ChartType.X:
-                case ChartType.Y:
-                case ChartType.RX:
-                case ChartType.RY:
-                    StripChart.MaxY = 32768; StripChart.MinY = -32768;
-                    StripChart.AxisYLabelCount = 4;
-                     break;
-                case ChartType.LT:
-                case ChartType.RT:
-                    StripChart.MaxY = 256; StripChart.MinY = 0;
-                    StripChart.AxisYLabelCount = 4;
-                     break;
-            }
-        }
-
-        private void SetRenderMode(ChartRenderMode mode)
+        TriggerVibrationButton.Click += (_, _) =>
         {
-            renderMode = mode;
-            StripChart.RenderMode = mode;
-            XYChart.RenderMode = mode;
-        }
-
-        private bool DecodeBytes()
-        {
-            Data rawData = default;
-            bool hasData = false;
-
-            // Parse all queued reports
-            while (unprocessedDatas.TryDequeue(out Data newData))
-            {
-                rawData = newData;
-                hasData = true;
-                timestamps.Enqueue(rawData.time.Ticks);
-
-                float atomicReportRate = 10_000_000f / newData.interval;
-
-                float sensitivity = 0.1f;
-                float delta = atomicReportRate - reportRate;
-                sensitivity = 1f / (0.1f * Math.Abs(delta) + 1);
-                if (momentum == 0) momentum = delta * sensitivity;
-                else if (delta * momentum < 0) momentum = 0;
-                else
-                {
-                    reportRate += momentum;
-                    momentum += delta * sensitivity;
-                }
-                reportRateRaw = atomicReportRate;
-
-                var data = newData.data;
-
-                if (!mappingReady)
-                    BuildMapping(data);
-
-                if (mappingReady)
-                {
-                    // Capture previous LT/RT for change detection before axis updates
-                    byte prevLT = LT;
-                    byte prevRT = RT;
-
-                    // Axes/values (may include LT/RT if HID report has Z/RZ usages)
-                    foreach (var (up, u, setter) in axisMap)
-                    {
-                        if (ActiveInterface.TryGetUsageValue(data, up, u, out int v))
-                            setter(v);
-                    }
-
-                    // Latest button states
-                    bool[] latestButtonStates = new bool[32];
-
-                    // Set D-Pad states to latest button states
-                    if (hasHat && ActiveInterface.TryGetUsageValue(data, 0x01, 0x39, out int hat))
-                        DecodeHatToDpad(hat, latestButtonStates);
-
-                    // Set other buttons to latest button states
-                    var pressedRaw = ActiveInterface.GetPressedButtons(data, 0x09);
-                    foreach (var p in pressedRaw)
-                    {
-                        int idx = p - 1; // usages start at 1
-                        if (idx >= 0 && idx < ButtonStates.Length) latestButtonStates[idx] = true;
-                    }
-
-                    // Detect button down events
-                    bool[] onPressed = new bool[BUTTON_COUNT];
-                    for (int i = 0; i < BUTTON_COUNT; i++)
-                    {
-                        onPressed[i] = latestButtonStates[i] && !ButtonStates[i];
-                    }
-
-                    // Apply button states and advance counters
-                    Array.Fill(ButtonStates, false);
-                    for (int i = 0; i < BUTTON_COUNT; i++) ButtonStates[i] = latestButtonStates[i];
-                    for (int i = 0; i < BUTTON_COUNT; i++) buttonCounter[i] += onPressed[i] ? 1 : 0;
-
-                    // LT/RT: prefer HID report (Z/RZ usages); fall back to XInput if not available
-                    if (!hidHasLT) LT = newData.xinput_state.Gamepad.bLeftTrigger;
-                    if (!hidHasRT) RT = newData.xinput_state.Gamepad.bRightTrigger;
-                    if (LT != prevLT) zCounter++;
-                    if (RT != prevRT) rZCounter++;
-
-                    leftJoyStick.Update(Xf, Yf);
-                    rightJoyStick.Update(RXf, RYf);
-                }
-
-                if (!isChartPaused)
-                {
-                    appendChartData.Invoke(newData.time.Ticks);
-                    if (isRecording) WriteRecord(newData.time);
-                }
-            }
-
-            // Report-rate window
-            float windowSeconds = 1f;
-            long window = DateTime.UtcNow.Ticks - TimeSpan.FromSeconds(windowSeconds).Ticks;
-
-            while (timestamps.TryPeek(out long ts) && ts <= window)
-                timestamps.TryDequeue(out _);
-            reportRateSmoothed = timestamps.Count / 1f;
-
-            if(isReportRateTriggerEnabled)
-            {
-                if (reportRateSmoothed < reportRateTriggerThreshold)
-                {
-                    if(!isReportRateTriggered)
-                    {
-                        isReportRateTriggered = true;
-                        isReportRateTriggerEnabled = false;
-                        ContentDialog dialog = new()
-                        {
-                            Title = "Report Rate Trigger Threshold",
-                            Content = new TextBlock() { Text = $"Report rate dropped below {reportRateTriggerThreshold} reports/sec. at date time {DateTime.Now}" },
-                            PrimaryButtonText = "Ok",
-                        };
-
-                        dialog.PrimaryButtonClick += (_, _) =>
-                        {
-                            isReportRateTriggerEnabled = true;
-                        };
-                        Main.RequestWindowFocus();
-                        _ = dialog.ShowAsync();
-                    }
-                }
-                else
-                {
-                    isReportRateTriggered = false;
-                }
-            }
-
-            if (!hasData)
-            {
-                _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
-                if (!hidHasLT) LT = xinput_state.Gamepad.bLeftTrigger;
-                if (!hidHasRT) RT = xinput_state.Gamepad.bRightTrigger;
-
-                if (!isChartPaused && chartType <= ChartType.RT)
-                {
-                    if (chartType <= ChartType.SmoothedReportRate && ++noDataCounter > 5)
-                    {
-                        reportRate = 0;
-                        appendChartData.Invoke(DateTime.UtcNow.Ticks);
-                    }
-                    else tickChartData(DateTime.UtcNow.Ticks);
-                    if (isRecording) WriteRecord(DateTime.UtcNow);
-                }
-            }
-            else
-            {
-                noDataCounter = 0;
-            }
-            return hasData;
-        }
-
-        private void UpdateGamepadController()
-        {
-            LeftJoyStick.SetStick(Xf, Yf);
-            RightJoyStick.SetStick(RXf, RYf);
-            LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
-            RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
-
-            GamepadController.LeftStickX = Xf;
-            GamepadController.LeftStickY = Yf;
-            GamepadController.RightStickX = RXf;
-            GamepadController.RightStickY = RYf;
-
-            GamepadController.LT = LTf / 255f;
-            GamepadController.RT = RTf / 255f;
-
-            GamepadController.A = ButtonStates[(int)ButtonMap.A];
-            GamepadController.B = ButtonStates[(int)ButtonMap.B];
-            GamepadController.X = ButtonStates[(int)ButtonMap.XBtn];
-            GamepadController.Y = ButtonStates[(int)ButtonMap.YBtn];
-
-            GamepadController.DpadDown = ButtonStates[(int)ButtonMap.DpadDown];
-            GamepadController.DpadRight = ButtonStates[(int)ButtonMap.DpadRight];
-            GamepadController.DpadLeft = ButtonStates[(int)ButtonMap.DpadLeft];
-            GamepadController.DpadUp = ButtonStates[(int)ButtonMap.DpadUp];
-
-            GamepadController.LB = ButtonStates[(int)ButtonMap.LB];
-            GamepadController.RB = ButtonStates[(int)ButtonMap.RB];
-            GamepadController.View = ButtonStates[(int)ButtonMap.Menu];
-            GamepadController.Menu = ButtonStates[(int)ButtonMap.Start];
-            GamepadController.LeftStickKnob = ButtonStates[(int)ButtonMap.LeftStickKnob];
-            GamepadController.RightStickKnob = ButtonStates[(int)ButtonMap.RightStickKnob];
-        }
-
-        private void UpdateButtons()
-        {
-            // Counters
-            B0.SetCounter(buttonCounter[(int)ButtonMap.A]);
-            B1.SetCounter(buttonCounter[(int)ButtonMap.B]);
-            B2.SetCounter(buttonCounter[(int)ButtonMap.XBtn]);
-            B3.SetCounter(buttonCounter[(int)ButtonMap.YBtn]);
-            B4.SetCounter(buttonCounter[(int)ButtonMap.LB]);
-            B5.SetCounter(buttonCounter[(int)ButtonMap.RB]);
-            B6.SetCounter(buttonCounter[(int)ButtonMap.Menu]);
-            B9.SetCounter(buttonCounter[(int)ButtonMap.Start]);
-            B10.SetCounter(buttonCounter[(int)ButtonMap.LeftStickKnob]);
-            B11.SetCounter(buttonCounter[(int)ButtonMap.RightStickKnob]);
-            B12.SetCounter(buttonCounter[(int)ButtonMap.DpadUp]);
-            B13.SetCounter(buttonCounter[(int)ButtonMap.DpadDown]);
-            B14.SetCounter(buttonCounter[(int)ButtonMap.DpadLeft]);
-            B15.SetCounter(buttonCounter[(int)ButtonMap.DpadRight]);
-
-            // States
-            B0.SetValue(ButtonStates[(int)ButtonMap.A]);
-            B1.SetValue(ButtonStates[(int)ButtonMap.B]);
-            B2.SetValue(ButtonStates[(int)ButtonMap.XBtn]);
-            B3.SetValue(ButtonStates[(int)ButtonMap.YBtn]);
-            B4.SetValue(ButtonStates[(int)ButtonMap.LB]);
-            B5.SetValue(ButtonStates[(int)ButtonMap.RB]);
-            B6.SetValue(ButtonStates[(int)ButtonMap.Menu]);
-            B9.SetValue(ButtonStates[(int)ButtonMap.Start]);
-            B10.SetValue(ButtonStates[(int)ButtonMap.LeftStickKnob]);
-            B11.SetValue(ButtonStates[(int)ButtonMap.RightStickKnob]);
-            B12.SetValue(ButtonStates[(int)ButtonMap.DpadUp]);
-            B13.SetValue(ButtonStates[(int)ButtonMap.DpadDown]);
-            B14.SetValue(ButtonStates[(int)ButtonMap.DpadLeft]);
-            B15.SetValue(ButtonStates[(int)ButtonMap.DpadRight]);
-            LeftTrigger.SetValue(LT);
-            RightTrigger.SetValue(RT);
-
-            LeftTrigger.SetCounter(zCounter);
-            RightTrigger.SetCounter(rZCounter);
-        }
-
-        [AppMenuItem("Vibration/Both", true)]
-        [AppMenuItem("Vibration/Heavy", true, 65535)]
-        [AppMenuItem("Vibration/Light", true, 0, 65535)]
-        [AppMenuItem("Vibration/Stop", true, 0, 0)]
-        private async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
-        {
-            if (lastGamepadIndex < 0) return;
-
-            var vibration = new XInput.XINPUT_VIBRATION
-            {
-                wLeftMotorSpeed = heavy,
-                wRightMotorSpeed = light
-            };
-
-            // Start vibration
-            _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
-
-            if (durationMs > 0)
-            {
-                await Task.Delay(durationMs);
-
-                // Stop vibration
-                var stop = new XInput.XINPUT_VIBRATION(); // both 0
-                _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
-            }
-        }
-
-        [AppMenuItem("Vibration/Trigger Mode")]
-        private void ToggleTriggerVibrationMode()
-        {
-            isTriggerVibrationMode = !isTriggerVibrationMode;
-            TriggerVibrationButton.IsChecked = isTriggerVibrationMode;
+            isTriggerVibrationMode = TriggerVibrationButton.IsChecked ?? false;
             if (!isTriggerVibrationMode)
             {
                 StopVibration();
             }
-        }
+        };
 
-        private void ApplyTriggerVibration()
+        RenderModeButton.Click += (_, _) =>
         {
-            // Only update when LT or RT values have changed to avoid redundant XInput calls
-            if (LT == prevVibLT && RT == prevVibRT) return;
-
-            prevVibLT = LT;
-            prevVibRT = RT;
-
-            // LT → light motor (right motor), RT → heavy motor (left motor)
-            // Scale from 0-255 to 0-65535 using bit-shift: x * 257 == (x << 8) | x
-            ushort heavy = (ushort)((RT << 8) | RT);
-            ushort light = (ushort)((LT << 8) | LT);
-
-            var vibration = new XInput.XINPUT_VIBRATION
+            // Cycle through render modes
+            renderMode = renderMode switch
             {
-                wLeftMotorSpeed = heavy,
-                wRightMotorSpeed = light
+                ChartRenderMode.Line => ChartRenderMode.Dot,
+                ChartRenderMode.Dot => ChartRenderMode.Combined,
+                ChartRenderMode.Combined => ChartRenderMode.Line,
+                _ => ChartRenderMode.Combined,
             };
-            _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
+
+            SetRenderMode(renderMode);
+        };
+        SetRenderMode(renderMode);
+
+        FullWindowChart.Click += (_, _) =>
+        {
+            if (fullWindowChart != null)
+            {
+                fullWindowChart.Focus();
+                FullWindowChart.IsChecked = true;
+                return;
+            }
+
+            // Set chart to other monitor by getting the current monitor index of this window and adding 1 (next monitor)
+            int targetMonitorIndex = 1;
+            var hwnd = new WindowInteropHelper(Main).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var screen = System.Windows.Forms.Screen.FromHandle(hwnd);
+                targetMonitorIndex = Array.IndexOf(System.Windows.Forms.Screen.AllScreens, screen) + 1;
+                targetMonitorIndex = targetMonitorIndex % System.Windows.Forms.Screen.AllScreens.Length;
+            }
+
+            fullWindowChart = new FullWindowChart(targetMonitorIndex);
+            fullWindowChart.Show();
+
+            // Assign update chart target
+            XYChart = fullWindowChart.XYChart;
+            StripChart = fullWindowChart.StripChart;
+            SetChartType(chartType);
+            SetRenderMode(renderMode);
+
+            StripChartContainer.Visibility = Visibility.Collapsed;
+            XYChartContainer.Visibility = Visibility.Collapsed;
+            FullWindowText.Visibility = Visibility.Visible;
+
+            fullWindowChart.Loaded += (_, _) =>
+            {
+                SetChartType(chartType);
+            };
+
+            fullWindowChart.OnClosedEvent += () =>
+            {
+                fullWindowChart = null;
+
+                FullWindowChart.IsChecked = false;
+                FullWindowText.Visibility = Visibility.Collapsed;
+
+                // Assign update chart target
+                XYChart = XYChart;
+                StripChart = StripChart;
+                SetChartType(chartType);
+                SetRenderMode(renderMode);
+            };
+        };
+
+        ReportRateSettingBtn.Click += (_, _) =>
+        {
+            StackPanel stackPanel = new() { Orientation = Orientation.Vertical };
+
+            // Rate Input
+            TextBox rateInput = new() { Text = reportRateTriggerThreshold.ToString(), Margin = new Thickness(0, 10, 0, 0) };
+            stackPanel.Children.Add(rateInput);
+
+            // Enable Checkbox
+            CheckBox enableCheckbox = new() { Content = "Enable Report Rate Trigger", IsChecked = isReportRateTriggerEnabled, Margin = new Thickness(0, 10, 0, 0) };
+            stackPanel.Children.Add(enableCheckbox);
+
+            // Dialog
+            ContentDialog dialog = new()
+            {
+                Title = "Report Rate Trigger Threshold",
+                Content = stackPanel,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel"
+            };
+
+            dialog.PrimaryButtonClick += (_, _) =>
+            {
+                if (dialog.Content is StackPanel sp)
+                {
+                    if (sp.Children[0] is TextBox tb && float.TryParse(tb.Text, out float threshold))
+                    {
+                        reportRateTriggerThreshold = threshold;
+                    }
+
+                    if (sp.Children[1] is CheckBox cb)
+                    {
+                        isReportRateTriggerEnabled = cb.IsChecked == true;
+                    }
+                }
+            };
+
+            _ = dialog.ShowAsync();
+        };
+
+        ChartTypeDropdown.SelectionChanged += (_, _) => SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
+        SetChartType((ChartType)ChartTypeDropdown.SelectedIndex);
+        tickChartData = (t) => StripChart.Tick(t);
+    }
+
+    public override void ThemeChanged()
+    {
+        base.ThemeChanged();
+        UpdateGamepadController();
+        GamepadController.UpdateAllVisuals();
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        //Clear();
+    }
+
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+
+        if (isRecording) StopRecording();
+        if (isTriggerVibrationMode)
+        {
+            StopVibration();
+            isTriggerVibrationMode = false;
+            TriggerVibrationButton.IsChecked = false;
+        }
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+
+        TimestampText.Text = ((lastTimestamp - startTime) / 10000).ToString("0.#");
+
+        if (ActiveInterface != null && ActiveInterface.IsDeviceConnected)
+        {
+            bool hasData = DecodeBytes();
+
+            ReportRateText.Text = reportRateSmoothed.ToString("0.#");
+
+            if (hasData)
+            {
+                UpdateGamepadController();
+            }
+            UpdateButtons();
+            if (ButtonStates[(int)ButtonMap.Menu] && ButtonStates[(int)ButtonMap.Start])
+            {
+                Clear();
+            }
+
+            if (isTriggerVibrationMode && lastGamepadIndex >= 0)
+            {
+                ApplyTriggerVibration();
+            }
+        }
+    }
+
+    private void SetChartType(ChartType chartIndex)
+    {
+        chartType = chartIndex;
+        XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+        StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+        ChartsCanvas.Visibility = fullWindowChart == null ? Visibility.Visible : Visibility.Collapsed;
+
+        if (fullWindowChart != null)
+        {
+            fullWindowChart.XYChartContainer.Visibility = chartType > ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
+            fullWindowChart.StripChartContainer.Visibility = chartType <= ChartType.RT ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void StopVibration()
+        RecordButton.IsEnabled = chartType <= ChartType.RT;
+
+        StripChart.Clear();
+        XYChart.Clear();
+
+        appendChartData = chartType switch
         {
-            if (lastGamepadIndex < 0) return;
+            ChartType.ReportRate => (l) => StripChart.AddSample(reportRate, l),
+            ChartType.SmoothedReportRate => (l) => StripChart.AddSample(reportRateSmoothed, l),
+            ChartType.X => (l) => StripChart.AddSample(Xf, l),
+            ChartType.Y => (l) => StripChart.AddSample(Yf, l),
+            ChartType.RX => (l) => StripChart.AddSample(RXf, l),
+            ChartType.RY => (l) => StripChart.AddSample(RYf, l),
+            ChartType.LT => (l) => StripChart.AddSample(LTf, l),
+            ChartType.RT => (l) => StripChart.AddSample(RTf, l),
+            ChartType.LeftStick => (_) => XYChart.AddSample(new(X, -Y)),
+            ChartType.RightStick => (_) => XYChart.AddSample(new(RX, -RY)),
+            _ => (_) => { }
+        };
+
+        addRecordData = chartType switch
+        {
+            ChartType.ReportRate => time => $"{time:HH:mm:ss.fff},{reportRate}",
+            ChartType.SmoothedReportRate => time => $"{time:HH:mm:ss.fff},{reportRateSmoothed}",
+            ChartType.X => time => $"{time:HH:mm:ss.fff},{Xf}",
+            ChartType.Y => time => $"{time:HH:mm:ss.fff},{Yf}",
+            ChartType.RX => time => $"{time:HH:mm:ss.fff},{RXf}",
+            ChartType.RY => time => $"{time:HH:mm:ss.fff},{RYf}",
+            ChartType.LT => time => $"{time:HH:mm:ss.fff},{LTf}",
+            ChartType.RT => time => $"{time:HH:mm:ss.fff},{RTf}",
+            _ => time => ""
+        };
+
+        switch (chartType)
+        {
+            case ChartType.ReportRate:
+            case ChartType.SmoothedReportRate:
+                StripChart.MaxY = 10000; StripChart.MinY = 0;
+                StripChart.AxisYLabelCount = 5;
+                break;
+            case ChartType.X:
+            case ChartType.Y:
+            case ChartType.RX:
+            case ChartType.RY:
+                StripChart.MaxY = 32768; StripChart.MinY = -32768;
+                StripChart.AxisYLabelCount = 4;
+                break;
+            case ChartType.LT:
+            case ChartType.RT:
+                StripChart.MaxY = 256; StripChart.MinY = 0;
+                StripChart.AxisYLabelCount = 4;
+                break;
+        }
+    }
+
+    private void SetRenderMode(ChartRenderMode mode)
+    {
+        renderMode = mode;
+        StripChart.RenderMode = mode;
+        XYChart.RenderMode = mode;
+    }
+
+    private bool DecodeBytes()
+    {
+        Data rawData = default;
+        bool hasData = false;
+
+        // Parse all queued reports
+        while (unprocessedDatas.TryDequeue(out Data newData))
+        {
+            rawData = newData;
+            hasData = true;
+            timestamps.Enqueue(rawData.time.Ticks);
+
+            float atomicReportRate = 10_000_000f / newData.interval;
+
+            float sensitivity = 0.1f;
+            float delta = atomicReportRate - reportRate;
+            sensitivity = 1f / (0.1f * Math.Abs(delta) + 1);
+            if (momentum == 0) momentum = delta * sensitivity;
+            else if (delta * momentum < 0) momentum = 0;
+            else
+            {
+                reportRate += momentum;
+                momentum += delta * sensitivity;
+            }
+            reportRateRaw = atomicReportRate;
+
+            var data = newData.data;
+
+            if (!mappingReady)
+                BuildMapping(data);
+
+            if (mappingReady)
+            {
+                // Capture previous LT/RT for change detection before axis updates
+                byte prevLT = LT;
+                byte prevRT = RT;
+
+                // Axes/values (may include LT/RT if HID report has Z/RZ usages)
+                foreach (var (up, u, setter) in axisMap)
+                {
+                    if (ActiveInterface.TryGetUsageValue(data, up, u, out int v))
+                        setter(v);
+                }
+
+                // Latest button states
+                bool[] latestButtonStates = new bool[32];
+
+                // Set D-Pad states to latest button states
+                if (hasHat && ActiveInterface.TryGetUsageValue(data, 0x01, 0x39, out int hat))
+                    DecodeHatToDpad(hat, latestButtonStates);
+
+                // Set other buttons to latest button states
+                var pressedRaw = ActiveInterface.GetPressedButtons(data, 0x09);
+                foreach (var p in pressedRaw)
+                {
+                    int idx = p - 1; // usages start at 1
+                    if (idx >= 0 && idx < ButtonStates.Length) latestButtonStates[idx] = true;
+                }
+
+                // Detect button down events
+                bool[] onPressed = new bool[BUTTON_COUNT];
+                for (int i = 0; i < BUTTON_COUNT; i++)
+                {
+                    onPressed[i] = latestButtonStates[i] && !ButtonStates[i];
+                }
+
+                // Apply button states and advance counters
+                Array.Fill(ButtonStates, false);
+                for (int i = 0; i < BUTTON_COUNT; i++) ButtonStates[i] = latestButtonStates[i];
+                for (int i = 0; i < BUTTON_COUNT; i++) buttonCounter[i] += onPressed[i] ? 1 : 0;
+
+                // LT/RT: prefer HID report (Z/RZ usages); fall back to XInput if not available
+                if (!hidHasLT) LT = newData.xinput_state.Gamepad.bLeftTrigger;
+                if (!hidHasRT) RT = newData.xinput_state.Gamepad.bRightTrigger;
+                if (LT != prevLT) zCounter++;
+                if (RT != prevRT) rZCounter++;
+
+                leftJoyStick.Update(Xf, Yf);
+                rightJoyStick.Update(RXf, RYf);
+            }
+
+            if (!isChartPaused)
+            {
+                appendChartData.Invoke(newData.time.Ticks);
+                if (isRecording) WriteRecord(newData.time);
+            }
+        }
+
+        // Report-rate window
+        float windowSeconds = 1f;
+        long window = DateTime.UtcNow.Ticks - TimeSpan.FromSeconds(windowSeconds).Ticks;
+
+        while (timestamps.TryPeek(out long ts) && ts <= window)
+            timestamps.TryDequeue(out _);
+        reportRateSmoothed = timestamps.Count / 1f;
+
+        if (isReportRateTriggerEnabled)
+        {
+            if (reportRateSmoothed < reportRateTriggerThreshold)
+            {
+                if (!isReportRateTriggered)
+                {
+                    isReportRateTriggered = true;
+                    isReportRateTriggerEnabled = false;
+                    ContentDialog dialog = new()
+                    {
+                        Title = "Report Rate Trigger Threshold",
+                        Content = new TextBlock() { Text = $"Report rate dropped below {reportRateTriggerThreshold} reports/sec. at date time {DateTime.Now}" },
+                        PrimaryButtonText = "Ok",
+                    };
+
+                    dialog.PrimaryButtonClick += (_, _) =>
+                    {
+                        isReportRateTriggerEnabled = true;
+                    };
+                    Main.RequestWindowFocus();
+                    _ = dialog.ShowAsync();
+                }
+            }
+            else
+            {
+                isReportRateTriggered = false;
+            }
+        }
+
+        if (!hasData)
+        {
+            _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
+            if (!hidHasLT) LT = xinput_state.Gamepad.bLeftTrigger;
+            if (!hidHasRT) RT = xinput_state.Gamepad.bRightTrigger;
+
+            if (!isChartPaused && chartType <= ChartType.RT)
+            {
+                if (chartType <= ChartType.SmoothedReportRate && ++noDataCounter > 5)
+                {
+                    reportRate = 0;
+                    appendChartData.Invoke(DateTime.UtcNow.Ticks);
+                }
+                else tickChartData(DateTime.UtcNow.Ticks);
+                if (isRecording) WriteRecord(DateTime.UtcNow);
+            }
+        }
+        else
+        {
+            noDataCounter = 0;
+        }
+        return hasData;
+    }
+
+    private void UpdateGamepadController()
+    {
+        LeftJoyStick.SetStick(Xf, Yf);
+        RightJoyStick.SetStick(RXf, RYf);
+        LeftJoyStick.SetMinMax(leftJoyStick.MinX, leftJoyStick.MaxX, leftJoyStick.MinY, leftJoyStick.MaxY);
+        RightJoyStick.SetMinMax(rightJoyStick.MinX, rightJoyStick.MaxX, rightJoyStick.MinY, rightJoyStick.MaxY);
+
+        GamepadController.LeftStickX = Xf;
+        GamepadController.LeftStickY = Yf;
+        GamepadController.RightStickX = RXf;
+        GamepadController.RightStickY = RYf;
+
+        GamepadController.LT = LTf / 255f;
+        GamepadController.RT = RTf / 255f;
+
+        GamepadController.A = ButtonStates[(int)ButtonMap.A];
+        GamepadController.B = ButtonStates[(int)ButtonMap.B];
+        GamepadController.X = ButtonStates[(int)ButtonMap.XBtn];
+        GamepadController.Y = ButtonStates[(int)ButtonMap.YBtn];
+
+        GamepadController.DpadDown = ButtonStates[(int)ButtonMap.DpadDown];
+        GamepadController.DpadRight = ButtonStates[(int)ButtonMap.DpadRight];
+        GamepadController.DpadLeft = ButtonStates[(int)ButtonMap.DpadLeft];
+        GamepadController.DpadUp = ButtonStates[(int)ButtonMap.DpadUp];
+
+        GamepadController.LB = ButtonStates[(int)ButtonMap.LB];
+        GamepadController.RB = ButtonStates[(int)ButtonMap.RB];
+        GamepadController.View = ButtonStates[(int)ButtonMap.Menu];
+        GamepadController.Menu = ButtonStates[(int)ButtonMap.Start];
+        GamepadController.LeftStickKnob = ButtonStates[(int)ButtonMap.LeftStickKnob];
+        GamepadController.RightStickKnob = ButtonStates[(int)ButtonMap.RightStickKnob];
+    }
+
+    private void UpdateButtons()
+    {
+        // Counters
+        B0.SetCounter(buttonCounter[(int)ButtonMap.A]);
+        B1.SetCounter(buttonCounter[(int)ButtonMap.B]);
+        B2.SetCounter(buttonCounter[(int)ButtonMap.XBtn]);
+        B3.SetCounter(buttonCounter[(int)ButtonMap.YBtn]);
+        B4.SetCounter(buttonCounter[(int)ButtonMap.LB]);
+        B5.SetCounter(buttonCounter[(int)ButtonMap.RB]);
+        B6.SetCounter(buttonCounter[(int)ButtonMap.Menu]);
+        B9.SetCounter(buttonCounter[(int)ButtonMap.Start]);
+        B10.SetCounter(buttonCounter[(int)ButtonMap.LeftStickKnob]);
+        B11.SetCounter(buttonCounter[(int)ButtonMap.RightStickKnob]);
+        B12.SetCounter(buttonCounter[(int)ButtonMap.DpadUp]);
+        B13.SetCounter(buttonCounter[(int)ButtonMap.DpadDown]);
+        B14.SetCounter(buttonCounter[(int)ButtonMap.DpadLeft]);
+        B15.SetCounter(buttonCounter[(int)ButtonMap.DpadRight]);
+
+        // States
+        B0.SetValue(ButtonStates[(int)ButtonMap.A]);
+        B1.SetValue(ButtonStates[(int)ButtonMap.B]);
+        B2.SetValue(ButtonStates[(int)ButtonMap.XBtn]);
+        B3.SetValue(ButtonStates[(int)ButtonMap.YBtn]);
+        B4.SetValue(ButtonStates[(int)ButtonMap.LB]);
+        B5.SetValue(ButtonStates[(int)ButtonMap.RB]);
+        B6.SetValue(ButtonStates[(int)ButtonMap.Menu]);
+        B9.SetValue(ButtonStates[(int)ButtonMap.Start]);
+        B10.SetValue(ButtonStates[(int)ButtonMap.LeftStickKnob]);
+        B11.SetValue(ButtonStates[(int)ButtonMap.RightStickKnob]);
+        B12.SetValue(ButtonStates[(int)ButtonMap.DpadUp]);
+        B13.SetValue(ButtonStates[(int)ButtonMap.DpadDown]);
+        B14.SetValue(ButtonStates[(int)ButtonMap.DpadLeft]);
+        B15.SetValue(ButtonStates[(int)ButtonMap.DpadRight]);
+        LeftTrigger.SetValue(LT);
+        RightTrigger.SetValue(RT);
+
+        LeftTrigger.SetCounter(zCounter);
+        RightTrigger.SetCounter(rZCounter);
+    }
+
+    [AppMenuItem("Vibration/Both", true)]
+    [AppMenuItem("Vibration/Heavy", true, 65535)]
+    [AppMenuItem("Vibration/Light", true, 0, 65535)]
+    [AppMenuItem("Vibration/Stop", true, 0, 0)]
+    private async void SetToVibrate(ushort heavy = 65535, ushort light = 65535, int durationMs = 1000)
+    {
+        if (lastGamepadIndex < 0) return;
+
+        var vibration = new XInput.XINPUT_VIBRATION
+        {
+            wLeftMotorSpeed = heavy,
+            wRightMotorSpeed = light
+        };
+
+        // Start vibration
+        _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
+
+        if (durationMs > 0)
+        {
+            await Task.Delay(durationMs);
+
+            // Stop vibration
             var stop = new XInput.XINPUT_VIBRATION(); // both 0
             _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
-            prevVibLT = 0;
-            prevVibRT = 0;
+        }
+    }
+
+    [AppMenuItem("Vibration/Trigger Mode")]
+    private void ToggleTriggerVibrationMode()
+    {
+        isTriggerVibrationMode = !isTriggerVibrationMode;
+        TriggerVibrationButton.IsChecked = isTriggerVibrationMode;
+        if (!isTriggerVibrationMode)
+        {
+            StopVibration();
+        }
+    }
+
+    private void ApplyTriggerVibration()
+    {
+        // Only update when LT or RT values have changed to avoid redundant XInput calls
+        if (LT == prevVibLT && RT == prevVibRT) return;
+
+        prevVibLT = LT;
+        prevVibRT = RT;
+
+        // LT → light motor (right motor), RT → heavy motor (left motor)
+        // Scale from 0-255 to 0-65535 using bit-shift: x * 257 == (x << 8) | x
+        ushort heavy = (ushort)((RT << 8) | RT);
+        ushort light = (ushort)((LT << 8) | LT);
+
+        var vibration = new XInput.XINPUT_VIBRATION
+        {
+            wLeftMotorSpeed = heavy,
+            wRightMotorSpeed = light
+        };
+        _ = XInput.XInputSetState(lastGamepadIndex, ref vibration);
+    }
+
+    private void StopVibration()
+    {
+        if (lastGamepadIndex < 0) return;
+        var stop = new XInput.XINPUT_VIBRATION(); // both 0
+        _ = XInput.XInputSetState(lastGamepadIndex, ref stop);
+        prevVibLT = 0;
+        prevVibRT = 0;
+    }
+
+    private void ConnectToInterface()
+    {
+        DisconnectInterface();
+
+        if (ActiveDevice.interfaces.Count == 0) return;
+        int index = ActiveDevice.interfaces.FindIndex(x => x.UsagePage == 0x01 && x.Usage == 0x05); // Gamepad
+        if (index < 0)
+        {
+            index = ActiveDevice.interfaces.FindIndex(x => x.UsagePage == 0x1800); // Joystick
+        }
+        if (index < 0) index = 0;
+
+        //Clear();
+
+        ActiveInterface = ActiveDevice.interfaces[index].Connect(true);
+        ActiveInterface.OnDataReceived += Parse;
+
+        // reset mapping state
+        mappingReady = false;
+        axisMap.Clear();
+        hasHat = false;
+        hidHasLT = false;
+        hidHasRT = false;
+        lastGamepadIndex = FindGamepadIndex();
+
+        IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
+
+        IndexPanel.Visibility = Visibility.Visible;
+        ConnectedPanel.Visibility = Visibility.Collapsed;
+        RecordButton.IsEnabled = true;
+        HeavyVibrationButton.IsEnabled = true;
+        LightVibrationButton.IsEnabled = true;
+        TriggerVibrationButton.IsEnabled = true;
+    }
+
+    private void DisconnectInterface()
+    {
+        if (ActiveInterface == null) return;
+
+        if (isTriggerVibrationMode)
+        {
+            StopVibration();
         }
 
-        private void ConnectToInterface()
-        {
-            DisconnectInterface();
+        ActiveInterface.OnDataReceived -= Parse;
+        ActiveInterface = null;
 
-            if (ActiveDevice.interfaces.Count == 0) return;
-            int index = ActiveDevice.interfaces.FindIndex(x => x.UsagePage == 0x01 && x.Usage == 0x05); // Gamepad
-            if (index < 0)
+        IndexPanel.Visibility = Visibility.Collapsed;
+        ConnectedPanel.Visibility = Visibility.Visible;
+        RecordButton.IsEnabled = false;
+        HeavyVibrationButton.IsEnabled = false;
+        LightVibrationButton.IsEnabled = false;
+        TriggerVibrationButton.IsEnabled = false;
+        TriggerVibrationButton.IsChecked = false;
+        isTriggerVibrationMode = false;
+    }
+
+    private void Parse(ReadOnlyMemory<byte> data, DateTime time)
+    {
+        long tick = time.Ticks;
+        if (data.IsEmpty) return;
+        if (unprocessedDatas.Count > 1000) return;
+
+        long interval = tick - lastTimestamp;
+        lastTimestamp = tick;
+
+        _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
+
+        // Retain a stable copy for deferred processing
+        byte[] owned = data.ToArray();
+        unprocessedDatas.Enqueue(new(owned, time, interval, xinput_state));
+    }
+
+    private int FindGamepadIndex()
+    {
+        // Try to match via the IG_XX marker in the device path.
+        // XInput HID interfaces appear with IG_00/IG_01/IG_02/IG_03 in their path,
+        // where the two-digit decimal value equals the XInput slot index (0-3).
+        string devicePath = ActiveInterface?.ProductInfo?.ID ?? string.Empty;
+        if (!string.IsNullOrEmpty(devicePath))
+        {
+            int igIdx = devicePath.IndexOf("ig_", StringComparison.OrdinalIgnoreCase);
+            if (igIdx >= 0 && igIdx + 5 <= devicePath.Length)
             {
-                index = ActiveDevice.interfaces.FindIndex(x => x.UsagePage == 0x1800); // Joystick
+                string igSlot = devicePath.Substring(igIdx + 3, 2);
+                if (int.TryParse(igSlot, out int slot) && slot >= 0 && slot < 4)
+                    return slot;
             }
-            if (index < 0) index = 0;
-
-            //Clear();
-
-            ActiveInterface = ActiveDevice.interfaces[index].Connect(true);
-            ActiveInterface.OnDataReceived += Parse;
-
-            // reset mapping state
-            mappingReady = false;
-            axisMap.Clear();
-            hasHat = false;
-            hidHasLT = false;
-            hidHasRT = false;
-            lastGamepadIndex = FindGamepadIndex();
-
-            IndexText.Text = lastGamepadIndex >= 0 ? lastGamepadIndex.ToString() : "-";
-
-            IndexPanel.Visibility = Visibility.Visible;
-            ConnectedPanel.Visibility = Visibility.Collapsed;
-            RecordButton.IsEnabled = true;
-            HeavyVibrationButton.IsEnabled = true;
-            LightVibrationButton.IsEnabled = true;
-            TriggerVibrationButton.IsEnabled = true;
         }
 
-        private void DisconnectInterface()
+        // Fallback: scan all XInput slots and return the first active one.
+        for (int i = 0; i < 4; i++)
         {
-            if (ActiveInterface == null) return;
+            if (XInput.XInputGetState(i, out _) == XInput.ERROR_SUCCESS)
+                return i;
+        }
+        return -1;
+    }
 
-            if (isTriggerVibrationMode)
+    private void BuildMapping(byte[] firstReport)
+    {
+        if (ActiveInterface == null) return;
+
+        // Preferred axis order: X,Y,Rx,Ry,Slider,Dial  (Z/RZ handled separately with range normalization)
+        var candidates = new (ushort up, ushort u, Action<int> set)[]
+        {
+            (0x01, 0x30, v => X  = (ushort)v), // 48 X 
+            (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
+            (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
+            (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
+            (0x01, 0x36, v => { /* Slider */ }), // 54
+            (0x01, 0x37, v => { /* Dial */ }), // 55
+        };
+
+        axisMap.Clear();
+        hidHasLT = false;
+        hidHasRT = false;
+        foreach (var (up, u, set) in candidates)
+        {
+            if (ActiveInterface.TryGetUsageValue(firstReport, up, u, out int v))
             {
-                StopVibration();
+                axisMap.Add((up, u, set));
+                set(v); // seed initial value
+            }
+        }
+
+        // Z axis (LT, or combined LT+RT on some controllers)
+        if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
+        {
+            int zMin = 0, zEffMax = 255;
+            if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap))
+            {
+                zMin = ltCap.LogicalMin;
+                // LogicalMax may be <= LogicalMin when the firmware encodes 0xFF as a
+                // 1-byte signed value (-1), or when the field uses a 7-bit unsigned range.
+                // Fall back to the bit-width maximum so all cases map correctly to 0-255.
+                if (ltCap.LogicalMax > zMin)
+                    zEffMax = ltCap.LogicalMax;
+                else zEffMax = ltCap.BitSize > 0 ? (1 << ltCap.BitSize) - 1 : 255;
             }
 
-            ActiveInterface.OnDataReceived -= Parse;
-            ActiveInterface = null;
+            double zRange = zEffMax - zMin;
+            double zMid = zMin + zRange / 2.0;
 
-            IndexPanel.Visibility = Visibility.Collapsed;
-            ConnectedPanel.Visibility = Visibility.Visible;
-            RecordButton.IsEnabled = false;
-            HeavyVibrationButton.IsEnabled = false;
-            LightVibrationButton.IsEnabled = false;
-            TriggerVibrationButton.IsEnabled = false;
-            TriggerVibrationButton.IsChecked = false;
-            isTriggerVibrationMode = false;
-        }
+            // Detect combined trigger axis: when neither trigger is pressed the axis sits at
+            // the midpoint (≈127 for a 0-255 range), LT pushes toward the max and RT toward
+            // the min.  A 15% tolerance around the midpoint covers quantization and power-on
+            // drift without accidentally misclassifying a half-pressed independent trigger.
+            const double combinedAxisMidTolerance = 0.15;
+            bool isCombined = zRange > 0 && Math.Abs(ltSeed - zMid) < zRange * combinedAxisMidTolerance;
 
-        private void Parse(ReadOnlyMemory<byte> data, DateTime time)
-        {
-            long tick = time.Ticks;
-            if (data.IsEmpty) return;
-            if (unprocessedDatas.Count > 1000) return;
-
-            long interval = tick - lastTimestamp;
-            lastTimestamp = tick;
-
-            _ = XInput.XInputGetState(lastGamepadIndex, out XInput.XINPUT_STATE xinput_state);
-
-            // Retain a stable copy for deferred processing
-            byte[] owned = data.ToArray();
-            unprocessedDatas.Enqueue(new(owned, time, interval, xinput_state));
-        }
-
-        private int FindGamepadIndex()
-        {
-            // Try to match via the IG_XX marker in the device path.
-            // XInput HID interfaces appear with IG_00/IG_01/IG_02/IG_03 in their path,
-            // where the two-digit decimal value equals the XInput slot index (0-3).
-            string devicePath = ActiveInterface?.ProductInfo?.ID ?? string.Empty;
-            if (!string.IsNullOrEmpty(devicePath))
+            if (isCombined)
             {
-                int igIdx = devicePath.IndexOf("ig_", StringComparison.OrdinalIgnoreCase);
-                if (igIdx >= 0 && igIdx + 5 <= devicePath.Length)
+                // This is a combined trigger axis (single channel, LT and RT share one axis).
+                // XInput exposes bLeftTrigger and bRightTrigger as independent bytes, which
+                // correctly reports both triggers simultaneously.  Prefer XInput when available
+                // (lastGamepadIndex != -1) so that pressing both triggers at the same time is
+                // handled correctly; hidHasLT/hidHasRT are left false so the XInput fallback
+                // path in DecodeBytes() picks up both values independently.
+                //
+                // Only fall back to HID axis splitting when there is no XInput slot (e.g. a
+                // non-XInput controller that uses a combined DirectInput Z axis).
+                if (lastGamepadIndex < 0)
                 {
-                    string igSlot = devicePath.Substring(igIdx + 3, 2);
-                    if (int.TryParse(igSlot, out int slot) && slot >= 0 && slot < 4)
-                        return slot;
-                }
-            }
-
-            // Fallback: scan all XInput slots and return the first active one.
-            for (int i = 0; i < 4; i++)
-            {
-                if (XInput.XInputGetState(i, out _) == XInput.ERROR_SUCCESS)
-                    return i;
-            }
-            return -1;
-        }
-
-        private void BuildMapping(byte[] firstReport)
-        {
-            if (ActiveInterface == null) return;
-
-            // Preferred axis order: X,Y,Rx,Ry,Slider,Dial  (Z/RZ handled separately with range normalization)
-            var candidates = new (ushort up, ushort u, Action<int> set)[]
-            {
-                (0x01, 0x30, v => X  = (ushort)v), // 48 X 
-                (0x01, 0x31, v => Y  = (ushort)v), // 49 Y
-                (0x01, 0x33, v => RX = (ushort)v), // 51 Rx
-                (0x01, 0x34, v => RY = (ushort)v), // 52 Ry
-                (0x01, 0x36, v => { /* Slider */ }), // 54
-                (0x01, 0x37, v => { /* Dial */ }), // 55
-            };
-
-            axisMap.Clear();
-            hidHasLT = false;
-            hidHasRT = false;
-            foreach (var (up, u, set) in candidates)
-            {
-                if (ActiveInterface.TryGetUsageValue(firstReport, up, u, out int v))
-                {
-                    axisMap.Add((up, u, set));
-                    set(v); // seed initial value
-                }
-            }
-
-            // Z axis (LT, or combined LT+RT on some controllers)
-            if (ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x32, out int ltSeed))
-            {
-                int zMin = 0, zEffMax = 255;
-                if (ActiveInterface.TryGetValueCap(0x01, 0x32, out var ltCap))
-                {
-                    zMin = ltCap.LogicalMin;
-                    // LogicalMax may be <= LogicalMin when the firmware encodes 0xFF as a
-                    // 1-byte signed value (-1), or when the field uses a 7-bit unsigned range.
-                    // Fall back to the bit-width maximum so all cases map correctly to 0-255.
-                    if (ltCap.LogicalMax > zMin)
-                        zEffMax = ltCap.LogicalMax;
-                    else if (ltCap.BitSize > 0)
-                        zEffMax = (1 << ltCap.BitSize) - 1;
-                    else
-                        zEffMax = 255;
-                }
-
-                double zRange = zEffMax - zMin;
-                double zMid = zMin + zRange / 2.0;
-
-                // Detect combined trigger axis: when neither trigger is pressed the axis sits at
-                // the midpoint (≈127 for a 0-255 range), LT pushes toward the max and RT toward
-                // the min.  A 15% tolerance around the midpoint covers quantization and power-on
-                // drift without accidentally misclassifying a half-pressed independent trigger.
-                const double combinedAxisMidTolerance = 0.15;
-                bool isCombined = zRange > 0 && Math.Abs(ltSeed - zMid) < zRange * combinedAxisMidTolerance;
-
-                if (isCombined)
-                {
-                    // This is a combined trigger axis (single channel, LT and RT share one axis).
-                    // XInput exposes bLeftTrigger and bRightTrigger as independent bytes, which
-                    // correctly reports both triggers simultaneously.  Prefer XInput when available
-                    // (lastGamepadIndex != -1) so that pressing both triggers at the same time is
-                    // handled correctly; hidHasLT/hidHasRT are left false so the XInput fallback
-                    // path in DecodeBytes() picks up both values independently.
-                    //
-                    // Only fall back to HID axis splitting when there is no XInput slot (e.g. a
-                    // non-XInput controller that uses a combined DirectInput Z axis).
-                    if (lastGamepadIndex < 0)
+                    double ltAxisRange = zEffMax - zMid;
+                    double rtAxisRange = zMid - zMin;
+                    axisMap.Add((0x01, 0x32, v =>
                     {
-                        double ltAxisRange = zEffMax - zMid;
-                        double rtAxisRange = zMid - zMin;
-                        axisMap.Add((0x01, 0x32, v =>
-                        {
-                            LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
-                            RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
-                        }));
-                        LT = 0;
-                        RT = 0;
-                        hidHasLT = true;
-                        hidHasRT = true;
+                        LT = ltAxisRange > 0 ? (byte)Math.Clamp((int)((v - zMid) * 255.0 / ltAxisRange), 0, 255) : (byte)0;
+                        RT = rtAxisRange > 0 ? (byte)Math.Clamp((int)((zMid - v) * 255.0 / rtAxisRange), 0, 255) : (byte)0;
                     }
-                    // else: XInput is available — leave hidHasLT/hidHasRT false so XInput
-                    // provides separate LT/RT readings (simultaneous press works correctly).
-                }
-                else
-                {
-                    Action<int> ltSetter = zRange > 0
-                        ? v => LT = (byte)Math.Clamp((int)((v - zMin) * 255.0 / zRange), 0, 255)
-                        : v => LT = (byte)Math.Clamp(v, 0, 255);
-                    axisMap.Add((0x01, 0x32, ltSetter));
-                    ltSetter(ltSeed);
+                    ));
+                    LT = 0;
+                    RT = 0;
                     hidHasLT = true;
+                    hidHasRT = true;
                 }
+                // else: XInput is available — leave hidHasLT/hidHasRT false so XInput
+                // provides separate LT/RT readings (simultaneous press works correctly).
             }
-
-            // RZ axis (RT) - only register if RT is not already covered by combined Z axis
-            if (!hidHasRT && ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
+            else
             {
-                int rtMin = 0, rtEffMax = 255;
-                if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap))
-                {
-                    rtMin = rtCap.LogicalMin;
-                    if (rtCap.LogicalMax > rtMin)
-                        rtEffMax = rtCap.LogicalMax;
-                    else if (rtCap.BitSize > 0)
-                        rtEffMax = (1 << rtCap.BitSize) - 1;
-                    else
-                        rtEffMax = 255;
-                }
-                double rtRange = rtEffMax - rtMin;
-                Action<int> rtSetter = rtRange > 0
-                    ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
-                    : v => RT = (byte)Math.Clamp(v, 0, 255);
-                axisMap.Add((0x01, 0x35, rtSetter));
-                rtSetter(rtSeed);
-                hidHasRT = true;
+                Action<int> ltSetter = zRange > 0
+                    ? v => LT = (byte)Math.Clamp((int)((v - zMin) * 255.0 / zRange), 0, 255)
+                    : v => LT = (byte)Math.Clamp(v, 0, 255);
+                axisMap.Add((0x01, 0x32, ltSetter));
+                ltSetter(ltSeed);
+                hidHasLT = true;
             }
-
-            // Hat switch?
-            hasHat = ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x39, out _);
-
-            mappingReady = true;
         }
 
-        // ── HID diagnostics ──────────────────────────────────────────────────
-        // These answer "is a mis-placed button/axis the device's fault or the
-        // app's fixed usage→UI mapping?" by logging (a) what the device DECLARES,
-        // and (b) the raw report bytes next to what Windows DECODES from them.
-
-        [AppMenuItem("Diagnostics/Dump HID Descriptor")]
-        private void DumpHidDescriptor()
+        // RZ axis (RT) - only register if RT is not already covered by combined Z axis
+        if (!hidHasRT && ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x35, out int rtSeed))
         {
-            if (ActiveInterface?.ProductInfo is not { } info)
+            int rtMin = 0, rtEffMax = 255;
+            if (ActiveInterface.TryGetValueCap(0x01, 0x35, out var rtCap))
             {
-                Debug.Log("[GP-DIAG] No active interface — connect a device first.");
-                return;
+                rtMin = rtCap.LogicalMin;
+                if (rtCap.LogicalMax > rtMin)
+                    rtEffMax = rtCap.LogicalMax;
+                else rtEffMax = rtCap.BitSize > 0 ? (1 << rtCap.BitSize) - 1 : 255;
             }
-
-            Debug.Log($"[GP-DIAG] Device '{info.Product}' VID:{info.VID:X4} PID:{info.PID:X4} " +
-                      $"transport={info.Transport} selectedInterface usage=0x{info.UsagePage:X2}:0x{info.Usage:X2}");
-            Debug.Log("[GP-DIAG] Declared input capabilities (what the device's report descriptor says):\n"
-                      + ActiveInterface.DescribeInputCapabilities());
-            Debug.Log("[GP-DIAG] App's fixed mapping — buttons: usage 1=A 2=B 3=X 4=Y 5=LB 6=RB 7=View 8=Menu "
-                      + "9=LStickKnob 10=RStickKnob; axes: X=0x30 Y=0x31 Z/LT=0x32 Rx=0x33 Ry=0x34 Rz/RT=0x35 Hat=0x39.");
-            Debug.Log("[GP-DIAG] If the declared usages differ from this fixed mapping, the misplacement is a "
-                      + "device-descriptor/layout mismatch, not a caps-parsing bug. Use 'Log Raw Reports' to confirm.");
+            double rtRange = rtEffMax - rtMin;
+            Action<int> rtSetter = rtRange > 0
+                ? v => RT = (byte)Math.Clamp((int)((v - rtMin) * 255.0 / rtRange), 0, 255)
+                : v => RT = (byte)Math.Clamp(v, 0, 255);
+            axisMap.Add((0x01, 0x35, rtSetter));
+            rtSetter(rtSeed);
+            hidHasRT = true;
         }
 
-        private void LogReportDiagnostic(byte[] data)
+        // Hat switch?
+        hasHat = ActiveInterface.TryGetUsageValue(firstReport, 0x01, 0x39, out _);
+
+        mappingReady = true;
+    }
+
+    // ── HID diagnostics ──────────────────────────────────────────────────
+    // These answer "is a mis-placed button/axis the device's fault or the
+    // app's fixed usage→UI mapping?" by logging (a) what the device DECLARES,
+    // and (b) the raw report bytes next to what Windows DECODES from them.
+
+    [AppMenuItem("Diagnostics/Dump HID Descriptor")]
+    private void DumpHidDescriptor()
+    {
+        if (ActiveInterface?.ProductInfo is not { } info)
         {
-            if (ActiveInterface == null) return;
-
-            var sb = new System.Text.StringBuilder();
-            sb.Append("[GP-DIAG] raw=").Append(BitConverter.ToString(data));
-
-            var pressed = ActiveInterface.GetPressedButtons(data, 0x09);
-            sb.Append(" | btns(0x09)=").Append(pressed.Length == 0 ? "none" : string.Join(",", pressed));
-
-            (ushort usage, string name)[] axes =
-            {
-                (0x30, "X"), (0x31, "Y"), (0x32, "Z/LT"), (0x33, "Rx"),
-                (0x34, "Ry"), (0x35, "Rz/RT"), (0x36, "Slider"), (0x37, "Dial"), (0x39, "Hat"),
-            };
-            sb.Append(" | axes=");
-            foreach (var (usage, name) in axes)
-            {
-                if (ActiveInterface.TryGetUsageValue(data, 0x01, usage, out int v))
-                    sb.Append(name).Append('=').Append(v).Append(' ');
-            }
-
-            Debug.Log(sb.ToString());
+            Debug.Log("[GP-DIAG] No active interface — connect a device first.");
+            return;
         }
 
-        [AppMenuItem("Clear")]
-        private void Clear()
+        Debug.Log($"[GP-DIAG] Device '{info.Product}' VID:{info.VID:X4} PID:{info.PID:X4} " +
+                  $"transport={info.Transport} selectedInterface usage=0x{info.UsagePage:X2}:0x{info.Usage:X2}");
+        Debug.Log("[GP-DIAG] Declared input capabilities (what the device's report descriptor says):\n"
+                  + ActiveInterface.DescribeInputCapabilities());
+        Debug.Log("[GP-DIAG] App's fixed mapping — buttons: usage 1=A 2=B 3=X 4=Y 5=LB 6=RB 7=View 8=Menu "
+                  + "9=LStickKnob 10=RStickKnob; axes: X=0x30 Y=0x31 Z/LT=0x32 Rx=0x33 Ry=0x34 Rz/RT=0x35 Hat=0x39.");
+        Debug.Log("[GP-DIAG] If the declared usages differ from this fixed mapping, the misplacement is a "
+                  + "device-descriptor/layout mismatch, not a caps-parsing bug. Use 'Log Raw Reports' to confirm.");
+    }
+
+    private void LogReportDiagnostic(byte[] data)
+    {
+        if (ActiveInterface == null) return;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("[GP-DIAG] raw=").Append(BitConverter.ToString(data));
+
+        var pressed = ActiveInterface.GetPressedButtons(data, 0x09);
+        sb.Append(" | btns(0x09)=").Append(pressed.Length == 0 ? "none" : string.Join(",", pressed));
+
+        (ushort usage, string name)[] axes =
         {
-            timestamps.Clear();
-            lastTimestamp = DateTime.UtcNow.Ticks;
-            startTime = DateTime.UtcNow.Ticks;
-
-            StripChart.Clear();
-            XYChart.Clear();
-            LeftJoyStick.Clear();
-            RightJoyStick.Clear();
-            RightTrigger.Clear();
-            LeftTrigger.Clear();
-            leftJoyStick.Reset();
-            rightJoyStick.Reset();
-
-            for (int i = 0; i < buttonCounter.Length; i++) buttonCounter[i] = 0;
-            zCounter = 0;
-            rZCounter = 0;
+            (0x30, "X"), (0x31, "Y"), (0x32, "Z/LT"), (0x33, "Rx"),
+            (0x34, "Ry"), (0x35, "Rz/RT"), (0x36, "Slider"), (0x37, "Dial"), (0x39, "Hat"),
+        };
+        sb.Append(" | axes=");
+        foreach (var (usage, name) in axes)
+        {
+            if (ActiveInterface.TryGetUsageValue(data, 0x01, usage, out int v))
+                sb.Append(name).Append('=').Append(v).Append(' ');
         }
 
-        private static void DecodeHatToDpad(int hat, bool[] buttons)
+        Debug.Log(sb.ToString());
+    }
+
+    [AppMenuItem("Clear")]
+    private void Clear()
+    {
+        timestamps.Clear();
+        lastTimestamp = DateTime.UtcNow.Ticks;
+        startTime = DateTime.UtcNow.Ticks;
+
+        StripChart.Clear();
+        XYChart.Clear();
+        LeftJoyStick.Clear();
+        RightJoyStick.Clear();
+        RightTrigger.Clear();
+        LeftTrigger.Clear();
+        leftJoyStick.Reset();
+        rightJoyStick.Reset();
+
+        for (int i = 0; i < buttonCounter.Length; i++) buttonCounter[i] = 0;
+        zCounter = 0;
+        rZCounter = 0;
+    }
+
+    private static void DecodeHatToDpad(int hat, bool[] buttons)
+    {
+        // HID hat convention: 1..8 for directions, 0 = null (released) — but check device logical min/max.
+        bool up = false, down = false, left = false, right = false;
+        switch (hat)
         {
-            // HID hat convention: 1..8 for directions, 0 = null (released) — but check device logical min/max.
-            bool up = false, down = false, left = false, right = false;
-            switch (hat)
-            {
-                case 1: up = true; break;
-                case 2: up = true; right = true; break;
-                case 3: right = true; break;
-                case 4: right = true; down = true; break;
-                case 5: down = true; break;
-                case 6: down = true; left = true; break;
-                case 7: left = true; break;
-                case 8: left = true; up = true; break;
-                default: break; // 0 or out-of-range -> released
-            }
-            buttons[(int)ButtonMap.DpadUp] = up;
-            buttons[(int)ButtonMap.DpadDown] = down;
-            buttons[(int)ButtonMap.DpadLeft] = left;
-            buttons[(int)ButtonMap.DpadRight] = right;
+            case 1: up = true; break;
+            case 2: up = true; right = true; break;
+            case 3: right = true; break;
+            case 4: right = true; down = true; break;
+            case 5: down = true; break;
+            case 6: down = true; left = true; break;
+            case 7: left = true; break;
+            case 8: left = true; up = true; break;
+            default: break; // 0 or out-of-range -> released
+        }
+        buttons[(int)ButtonMap.DpadUp] = up;
+        buttons[(int)ButtonMap.DpadDown] = down;
+        buttons[(int)ButtonMap.DpadLeft] = left;
+        buttons[(int)ButtonMap.DpadRight] = right;
+    }
+
+    #region Recording
+
+    private void StartRecording()
+    {
+        StopRecording();
+
+        if (recordFileStream != null)
+        {
+            try { recordFileStream.Close(); } catch { }
+            recordFileStream = null;
         }
 
-        #region Recording
-
-        private void StartRecording()
+        try
         {
+            string directory = MainWindow.GetOutputFolder();
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+            string filePath = Path.Combine(directory, $"GamepadRecord_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+            var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+
+            recordFileStream = new StreamWriter(stream);
+            recordFileStream.WriteLine("Tick,Value");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error starting recording: {ex.Message}");
+            return;
+        }
+
+        isRecording = true;
+        ChartTypeDropdown.IsEnabled = false;
+        AutoFit.IsEnabled = false;
+        PauseButton.IsEnabled = false;
+    }
+
+    private void WriteRecord(DateTime time)
+    {
+        string data = addRecordData?.Invoke(time) ?? string.Empty;
+        if (string.IsNullOrEmpty(data)) return;
+
+        try
+        {
+            recordFileStream?.WriteLine(data);
+            recordFileStream?.Flush();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error writing record: {ex.Message}");
             StopRecording();
-
-            if (recordFileStream != null)
-            {
-                try { recordFileStream.Close(); } catch { }
-                recordFileStream = null;
-            }
-
-            try
-            {
-                string directory = MainWindow.GetOutputFolder();
-                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
-                string filePath = Path.Combine(directory, $"GamepadRecord_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-                var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
-
-                recordFileStream = new StreamWriter(stream);
-                recordFileStream.WriteLine("Tick,Value");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error starting recording: {ex.Message}");
-                return;
-            }
-
-            isRecording = true;
-            ChartTypeDropdown.IsEnabled = false;
-            AutoFit.IsEnabled = false;
-            PauseButton.IsEnabled = false;
         }
+    }
 
-        private void WriteRecord(DateTime time)
+    private void StopRecording()
+    {
+        if (!isRecording) return;
+
+        try
         {
-            string data = addRecordData?.Invoke(time) ?? string.Empty;
-            if (string.IsNullOrEmpty(data)) return;
-
-            try
-            {
-                recordFileStream?.WriteLine(data);
-                recordFileStream?.Flush();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error writing record: {ex.Message}");
-                StopRecording();
-            }
+            recordFileStream?.Close();
+            recordFileStream = null;
         }
-
-        private void StopRecording()
+        catch (Exception ex)
         {
-            if (!isRecording) return;
-
-            try
-            {
-                recordFileStream?.Close();
-                recordFileStream = null;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error stopping recording: {ex.Message}");
-            }
-
-            ChartTypeDropdown.IsEnabled = true;
-            AutoFit.IsEnabled = true;
-            PauseButton.IsEnabled = true;
-
-            isRecording = false;
+            System.Diagnostics.Debug.WriteLine($"Error stopping recording: {ex.Message}");
         }
 
-        #endregion
+        ChartTypeDropdown.IsEnabled = true;
+        AutoFit.IsEnabled = true;
+        PauseButton.IsEnabled = true;
 
-        private static short NormalizeUnsigned(int v) => (short)(v + short.MinValue);
+        isRecording = false;
+    }
 
-        private class JoyStickMinMax
+    #endregion
+
+    private static short NormalizeUnsigned(int v) => (short)(v + short.MinValue);
+
+    private class JoyStickMinMax
+    {
+        public int MinX { get; private set; } = int.MaxValue;
+        public int MaxX { get; private set; } = int.MinValue;
+        public int MinY { get; private set; } = int.MaxValue;
+        public int MaxY { get; private set; } = int.MinValue;
+        public void Update(int x, int y)
         {
-            public int MinX { get; private set; } = int.MaxValue;
-            public int MaxX { get; private set; } = int.MinValue;
-            public int MinY { get; private set; } = int.MaxValue;
-            public int MaxY { get; private set; } = int.MinValue;
-            public void Update(int x, int y)
-            {
-                if (x < MinX) MinX = x;
-                if (x > MaxX) MaxX = x;
-                if (y < MinY) MinY = y;
-                if (y > MaxY) MaxY = y;
-            }
-            public void Reset()
-            {
-                MinX = int.MaxValue;
-                MaxX = int.MinValue;
-                MinY = int.MaxValue;
-                MaxY = int.MinValue;
-            }
+            if (x < MinX) MinX = x;
+            if (x > MaxX) MaxX = x;
+            if (y < MinY) MinY = y;
+            if (y > MaxY) MaxY = y;
         }
-
-        public struct Data
+        public void Reset()
         {
-            public readonly byte[] data;
-            public readonly DateTime time;
-            public readonly long interval;
-            public readonly XInput.XINPUT_STATE xinput_state;
-
-            public Data(byte[] data, DateTime time, long interval, XInput.XINPUT_STATE xinput_state)
-            {
-                if (data == null) { this = default; return; }
-                this.time = time;
-                this.interval = interval;
-                this.data = data;
-                this.xinput_state = xinput_state;
-            }
+            MinX = int.MaxValue;
+            MaxX = int.MinValue;
+            MinY = int.MaxValue;
+            MaxY = int.MinValue;
         }
+    }
 
-        public enum ChartType : int
+    public struct Data
+    {
+        public readonly byte[] data;
+        public readonly DateTime time;
+        public readonly long interval;
+        public readonly XInput.XINPUT_STATE xinput_state;
+
+        public Data(byte[] data, DateTime time, long interval, XInput.XINPUT_STATE xinput_state)
         {
-            ReportRate = 0,
-            SmoothedReportRate = 1,
-            X = 2,
-            Y = 3,
-            RX = 4,
-            RY = 5,
-            LT = 6,
-            RT = 7,
-            LeftStick = 8,
-            RightStick = 9,
+            if (data == null) { this = default; return; }
+            this.time = time;
+            this.interval = interval;
+            this.data = data;
+            this.xinput_state = xinput_state;
         }
+    }
+
+    public enum ChartType : int
+    {
+        ReportRate = 0,
+        SmoothedReportRate = 1,
+        X = 2,
+        Y = 3,
+        RX = 4,
+        RY = 5,
+        LT = 6,
+        RT = 7,
+        LeftStick = 8,
+        RightStick = 9,
     }
 }

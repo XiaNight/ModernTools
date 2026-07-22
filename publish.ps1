@@ -242,6 +242,7 @@ Write-Host "ModernToolset publish - version $Version" -ForegroundColor Cyan
 
 # --- Plugin projects (Plugins subfolder name => project path) ---
 # Mirrors the PublishPluginProjects target in ModernTools.csproj.
+# NOTE: MCPServer is NOT a plugin - it is a standalone exe published separately below.
 $plugins = [ordered]@{
     'Base'                 = 'Base\Base.csproj'
     'Audio'                = 'Features\Audio\Audio.csproj'
@@ -251,7 +252,13 @@ $plugins = [ordered]@{
     'KeyboardHallSensor'   = 'Features\KeyboardHallSensor\KeyboardHallSensor.csproj'
     'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
     'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
-    'MCPServer'            = 'Features\MCPServer\MCPServer.csproj'
+}
+
+# --- Standalone companion executables bundled alongside the app (subfolder => project).
+# These are separate processes (their own dependency closure), NOT reflection-loaded
+# plugins, so they get their own folder and are excluded from the plugin dedupe. ---
+$companions = [ordered]@{
+    'MCPServer' = 'Features\MCPServer\MCPServer.csproj'   # ModernToolsetMCPServer.exe (MCP API bridge)
 }
 
 $buildRoot = Join-Path $distRoot 'build'
@@ -292,6 +299,20 @@ function Publish-Bundle {
         Write-Host "Publishing plugin: $name" -ForegroundColor Yellow
         & dotnet msbuild $proj /t:Publish /p:PublishProfile=FolderProfile "/p:PublishDir=$pluginDir/"
         if ($LASTEXITCODE -ne 0) { throw "Plugin publish failed: $name" }
+    }
+
+    # --- Companion executables: each into its own subfolder alongside the main app, as a
+    # single-file exe matching the bundle's self-contained mode. They are separate
+    # processes, so they are published in full (not deduped against the host). ---
+    foreach ($name in $companions.Keys) {
+        $proj    = Join-Path $repo $companions[$name]
+        $compDir = Join-Path $staging $name
+        Write-Host "Publishing companion: $name (self-contained=$scStr)..." -ForegroundColor Yellow
+        & dotnet publish $proj -c $config -r $rid `
+            -p:SelfContained=$scStr -p:PublishSingleFile=true -p:PublishReadyToRun=$r2r `
+            -p:DebugType=none -p:DebugSymbols=false `
+            -o $compDir
+        if ($LASTEXITCODE -ne 0) { throw "Companion publish failed: $name ($ModeName)." }
     }
 
     # --- Dedupe: drop assemblies the host (main exe) already provides. The host loads its

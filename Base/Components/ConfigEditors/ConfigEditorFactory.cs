@@ -92,6 +92,9 @@ public static class ConfigEditorFactory
 		else if ((ConfigEditorUtil.IntegerTypes.Contains(type) || ConfigEditorUtil.FloatTypes.Contains(type))
 				 && item.Attr.Type == ConfigType.Slider)
 			editor = new ConfigSlider();
+		else if (type == typeof(string)
+				 && (item.Attr.Type == ConfigType.File || item.Attr.Type == ConfigType.Folder))
+			editor = new ConfigPathField();
 		else
 			// string / integer / float / hex all share the text input control.
 			editor = new ConfigInputField();

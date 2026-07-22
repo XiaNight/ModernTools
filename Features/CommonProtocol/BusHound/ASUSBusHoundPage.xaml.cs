@@ -1,29 +1,27 @@
-﻿namespace Base.UI.Pages;
-
-using Base.Core;
+﻿using Base.Core;
 using Base.Framework.Utilities;
+using Base.Helpers;
 using Base.Pages;
 using Base.Services;
 using Base.Services.APIService;
 using Base.Services.Peripheral;
+using CommonProtocol.BusHound.QuickAction;
 using Microsoft.Win32;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using static Base.UI.Pages.ASUSBusHoundPage.BusListener;
+
+namespace CommonProtocol.BusHound;
+
 
 [PageInfo("Bus Hound", Glyph = "\uEE6F",
     Description = "ASUS Bus Hound is a software that allows you to control your ASUS laptop's fans and performance modes. This page provides integration with ASUS Hound, allowing you to monitor and adjust your laptop's performance settings directly from this application.")]
@@ -51,6 +49,20 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     public BulkObservableCollection<LogRow> Items { get; } = new();
 
     public event PropertyChangedEventHandler PropertyChanged;
+
+    // ── Device tree panel ──
+    public ObservableCollection<UsbTreeNode> DeviceNodes { get; } = new();
+    private bool devicePanelVisible;
+    private HwndSource deviceHwndSource;
+    private bool deviceMonitorHooked;
+    private DispatcherTimer deviceChangeDebounce;
+    private int deviceRefreshInFlight;
+    private volatile bool deviceRefreshPending;
+
+    private const int WM_DEVICECHANGE = 0x0219;
+    private const int DBT_DEVNODES_CHANGED = 0x0007;
+    private const int DBT_DEVICEARRIVAL = 0x8000;
+    private const int DBT_DEVICEREMOVECOMPLETE = 0x8004;
 
     // Keep track of event handlers so we can unhook them on Stop without disposing interfaces.
     private readonly Dictionary<PeripheralInterface, Action<ReadOnlyMemory<byte>, DateTime>> dataReceivedHandlers = new();
@@ -85,6 +97,14 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         QuickActionAddBtn.Click += (_, _) => AddNewFolder();
         QuickActionImportBtn.Click += (_, _) => ImportQuickActionFile();
         QuickActionSearchBox.TextChanged += (_, _) => FilterQuickActions(QuickActionSearchBox.Text);
+
+        // Device panel buttons
+        CaptureBtn.Click += (_, _) => ShowCapturePanel();
+        DevicesBtn.Click += (_, _) => ShowDevicePanel();
+        DeviceRefreshBtn.Click += (_, _) => _ = RefreshDeviceTreeAsync();
+
+        // Tests panel (logic lives in ASUSBusHoundPage.Tests.cs)
+        InitTestsPanel();
 
         //USBPCapHandler usbpcap = new();
         //usbpcap.DebugPrintDeviceTree(8);
@@ -172,6 +192,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         base.OnDestroy();
         // Persist quick action entries on destroy
         SaveQuickActionEntries();
+        UnhookDeviceMonitor();
         //usbpcapcts.Cancel();
     }
 
@@ -210,6 +231,13 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         {
             Dispatcher.InvokeAsync(() => LogGrid.ScrollIntoView(Items[^1]), DispatcherPriority.Background);
         }
+
+        // Resume live device monitoring if the tree was the active view.
+        if (devicePanelVisible)
+        {
+            HookDeviceMonitor();
+            _ = RefreshDeviceTreeAsync();
+        }
     }
 
     protected override void OnDisable()
@@ -217,6 +245,226 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         base.OnDisable();
         DeviceSelection.Instance.OnActiveDeviceConnected -= ConnectAndStart;
         DeviceSelection.Instance.OnActiveDeviceDisconnected -= Stop;
+
+        // Stop listening for device-change messages while the page is hidden.
+        UnhookDeviceMonitor();
+    }
+
+    // ----------------------------
+    // Device Tree Panel
+    // ----------------------------
+
+    private void ShowDevicePanel()
+    {
+        devicePanelVisible = true;
+        DevicePanel.Visibility = Visibility.Visible;
+        CapturePanel.Visibility = Visibility.Collapsed;
+        TestsPanel.Visibility = Visibility.Collapsed;
+
+        HookDeviceMonitor();
+        _ = RefreshDeviceTreeAsync();
+    }
+
+    private void ShowCapturePanel()
+    {
+        devicePanelVisible = false;
+        DevicePanel.Visibility = Visibility.Collapsed;
+        CapturePanel.Visibility = Visibility.Visible;
+        TestsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Hooks the hosting window's message loop so we hear when the OS device tree
+    /// changes (a peripheral is plugged in or removed).
+    /// </summary>
+    private void HookDeviceMonitor()
+    {
+        if (deviceMonitorHooked) return;
+
+        HwndSource source = PresentationSource.FromVisual(this) as HwndSource;
+        if (source is null)
+        {
+            IntPtr handle = new WindowInteropHelper(Application.Current?.MainWindow).Handle;
+            if (handle != IntPtr.Zero) source = HwndSource.FromHwnd(handle);
+        }
+        if (source is null) return;
+
+        deviceHwndSource = source;
+        deviceHwndSource.AddHook(DeviceChangeHook);
+        deviceMonitorHooked = true;
+    }
+
+    private void UnhookDeviceMonitor()
+    {
+        deviceChangeDebounce?.Stop();
+
+        if (!deviceMonitorHooked) return;
+
+        try { deviceHwndSource?.RemoveHook(DeviceChangeHook); }
+        catch { /* window may already be gone */ }
+
+        deviceHwndSource = null;
+        deviceMonitorHooked = false;
+    }
+
+    private IntPtr DeviceChangeHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WM_DEVICECHANGE)
+        {
+            int evt = wParam.ToInt32();
+            if (evt is DBT_DEVNODES_CHANGED or DBT_DEVICEARRIVAL or DBT_DEVICEREMOVECOMPLETE)
+            {
+                ScheduleDeviceRefresh();
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Device-change messages arrive in bursts (one per interface); coalesce them
+    /// into a single re-enumeration.
+    /// </summary>
+    private void ScheduleDeviceRefresh()
+    {
+        if (!devicePanelVisible) return;
+
+        deviceChangeDebounce ??= CreateDebounceTimer();
+        deviceChangeDebounce.Stop();
+        deviceChangeDebounce.Start();
+    }
+
+    private DispatcherTimer CreateDebounceTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (devicePanelVisible) _ = RefreshDeviceTreeAsync();
+        };
+        return timer;
+    }
+
+    private async Task RefreshDeviceTreeAsync()
+    {
+        // Only one enumeration at a time; if another change arrives mid-flight,
+        // remember it and re-run once with the latest state.
+        if (Interlocked.CompareExchange(ref deviceRefreshInFlight, 1, 0) != 0)
+        {
+            deviceRefreshPending = true;
+            return;
+        }
+
+        try
+        {
+            do
+            {
+                deviceRefreshPending = false;
+
+                List<IPeripheralDetail> details;
+                try
+                {
+                    details = await PeripheralInterface
+                        .GetConnectedDevicesAsync(TimeSpan.FromSeconds(3))
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    Debug.Log($"[BusHound] Device enumeration failed: {ex.Message}");
+                    details = new List<IPeripheralDetail>();
+                }
+
+                List<UsbTreeNode> nodes = BuildDeviceNodes(details);
+
+                await Dispatcher.InvokeAsync(() => ApplyDeviceNodes(nodes));
+            }
+            while (deviceRefreshPending);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref deviceRefreshInFlight, 0);
+        }
+    }
+
+    /// <summary>
+    /// Groups discovered interfaces into device entries (by Windows Container ID,
+    /// falling back to VID/PID/transport) and turns each into a tree node with its
+    /// interfaces as children.
+    /// </summary>
+    private static List<UsbTreeNode> BuildDeviceNodes(List<IPeripheralDetail> details)
+    {
+        var nodes = new List<UsbTreeNode>();
+
+        var devices = DeviceSelection.MergeDiscoveredInterface(details)
+            .OrderBy(d => d.VID)
+            .ThenBy(d => d.PID)
+            .ThenBy(d => d.productName);
+
+        foreach (var device in devices)
+        {
+            string name = string.IsNullOrWhiteSpace(device.productName)
+                ? "(Unnamed device)"
+                : device.productName.Trim();
+
+            var deviceNode = new UsbTreeNode
+            {
+                Glyph = "", // USB
+                Title = name,
+                Detail = $"VID {device.VID:X4}   PID {device.PID:X4}   [{device.TransportLabel}]"
+            };
+
+            foreach (var iface in device.interfaces
+                         .OrderBy(i => i.UsagePage)
+                         .ThenBy(i => i.Usage))
+            {
+                deviceNode.Children.Add(new UsbTreeNode
+                {
+                    Glyph = "", // interface / connector
+                    Title = DescribeInterface(iface),
+                    Detail = $"Usage {iface.Usage:X4}   UsagePage {iface.UsagePage:X4}"
+                });
+            }
+
+            nodes.Add(deviceNode);
+        }
+
+        return nodes;
+    }
+
+    private void ApplyDeviceNodes(List<UsbTreeNode> nodes)
+    {
+        DeviceNodes.Clear();
+        foreach (var node in nodes) DeviceNodes.Add(node);
+
+        int interfaceCount = nodes.Sum(n => n.Children.Count);
+        DeviceSummaryText.Text = nodes.Count == 0
+            ? string.Empty
+            : $"{nodes.Count} device(s), {interfaceCount} interface(s)";
+
+        DeviceEmptyText.Visibility = nodes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Produces a short, human-readable label for an interface node, naming the
+    /// common HID top-level usages and marking vendor-defined usage pages.
+    /// </summary>
+    private static string DescribeInterface(IPeripheralDetail iface)
+    {
+        if (iface.UsagePage == 0x01)
+        {
+            switch (iface.Usage)
+            {
+                case 0x02: return "Mouse";
+                case 0x04: return "Joystick";
+                case 0x05: return "Game Pad";
+                case 0x06: return "Keyboard";
+                case 0x07: return "Keypad";
+                case 0x80: return "System Control";
+            }
+        }
+        if (iface.UsagePage == 0x0C && iface.Usage == 0x01) return "Consumer Control";
+        if (iface.UsagePage >= 0xFF00) return "Vendor-defined";
+
+        return $"{iface.ConnectionType} Interface";
     }
 
     // ----------------------------
@@ -252,7 +500,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         var listener = busListeners.FirstOrDefault(l => l.Name == name);
         if (listener != null)
         {
-            if (!listener.ReceivedData.TryDequeue(out MemoryData item)) return null;
+            if (!listener.ReceivedData.TryDequeue(out BusListener.MemoryData item)) return null;
             string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
             return new ApiResponse
             {
@@ -260,7 +508,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 {
                     Bytes = byteAsString,
                     Phase = Enum.GetName(item.phase),
-                    Delta = FormatInterval(TimeSpan.FromTicks(item.delta))
+                    Delta = Utilities.FormatInterval(TimeSpan.FromTicks(item.delta))
                 },
                 Status = 200,
             };
@@ -279,7 +527,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         if (listener != null)
         {
             List<object> allData = new();
-            while (listener.ReceivedData.TryDequeue(out MemoryData item))
+            while (listener.ReceivedData.TryDequeue(out BusListener.MemoryData item))
             {
                 string byteAsString = ByteToString(item.bucket.AsSpan(0, item.length).ToArray(), false);
                 allData.Add(
@@ -287,7 +535,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                     {
                         Bytes = byteAsString,
                         Phase = Enum.GetName(item.phase),
-                        Delta = FormatInterval(TimeSpan.FromTicks(item.delta))
+                        Delta = Utilities.FormatInterval(TimeSpan.FromTicks(item.delta))
                     });
             }
             return new ApiResponse
@@ -1055,7 +1303,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
 
     public void EnqueueLog(string device, Phase phase, byte[] data, long delta)
     {
-        string diff = FormatInterval(TimeSpan.FromTicks(delta));
+        string diff = Utilities.FormatInterval(TimeSpan.FromTicks(delta));
         pendingLogs.Enqueue(new LogRow(device, phase, data, ByteToString(data), "", diff));
 
         EnqueueToListeners(data, phase, delta);

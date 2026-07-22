@@ -1,10 +1,10 @@
-namespace Base.UI.Pages;
-
 using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+
+namespace CommonProtocol.BusHound.QuickAction;
 
 /// <summary>
 /// Code-behind for QuickActionEntryControl.xaml.
@@ -14,17 +14,17 @@ public partial class QuickActionEntryControl : UserControl
 {
     private QuickActionEntryData data;
 
-    // ?? Command edit popup (separated into its own control) ??
+    // == Command edit popup (separated into its own control) ==
     private readonly CommandEditPopup commandEditPopup = new();
 
     /// <summary>Raised when user changes any data so the parent can persist.</summary>
-    public event Action? DataChanged;
+    public event Action DataChanged;
 
     /// <summary>Raised when the user clicks Send. The parent hooks this to actually dispatch commands.</summary>
-    public event Action<QuickActionEntryData>? SendRequested;
+    public event Action<QuickActionEntryData> SendRequested;
 
     /// <summary>Raised when the user clicks Delete.</summary>
-    public event Action<QuickActionEntryControl>? DeleteRequested;
+    public event Action<QuickActionEntryControl> DeleteRequested;
 
     /// <summary>The underlying data model for this entry.</summary>
     public QuickActionEntryData EntryData => data;
@@ -35,25 +35,25 @@ public partial class QuickActionEntryControl : UserControl
 
         InitializeComponent();
 
-        // ?? Populate UI from data ??
+        // == Populate UI from data ==
         NameBox.Text = data.Name;
 
-        // ?? Wire XAML element events ??
+        // == Wire XAML element events ==
         SendButton.Click += OnSendButtonClick;
         NameBox.LostFocus += OnNameBoxLostFocus;
         PreviewBlock.MouseLeftButtonUp += OnPreviewBlockClick;
         EditButton.Click += OnEditButtonClick;
         DeleteButton.Click += OnDeleteButtonClick;
 
-        // ?? Wire command edit popup ??
+        // == Wire command edit popup ==
         commandEditPopup.CommandsSaved += OnCommandsSaved;
 
         RefreshPreview();
     }
 
-    // ??????????????????????????????
+    // ==============================
     //  Event handlers (UI ? Logic)
-    // ??????????????????????????????
+    // ==============================
 
     private void OnSendButtonClick(object sender, RoutedEventArgs e)
     {
@@ -82,9 +82,9 @@ public partial class QuickActionEntryControl : UserControl
         DeleteRequested?.Invoke(this);
     }
 
-    // ??????????????????????????????
+    // ==============================
     //  Command popup interaction
-    // ??????????????????????????????
+    // ==============================
 
     private void OpenCommandPopup()
     {
@@ -100,9 +100,9 @@ public partial class QuickActionEntryControl : UserControl
         DataChanged?.Invoke();
     }
 
-    // ??????????????????????????????
+    // ==============================
     //  Preview text helpers
-    // ??????????????????????????????
+    // ==============================
 
     private void RefreshPreview()
     {
@@ -122,9 +122,9 @@ public partial class QuickActionEntryControl : UserControl
         PreviewBlock.ToolTip = string.Join("\n", data.Commands);
     }
 
-    // ??????????????????????????????
+    // ==============================
     //  Public API
-    // ??????????????????????????????
+    // ==============================
 
     /// <summary>Replace data (e.g. after a re-load) and refresh visuals.</summary>
     public void SetData(QuickActionEntryData newData)

@@ -31,5 +31,18 @@ namespace Base.Services
 			Order = 0,
 			Hint = "Which page to open when the app starts: the Home dashboard, or the page you last had open.")]
 		public LandingPage Landing = LandingPage.Home;
+
+		/// <summary>
+		/// When enabled, the device used last is reconnected automatically on startup. If it is not
+		/// currently present, the app starts with no device selected (the normal behaviour).
+		/// Auto-persisted (key <c>StartupSettings.AutoConnectLastDevice</c>).
+		/// </summary>
+		[Setting(
+			Section = "Startup",
+			Name = "Auto-connect last device",
+			Order = 1,
+			Hint = "On startup, automatically reconnect the device you last used. If it isn't connected, "
+				 + "the app starts with no device selected.")]
+		public bool AutoConnectLastDevice = false;
 	}
 }

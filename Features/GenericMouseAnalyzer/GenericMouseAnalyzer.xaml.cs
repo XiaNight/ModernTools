@@ -3,29 +3,15 @@ using Base.Services;
 using Base.Services.Peripheral;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace GenericMouseAnalyzer;
 
-/// <summary>
-/// Interaction logic for GenericMouseAnalyzer.xaml
-/// </summary>
-public partial class GenericMouseAnalyzer : UserControl
-{
-    public GenericMouseAnalyzer()
-    {
-        InitializeComponent();
-    }
-}
-
 [PageInfo("Generic Mouse Analyzer", Path = ["Mouse"])]
-public class GenericMouseAnalyzerPage : Base.Pages.PageBase
+public partial class GenericMouseAnalyzerPage : Base.Pages.PageBase
 {
-
-    protected GenericMouseAnalyzer page;
     protected PeripheralInterface ActiveInterface { get; private set; }
 
     // Report Rate
@@ -88,15 +74,18 @@ public class GenericMouseAnalyzerPage : Base.Pages.PageBase
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterRawInputDevices([In] RAWINPUTDEVICE[] pRawInputDevices, uint uiNumDevices, uint cbSize);
 
+    public GenericMouseAnalyzerPage()
+    {
+        InitializeComponent();
+    }
+
     public override void Awake()
     {
         base.Awake();
-        page = new GenericMouseAnalyzer();
 
         WriteableBitmap bmp = new(1024, 1024, 96, 96, PixelFormats.Bgra32, null);
         Image img = new() { Source = bmp };
         root.Children.Add(img);
-        root.Children.Add(page);
     }
 
     public override void Start()
@@ -129,7 +118,7 @@ public class GenericMouseAnalyzerPage : Base.Pages.PageBase
 
         reportRateSmoothed = timestamps.Count / 1f;
 
-        page.ReportRateText.Text = $"{reportRateSmoothed}";
+        ReportRateText.Text = $"{reportRateSmoothed}";
     }
 
     private void ConnectToInterface()

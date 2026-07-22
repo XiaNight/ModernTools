@@ -1,10 +1,12 @@
-namespace Base.UI.Pages;
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+
+namespace CommonProtocol;
+
+using BusHound.QuickAction;
 
 /// <summary>
 /// A reusable popup control for editing a list of hex-string commands
