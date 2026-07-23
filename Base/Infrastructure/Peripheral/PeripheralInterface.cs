@@ -5,6 +5,20 @@ namespace Base.Services.Peripheral;
 public enum ConnectionType { USB, HID, BLE, BT, Unknown }
 
 /// <summary>
+/// Which USB endpoint report I/O is routed through.
+/// <see cref="Interrupt"/> uses the interrupt IN/OUT endpoints (ReadFile/WriteFile).
+/// <see cref="Control"/> uses the control endpoint / EP0 (HID SET_REPORT / GET_REPORT).
+/// </summary>
+public enum PeripheralPipe { Interrupt, Control }
+
+/// <summary>
+/// HID report type used when moving data over the control pipe (EP0).
+/// <see cref="Output"/> uses SET/GET_REPORT(Output); <see cref="Feature"/> uses
+/// SET/GET_REPORT(Feature) — common for ASUS vendor collections.
+/// </summary>
+public enum ControlReportKind { Output, Feature }
+
+/// <summary>
 /// Physical transport a peripheral interface is reached over.
 /// </summary>
 public enum PeripheralTransport
@@ -140,6 +154,36 @@ public abstract class PeripheralInterface : IDisposable
 
     public bool UseAsyncReads { get; protected set; }
 
+    /// <summary>
+    /// Endpoint used for host-&gt;device report writes. <see cref="PeripheralPipe.Interrupt"/>
+    /// writes the interrupt OUT endpoint; <see cref="PeripheralPipe.Control"/> issues a HID
+    /// SET_REPORT over the control endpoint (EP0).
+    /// </summary>
+    public PeripheralPipe TxPipe { get; set; } = PeripheralPipe.Interrupt;
+
+    /// <summary>
+    /// Endpoint a request/response read takes its reply from. <see cref="PeripheralPipe.Interrupt"/>
+    /// waits on the interrupt IN stream; <see cref="PeripheralPipe.Control"/> polls with a HID
+    /// GET_REPORT (EP0).
+    /// </summary>
+    public PeripheralPipe RxPipe { get; set; } = PeripheralPipe.Interrupt;
+
+    /// <summary>
+    /// HID report type used for control-pipe transfers (Output vs Feature). ASUS vendor
+    /// collections frequently expose their command channel as a Feature report.
+    /// </summary>
+    public ControlReportKind ControlKind { get; set; } = ControlReportKind.Output;
+
+    /// <summary>
+    /// Explicit HID report id placed in byte 0 of every report sent/requested on this
+    /// interface. When negative (the default) the transport uses its built-in per-device
+    /// report-id logic. Set this when a device uses a non-standard report id (e.g. 0xCC).
+    /// </summary>
+    public int ReportIdOverride { get; set; } = -1;
+
+    /// <summary>True when this interface can move reports over the control pipe (EP0).</summary>
+    public virtual bool SupportsControlPipe => false;
+
     private Action<ReadOnlyMemory<byte>, DateTime> onDataReceived;
     public event Action<ReadOnlyMemory<byte>, DateTime> OnDataReceived
     {
@@ -228,6 +272,15 @@ public abstract class PeripheralInterface : IDisposable
 
     public abstract Task<bool> WriteAsync(byte[] data, CancellationToken cancellationToken = default);
     public abstract Task<byte[]> ReadAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads a report over the control pipe (HID GET_REPORT / EP0). Unlike <see cref="ReadAsync"/>
+    /// this is a host-initiated transaction and is safe to call while an interrupt read loop runs.
+    /// Interfaces without control-pipe support return an empty array.
+    /// </summary>
+    public virtual Task<byte[]> ReadControlAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(Array.Empty<byte>());
+
     protected abstract void CloseDevice();
 
     public virtual int InputReportLength => 0;
@@ -321,7 +374,7 @@ public abstract class PeripheralInterface : IDisposable
         }
     }
 
-    public async Task<byte[]> WriteAndReadAsync(byte[] data, CancellationToken cancellationToken = default)
+    public virtual async Task<byte[]> WriteAndReadAsync(byte[] data, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
 

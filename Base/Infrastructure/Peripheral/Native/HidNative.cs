@@ -218,10 +218,10 @@ namespace Base.Services.Peripheral.Native
         internal static extern bool HidD_GetAttributes(SafeFileHandle hObject, ref HIDD_ATTRIBUTES Attributes);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
-        internal static extern bool HidD_GetFeature(nint hDevice, nint hReportBuffer, uint ReportBufferLength);
+        internal static extern bool HidD_GetFeature(SafeFileHandle hDevice, IntPtr ReportBuffer, uint ReportBufferLength);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
-        internal static extern bool HidD_SetFeature(nint hDevice, nint ReportBuffer, uint ReportBufferLength);
+        internal static extern bool HidD_SetFeature(SafeFileHandle hDevice, IntPtr ReportBuffer, uint ReportBufferLength);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
         internal static extern bool HidD_GetProductString(SafeFileHandle hDevice, IntPtr Buffer, uint BufferLength);

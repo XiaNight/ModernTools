@@ -12,13 +12,20 @@ namespace API
 {
     internal class V1 : WpfBehaviourSingleton<V1>
     {
-        [POST("selectTabIndex", true)]
+        [POST("selectTabIndex", true,
+            Summary = "Select a navigation tab by its index.",
+            Description = "Navigates to the page/tab at the given zero-based position in the navigation list. " +
+                "Body: { \"index\": integer }. Use ListTabs to discover the available tabs and their order.")]
         private void SelectTabIndex(int index)
         {
             Main.SelectTabIndex(index);
         }
 
-        [POST("SelectTabByName", true)]
+        [POST("SelectTabByName", true,
+            Summary = "Select a navigation tab by its display name.",
+            Description = "Navigates to the page/tab whose display name matches. " +
+                "Body: { \"name\": string } — must match a name returned by ListTabs. " +
+                "Returns 200 when the tab is found and selected, or 404 when no tab with that name exists.")]
         private ApiResponse SelectTabByName(string name)
         {
             bool success = Main.SelectTabByName(name);
@@ -34,7 +41,9 @@ namespace API
             };
         }
 
-        [GET("GetCurrentTab", true)]
+        [GET("GetCurrentTab", true,
+            Summary = "Get the currently selected tab.",
+            Description = "Returns the display name of the page/tab that is currently selected. Takes no parameters.")]
         private ApiResponse GetCurrentTab()
         {
             var currentTab = Main.GetCurrentTab();
@@ -45,7 +54,10 @@ namespace API
             };
         }
 
-        [GET("ListTabs", true)]
+        [GET("ListTabs", true,
+            Summary = "List all navigation tabs.",
+            Description = "Returns the display names of every page/tab in the navigation, in order. Takes no " +
+                "parameters. Use these names with SelectTabByName, or their positions with selectTabIndex.")]
         private ApiResponse ListTabs()
         {
             var tabNames = Main.ListTabs().ToArray();
@@ -56,18 +68,22 @@ namespace API
             };
         }
 
-        [GET("ListRoute", false)]
+        [GET("ListRoute", false,
+            Summary = "List all API routes as readable strings.",
+            Description = "Lists every registered API route as human-readable strings (verb, path, parameter " +
+                "names and types, and the handler method). Takes no parameters. For machine-readable " +
+                "descriptions and JSON Schemas of each route, use the schema endpoint instead.")]
         private string[] ListRoute()
         {
             return APIService.Instance.ListRoute();
         }
 
-        /// <summary>
-        /// Returns a structured documentation manifest for every registered route — verb, path,
-        /// description and a JSON Schema for the accepted inputs (and outputs where known). Intended
-        /// for MCP clients so tools carry real descriptions and schemas instead of parsed strings.
-        /// </summary>
-        [GET("schema", false)]
+        [GET("schema", false,
+            Summary = "Get a structured documentation manifest for every route.",
+            Description = "Returns a structured documentation manifest for every registered route — verb, path, " +
+                "description, summary, and a JSON Schema for the accepted inputs (and outputs where known). " +
+                "Takes no parameters. Intended for MCP clients so tools carry real descriptions and schemas " +
+                "instead of parsed strings.")]
         private object[] Schema()
         {
             return APIService.Instance.ListSchema();

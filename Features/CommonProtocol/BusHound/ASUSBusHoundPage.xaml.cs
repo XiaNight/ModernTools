@@ -86,6 +86,9 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         StopBtn.Click += StopBtn_Click;
 
         SendBtn.Click += SendBtn_Click;
+        PollBtn.Click += PollBtn_Click;
+        PipeSelectionBox.SelectionChanged += PipeSelectionBox_SelectionChanged;
+        ReportIdBox.TextChanged += (_, _) => ApplyPipeMode();
         CmdInputbox.PreviewKeyDown += CmdInputbox_KeyDown;
         CmdInputbox.TextChanged += CmdInputbox_Validation;
         CmdInputbox.PreviewTextInput += CmdInputbox_ValidateInputCharacter;
@@ -1084,6 +1087,74 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
         }
     }
 
+    // Interfaces are pooled/shared across features, so this also switches the pipe other
+    // pages use for the same device. That is intended for a single-user diagnostic session.
+    // Replies are captured from the interrupt IN stream, so only the write side moves to EP0.
+    private void ApplyPipeMode()
+    {
+        if (connectedInterfaces is null) return;
+
+        int idx = PipeSelectionBox?.SelectedIndex ?? 0;
+        int reportId = ParseReportIdOverride();
+        foreach (var iface in connectedInterfaces)
+        {
+            if (iface is null) continue;
+            iface.ReportIdOverride = reportId;
+            switch (idx)
+            {
+                case 1: // Control (Output)
+                    iface.TxPipe = PeripheralPipe.Control;
+                    iface.ControlKind = ControlReportKind.Output;
+                    iface.RxPipe = PeripheralPipe.Interrupt;
+                    break;
+                case 2: // Control (Feature)
+                    iface.TxPipe = PeripheralPipe.Control;
+                    iface.ControlKind = ControlReportKind.Feature;
+                    iface.RxPipe = PeripheralPipe.Interrupt;
+                    break;
+                default: // Interrupt
+                    iface.TxPipe = PeripheralPipe.Interrupt;
+                    iface.RxPipe = PeripheralPipe.Interrupt;
+                    break;
+            }
+        }
+    }
+
+    private void PipeSelectionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => ApplyPipeMode();
+
+    // Parses the Report ID box (hex, e.g. "CC" or "0xCC"). Blank / 00 / invalid => -1 (device default).
+    private int ParseReportIdOverride()
+    {
+        string t = ReportIdBox?.Text?.Trim();
+        if (string.IsNullOrEmpty(t)) return -1;
+        if (t.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) t = t.Substring(2);
+        if (!byte.TryParse(t, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out byte id))
+            return -1;
+        return id == 0 ? -1 : id;
+    }
+
+    // One-shot GET_REPORT over the control pipe for the selected interface. Only meaningful
+    // while capturing; the reply is logged through the normal OnDataReceived path.
+    private async void PollBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (UsageSelectionBox.SelectedItem is not AvailableDeviceItem t) return;
+        if (connectedInterfaces is null) return;
+
+        PeripheralInterface target = connectedInterfaces.Find(
+            i => i.ProductInfo.Usage == t.usage && i.ProductInfo.UsagePage == t.usagePage);
+        if (target is null) return;
+
+        try
+        {
+            await target.ReadControlAsync();
+        }
+        catch (Exception ex)
+        {
+            Debug.Log($"[BusHound] Control poll failed: {ex.Message}");
+        }
+    }
+
     private void StartBtn_Click(object sender, RoutedEventArgs e)
     {
         ConnectAndStart();
@@ -1124,7 +1195,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                     }
 
                     EnqueueLog(
-                        deviceInterface.UsagePage.ToString("X4"),
+                        deviceInterface.UsagePage.ToString("X4") + (newInterface.RxPipe == PeripheralPipe.Control ? " CTRL" : ""),
                         Phase.IN,
                         data[1..].ToArray(),
                         delta);
@@ -1146,7 +1217,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                     }
 
                     EnqueueLog(
-                        deviceInterface.UsagePage.ToString("X4"),
+                        deviceInterface.UsagePage.ToString("X4") + (newInterface.TxPipe == PeripheralPipe.Control ? " CTRL" : ""),
                         Phase.OUT,
                         data.ToArray(),
                         delta);
@@ -1176,6 +1247,7 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
                 // Ignore individual interface connection/subscription errors.
             }
         }
+        ApplyPipeMode();
         PopulateComboBox();
 
         StartBtn.IsEnabled = false;

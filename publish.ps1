@@ -313,6 +313,33 @@ function Publish-Bundle {
             -p:DebugType=none -p:DebugSymbols=false `
             -o $compDir
         if ($LASTEXITCODE -ne 0) { throw "Companion publish failed: $name ($ModeName)." }
+
+        # --- Bundle a companion's `skill\` folder (if any) next to its exe. The companion csproj
+        # already copies skill\** to its publish output via CopyToOutputDirectory; this re-copies
+        # straight from the project as a guarantee, so the skill ships even if that content item
+        # is ever changed. Mirrors the skill the MCP server points developers at. ---
+        $skillSrc = Join-Path (Split-Path -Parent $proj) 'skill'
+        if (Test-Path -LiteralPath $skillSrc) {
+            $skillDst = Join-Path $compDir 'skill'
+            if (Test-Path -LiteralPath $skillDst) { Remove-Item $skillDst -Recurse -Force }
+            Copy-Item -LiteralPath $skillSrc -Destination $skillDst -Recurse -Force
+            $skillCount = (Get-ChildItem $skillDst -Recurse -File).Count
+            Write-Host "  Bundled $name skill ($skillCount files) -> skill\" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "  Note: no skill folder at $skillSrc; nothing to bundle for $name." -ForegroundColor DarkGray
+        }
+    }
+
+    # --- Bundle the changelog at the bundle root so every release carries it.
+    # Sourced from the repo-root changelog.txt (maintained by the weekday task). ---
+    $changelogSrc = Join-Path $repo 'changelog.txt'
+    if (Test-Path -LiteralPath $changelogSrc) {
+        Copy-Item -LiteralPath $changelogSrc -Destination (Join-Path $staging 'changelog.txt') -Force
+        Write-Host "Bundled changelog.txt." -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "Note: no changelog.txt at repo root; nothing to bundle." -ForegroundColor Yellow
     }
 
     # --- Dedupe: drop assemblies the host (main exe) already provides. The host loads its

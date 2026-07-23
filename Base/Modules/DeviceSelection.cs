@@ -232,7 +232,11 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         else if (list.Count > 0) Main.PortComboBox.SelectedIndex = 0;
     }
 
-    [GET("refresh")]
+    [GET("refresh",
+        Summary = "Rescan for connected devices.",
+        Description = "Rescans the system for connected peripherals and refreshes the device dropdown. Takes no " +
+            "parameters. Discovered devices can then be read via ListDiscoveredDevices and connected to with " +
+            "one of the connect endpoints.")]
     public async Task Refresh()
     {
         if (refreshTask != null) return;
@@ -249,7 +253,11 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         });
     }
 
-    [GET]
+    [GET(
+        Summary = "List devices found by the last scan.",
+        Description = "Returns the list of devices found by the most recent scan. Takes no parameters; call " +
+            "refresh first to populate or update it. Each entry describes one peripheral (VID, PID, product " +
+            "name, transport and its interfaces) and can be used to select a device to connect to.")]
     public List<Device> ListDiscoveredDevices()
     {
         return DiscoveredDevices;
@@ -344,7 +352,11 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         DiscoveredDevices.RemoveAll(device => device != lastConnectedDevice && device.IsAvailable == false);
     }
 
-    [GET("connect/pid", true)]
+    [GET("connect/pid", true,
+        Summary = "Connect to a device by USB Product ID.",
+        Description = "Selects the device with the given USB Product ID in the dropdown and connects to it. " +
+            "Query: ?pid=<value> (decimal or hex, e.g. 6100 or 0x17D4). Returns true on success, or false if " +
+            "no device with that PID is present in the dropdown.")]
     public bool SelectDropdownPID(ushort pid)
     {
         var index = Main.PortComboBox.Items.IndexOf(Main.PortComboBox.Items
@@ -371,7 +383,12 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         return Connect(items[idx]);
     }
 
-    [POST(requireMainThread: true)]
+    [POST(requireMainThread: true,
+        Summary = "Connect to a device by product identifier.",
+        Description = "Connects to a discovered device identified by its product-identifier string (as reported " +
+            "on each entry from ListDiscoveredDevices). Body: { \"productIdentifier\": string }. Any currently " +
+            "connected device is disconnected first. Returns true on success, false if no discovered device " +
+            "matches the identifier.")]
     public async Task<bool> Connect(string productIdentifier)
     {
         await Disconnect();
@@ -380,7 +397,11 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         return Connect(device);
     }
 
-    [POST(requireMainThread: true)]
+    [POST(requireMainThread: true,
+        Summary = "Connect to a device by USB Vendor ID and Product ID.",
+        Description = "Connects to a discovered device by its USB Vendor ID and Product ID. " +
+            "Body: { \"vid\": integer, \"pid\": integer } (decimal or hex). Any currently connected device is " +
+            "disconnected first. Returns true on success, false if no discovered device has that VID and PID.")]
     public async Task<bool> Connect(ushort vid, ushort pid)
     {
         await Disconnect();

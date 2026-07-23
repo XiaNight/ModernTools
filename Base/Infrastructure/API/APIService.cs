@@ -667,10 +667,11 @@ namespace Base.Services.APIService
                 HttpMethodAttribute.Normalize(path).ToLowerInvariant()
             );
 
-            // Resolve documentation: XML docs provide the fallback, the attribute wins when set.
+            // Resolve documentation. The attribute wins when set; the method's XML <summary> is the
+            // fallback. Description falls back to the (attribute or XML) summary when not set explicitly.
             xmlDocs.EnsureAssemblyLoaded(declaring.Assembly);
             var methodDoc = xmlDocs.GetMethodDoc(m);
-            var summary = methodDoc?.Summary;
+            var summary = !string.IsNullOrWhiteSpace(attr.Summary) ? attr.Summary : methodDoc?.Summary;
 
             var route = new Route
             {
