@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Threading;
 
 namespace Base.Core
 {
@@ -14,7 +13,10 @@ namespace Base.Core
         public override void Awake()
         {
             base.Awake();
-            Dispatcher.Invoke(Start, DispatcherPriority.Loaded);
+            // Singletons are preloaded and never enabled, so Start is driven from Awake. The caller
+            // (PreloadWpfBehaviourSingletons) guarantees every singleton is constructed before any
+            // Awake runs, so this can be a direct, synchronous call — no dispatcher deferral needed.
+            Start();
         }
 
         protected WpfBehaviourSingleton() : base()

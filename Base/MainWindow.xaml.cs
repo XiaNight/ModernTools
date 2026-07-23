@@ -470,13 +470,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (newPage == null)
             return;
 
-        RegisterWpfObject(newPage);
         navPageMap[newPage] = tab;
         lazyPageInstanceMap[pageType] = newPage;
 
-        // Awake() is dispatched at Normal priority by RegisterWpfObject.
-        // Dispatching SelectPage at Loaded (lower priority) ensures Awake runs first.
-        Dispatcher.InvokeAsync(() => SelectPage(newPage), DispatcherPriority.Loaded);
+        // Construction is complete (the base ctor already registered the page), so Awake runs
+        // deterministically here — before the page is enabled. SelectPage -> Enable -> OnEnable
+        // (which subscribes the Update loop) therefore always follows Awake, with no dependence
+        // on dispatcher priority.
+        newPage.Awake();
+        SelectPage(newPage);
     }
 
     public void SelectPage<T>() where T : PageBase
@@ -544,7 +546,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             ? NavTabsManager.AddBottom(text, path, glyph, secondaryGlyph, shortName, order)
             : NavTabsManager.AddTop(text, path, glyph, secondaryGlyph, shortName, order);
 
-        RegisterWpfObject(page);
+        // The caller hands us a fully-constructed page (the base ctor already registered it), so
+        // Awake it now — before its tab can be clicked and the page enabled.
+        page.Awake();
         navPageMap[page] = tab;
         tab.OnClick += () => SelectPage(page);
         return tab;
@@ -602,35 +606,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     #region WpfBehaviour Assigning
 
     private readonly List<WpfBehaviour> registeredWpfObjects = new();
-    private readonly Queue<WpfBehaviour> newWpfObjects = new();
-    private bool wpfRegisterDispatched = false;
-    private readonly object wpfRegisterLock = new();
+
+    /// <summary>
+    /// Records a behaviour in the registry used for theme broadcast, <see cref="FindObjectOfType{T}"/>,
+    /// and quit-time persistence. Called by the <see cref="WpfBehaviour"/> constructor, so this is a
+    /// plain, synchronous list-add and nothing more — it deliberately does NOT call <c>Awake()</c>,
+    /// because the object is not yet fully constructed at that point. Each creation site
+    /// (<see cref="SelectPageLazy"/>, <see cref="RegisterDynamicPage"/>, <see cref="PreloadWpfBehaviourSingletons"/>)
+    /// calls <c>Awake()</c> itself once construction completes and before the object is enabled.
+    /// </summary>
     public void RegisterWpfObject(WpfBehaviour wpfObject)
     {
-        lock (wpfRegisterLock)
-        {
-            newWpfObjects.Enqueue(wpfObject);
-            if (wpfRegisterDispatched) return;
-            wpfRegisterDispatched = true;
-
-            Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                lock (wpfRegisterLock)
-                {
-                    while (newWpfObjects.Count > 0)
-                    {
-                        WpfBehaviour wpfObject = newWpfObjects.Dequeue();
-                        if (wpfObject == null) continue;
-                        if (registeredWpfObjects.Contains(wpfObject)) continue;
-                        registeredWpfObjects.Add(wpfObject);
-
-                        wpfObject.Awake();
-                    }
-                    newWpfObjects.Clear();
-                    wpfRegisterDispatched = false;
-                }
-            });
-        }
+        if (wpfObject == null) return;
+        if (!registeredWpfObjects.Contains(wpfObject))
+            registeredWpfObjects.Add(wpfObject);
     }
 
     public WpfBehaviour FindObjectOfType(Type type, bool findInactive = false)
@@ -699,10 +688,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }, DispatcherPriority.Send);
 
+        // Every singleton is now constructed and registered, so Awake them in a single ordered pass.
+        // Doing it here (rather than at construction) means a singleton's Awake/Start can safely
+        // reference any other singleton — they all exist by this point.
+        foreach (WpfBehaviour instance in created)
+            instance.Awake();
+
         // Catalogue [Setting] members directly off the freshly-created singletons. Doing it here (with
-        // the instances in hand) is deterministic — it does not depend on the asynchronous
-        // RegisterWpfObject drain that fills registeredWpfObjects. Metadata + persisted values only;
-        // no editor UI is built until the Settings page is opened.
+        // the instances in hand) is deterministic — it does not depend on any deferred registration.
+        // Metadata + persisted values only; no editor UI is built until the Settings page is opened.
         SettingRegistry.Instance.Build(created);
     }
 

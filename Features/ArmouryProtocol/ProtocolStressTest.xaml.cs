@@ -206,12 +206,10 @@ public partial class ProtocolStressTest : PageBase
 
     // ── Start / Stop ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Starts the stress test. Does nothing and returns false if already running.
-    /// Reads parameters from <see cref="Parameters"/>; any previous
-    /// programmatic calls to Set* are reflected automatically.
-    /// </summary>
-    [POST(requireMainThread:true)]
+    [POST(requireMainThread: true,
+        Summary = "Start the protocol stress test.",
+        Description = "Starts the stress test using the parameters currently configured on the page. Takes no " +
+            "parameters. Returns true when the test starts, or false if a test is already running.")]
     public async Task<bool> StartAsync()
     {
         if (IsRunning) return false;
@@ -220,10 +218,9 @@ public partial class ProtocolStressTest : PageBase
         return true;
     }
 
-    /// <summary>
-    /// Stops the currently running stress test. Safe to call when idle.
-    /// </summary>
-    [POST(requireMainThread:true)]
+    [POST(requireMainThread: true,
+        Summary = "Stop the protocol stress test.",
+        Description = "Stops the currently running stress test. Takes no parameters. Safe to call when idle (no-op).")]
     public void Stop()
     {
         try { _sendCts?.Cancel(); } catch { }

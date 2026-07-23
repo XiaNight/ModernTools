@@ -291,7 +291,11 @@ namespace KeyboardHallSensor
             }
         }
 
-        [GET("/ClearAll", true)]
+        [GET("/ClearAll", true,
+            Summary = "Clear all keys from the keyboard view.",
+            Description = "Clears every key currently rendered on the keyboard view — both laid-out keys and " +
+                "any unmapped (\"rogue\") keys — then rebuilds the empty base keyboard layout. Takes no " +
+                "parameters. Use this to reset the display before capturing a fresh set of keys.")]
         protected virtual void ClearAll()
         {
             foreach (var item in spawnedKeys)
