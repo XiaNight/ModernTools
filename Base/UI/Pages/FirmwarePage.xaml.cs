@@ -23,7 +23,8 @@ namespace Base.Pages;
 [PageInfo("Firmware Update",
 	Glyph = "\uE777",           // UpdateRestore (Segoe Fluent Icons).
 	Description = "Browse and run Device Firmware Update packages.",
-	ShowDeviceSelection = false)]
+	ShowDeviceSelection = false,
+	NavOrder = -1)]
 public partial class FirmwarePage : PageBase, INotifyPropertyChanged
 {
 	private string searchText = string.Empty;

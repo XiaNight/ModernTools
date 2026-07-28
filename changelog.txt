@@ -4,6 +4,10 @@ This file is for EC team only. Please do not forward this file to any others.
 Projects   : Modern Toolset
 ******************************************************************************
 
+20260728 Modern Toolset_V02_00_06
+01. Fixed devices sometimes failing to reconnect after being unplugged and replugged; the device list now refreshes automatically when peripherals are connected or removed.
+END
+
 20260724 Modern Toolset_V02_01_05
 01. Quick Scan: run a one-tap protocol scan, with a ready-made M708 profile.
 02. Protocol Test in BusHound: build protocol test cases, run them, and compare the results against what you expect.

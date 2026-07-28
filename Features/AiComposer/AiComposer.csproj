@@ -10,6 +10,10 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<!-- Roslyn (Microsoft.CodeAnalysis.CSharp) ships localized resource assemblies for
+		     ~13 cultures. Keep only English so the build/publish output doesn't get a
+		     cs\, de\, ja\, zh-Hans\ ... folder each containing *.resources.dll. -->
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
 	</PropertyGroup>
 
 	<ItemGroup>

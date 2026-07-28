@@ -209,8 +209,10 @@ namespace CommonProtocol
         private void DisconnectInterface()
         {
             if (activeInterface == null) return;
-            if (!activeInterface.IsDeviceConnected) return;
-            activeInterface.OnDataReceived -= Parse;
+            if (activeInterface.IsDeviceConnected)
+            {
+                activeInterface.OnDataReceived -= Parse;
+            }
 
             timer?.Stop();
 
