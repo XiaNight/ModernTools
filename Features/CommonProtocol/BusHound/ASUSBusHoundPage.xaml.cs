@@ -397,16 +397,16 @@ public partial class ASUSBusHoundPage : PageBase, INotifyPropertyChanged
     {
         var nodes = new List<UsbTreeNode>();
 
-        var devices = DeviceSelection.MergeDiscoveredInterface(details)
+        var devices = DeviceSelection.UpdateDeviceInterfaces(details)
             .OrderBy(d => d.VID)
             .ThenBy(d => d.PID)
-            .ThenBy(d => d.productName);
+            .ThenBy(d => d.ProductName);
 
         foreach (var device in devices)
         {
-            string name = string.IsNullOrWhiteSpace(device.productName)
+            string name = string.IsNullOrWhiteSpace(device.ProductName)
                 ? "(Unnamed device)"
-                : device.productName.Trim();
+                : device.ProductName.Trim();
 
             var deviceNode = new UsbTreeNode
             {

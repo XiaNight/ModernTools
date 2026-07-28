@@ -78,7 +78,7 @@ public partial class QuickScanPage : PageBase
 		QuickScanScenario select = null;
 		if (ActiveDevice != null)
 		{
-			QuickScanScenario match = QuickScanStore.SelectForDevice(ActiveDevice.VID, ActiveDevice.PID, ActiveDevice.productName);
+			QuickScanScenario match = QuickScanStore.SelectForDevice(ActiveDevice.VID, ActiveDevice.PID, ActiveDevice.ProductName);
 			if (match != null)
 				select = scenarios.FirstOrDefault(s => s.Id == match.Id);
 		}
