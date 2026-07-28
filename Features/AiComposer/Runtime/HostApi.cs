@@ -57,7 +57,7 @@ internal sealed class HostApi : IHostApi, IDisposable
 
 	private sealed class HostDevice(DeviceSelection.Device device) : IHostDevice
 	{
-		public string Name => device.productName;
+		public string Name => device.ProductName;
 		public int Vid => device.VID;
 		public int Pid => device.PID;
 		public bool IsConnected => true;

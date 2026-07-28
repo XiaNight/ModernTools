@@ -47,7 +47,7 @@ public static class PeripheralTransportExtensions
     };
 }
 
-public interface IPeripheralDetail : IEquatable<IPeripheralDetail>
+public interface IPeripheralDetail : IEquatable<IPeripheralDetail>, IDisposable
 {
     ushort PID { get; }
     ushort VID { get; }
@@ -135,6 +135,20 @@ public abstract class PeripheralInterfaceDetail(
     public override bool Equals(object obj) => Equals(obj as IPeripheralDetail);
     public override int GetHashCode() => GetUniqueIdentifier().GetHashCode();
     public override string ToString() => $"{Product} ({Manufacturer}) - VID:{VID:X4} PID:{PID:X4}";
+
+    public void Dispose()
+    {
+        lock (connections)
+        {
+            var key = GetUniqueIdentifier();
+            if (connections.TryGetValue(key, out var connection))
+            {
+                connection.Dispose();
+                connections.Remove(key);
+            }
+        }
+        GC.SuppressFinalize(this);
+    }
 }
 
 public abstract class PeripheralInterface : IDisposable

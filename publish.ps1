@@ -252,6 +252,7 @@ $plugins = [ordered]@{
     'KeyboardHallSensor'   = 'Features\KeyboardHallSensor\KeyboardHallSensor.csproj'
     'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
     'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
+    'AiComposer'           = 'Features\AiComposer\AiComposer.csproj'
 }
 
 # --- Standalone companion executables bundled alongside the app (subfolder => project).

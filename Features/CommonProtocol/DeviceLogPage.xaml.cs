@@ -2,11 +2,9 @@
 using Base.Pages;
 using Base.Services;
 using Base.Services.Peripheral;
-using ModernWpf;
 using ModernWpf.Controls;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Threading;
 
 namespace CommonProtocol

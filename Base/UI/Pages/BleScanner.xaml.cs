@@ -38,7 +38,7 @@ namespace Base.Pages
 
             var interfaceDetails = await BLEInterface.CreateInterfaceDetailFromAddress(device.Address);
             if (interfaceDetails == null) return;
-            var devices = DeviceSelection.MergeDiscoveredInterface(interfaceDetails.Cast<IPeripheralDetail>());
+            var devices = DeviceSelection.UpdateDeviceInterfaces(interfaceDetails.Cast<IPeripheralDetail>());
             if (devices.Count == 0)
             {
                 Debug.Log($"[BLE] No usable GATT services found on {device.Name} [{device.Address:X12}].");
