@@ -37,6 +37,28 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    # ── Restore NuGet packages for all projects ─────────────────────────
+    - name: Restore packages
+      shell: powershell
+      run: |
+        dotnet restore $env:MAIN_PROJ
+        $plugins = @(
+          'Base\Base.csproj',
+          'Features\Audio\Audio.csproj',
+          'Features\CommonProtocol\CommonProtocol.csproj',
+          'Features\Gamepad\GamePad.csproj',
+          'Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj',
+          'Features\KeyboardHallSensor\KeyboardHallSensor.csproj',
+          'Features\ArmouryProtocol\ArmouryProtocol.csproj',
+          'Features\MouseATE\MouseATE.csproj',
+          'Features\AiComposer\AiComposer.csproj',
+          'Features\MCPServer\MCPServer.csproj'
+        )
+        foreach ($proj in $plugins) {
+          dotnet restore $proj
+          if ($LASTEXITCODE -ne 0) { throw "Restore failed: $proj" }
+        }
+
     # ── Resolve version ──────────────────────────────────────────────────
     - name: Resolve version
       id: version
