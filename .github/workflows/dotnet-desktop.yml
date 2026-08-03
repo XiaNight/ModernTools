@@ -40,7 +40,7 @@ jobs:
     # ── Resolve version ──────────────────────────────────────────────────
     - name: Resolve version
       id: version
-      shell: pwsh
+      shell: powershell
       run: |
         $v = '${{ github.event.inputs.version }}'.Trim()
         if (-not $v) {
@@ -63,7 +63,7 @@ jobs:
 
     # ── Host assembly manifest (for plugin dedupe) ───────────────────────
     - name: Compute host assembly manifest
-      shell: pwsh
+      shell: powershell
       run: |
         $manifestDir = 'dist\build\_host_manifest'
         if (Test-Path $manifestDir) { Remove-Item $manifestDir -Recurse -Force }
@@ -75,7 +75,7 @@ jobs:
 
     # ── Build standalone zip ─────────────────────────────────────────────
     - name: Build standalone bundle
-      shell: pwsh
+      shell: powershell
       run: |
         $version  = '${{ steps.version.outputs.VERSION }}'
         $folder   = "${{ env.APP_NAME }}_${version}_standalone"
@@ -166,7 +166,7 @@ jobs:
 
     # ── Build framework-dependent zip ────────────────────────────────────
     - name: Build framework-dependent bundle
-      shell: pwsh
+      shell: powershell
       run: |
         $version  = '${{ steps.version.outputs.VERSION }}'
         $folder   = "${{ env.APP_NAME }}_${version}_framework-dependent"
@@ -284,6 +284,6 @@ jobs:
     # ── Cleanup build intermediates ──────────────────────────────────────
     - name: Cleanup
       if: always()
-      shell: pwsh
+      shell: powershell
       run: |
         if (Test-Path 'dist\build') { Remove-Item 'dist\build' -Recurse -Force }
