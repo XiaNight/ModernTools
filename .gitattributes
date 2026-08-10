@@ -1,0 +1,20 @@
+# Store all text files with LF in the repository; each machine checks out
+# using its own line-ending preference (core.autocrlf / core.eol).
+* text=auto
+
+# Treat known binary types as binary so git never touches their bytes.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.bmp  binary
+*.dll  binary
+*.exe  binary
+*.pdb  binary
+*.snk  binary
+*.pfx  binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.zip  binary

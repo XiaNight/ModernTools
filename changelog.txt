@@ -1,0 +1,27 @@
+***************************** Modern Toolset *********************************
+This file is for EC team only. Please do not forward this file to any others.
+******************************************************************************
+Projects   : Modern Toolset
+******************************************************************************
+
+20260728 Modern Toolset_V02_00_06
+01. Fixed devices sometimes failing to reconnect after being unplugged and replugged; the device list now refreshes automatically when peripherals are connected or removed.
+END
+
+20260724 Modern Toolset_V02_01_05
+01. Quick Scan: run a one-tap protocol scan, with a ready-made M708 profile.
+02. Protocol Test in BusHound: build protocol test cases, run them, and compare the results against what you expect.
+03. Quick Action folders in BusHound to keep your saved commands organized.
+04. AI Composer: generate and save your own custom tool pages.
+05. Firmware Update page for installing firmware packages.
+06. Control pipe support in Device Log and BusHound: send commands over the USB control pipe (Control Output or Control Feature), not just the interrupt endpoint, and set the report ID byte per command.
+07. BusHound: read a single report on demand over the control pipe with the new Poll button.
+08. Added a file/folder picker to config editor fields.
+09. Improved AI-automation support: the built-in MCP tools now include documentation and input schemas.
+10. Fixed a device connection issue that could leave data reads in the wrong state.
+11. Fixed the title bar blending into the window content; added a clear separator.
+END
+
+20260722 Modern Toolset_V02_01_04
+01. Changelog restarted; earlier history retired.
+END

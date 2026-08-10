@@ -24,7 +24,12 @@ public abstract class MFGKeyboardBasePage : KeyboardPageBase
 
     public record KeyData(byte keyCode, string value);
 
-    [POST("GetData")]
+    [POST("GetData",
+        Summary = "Get captured sensor data for all keys.",
+        Description = "Returns the current captured sensor data for every key seen on this page, as an array of " +
+            "{ keyCode, value } entries. Takes no parameters. keyCode is the device key code (matrix scan " +
+            "code); value is that key's collected readings joined into one space-separated string. The array " +
+            "is empty until key data has been received from the connected keyboard.")]
     public List<KeyData> GetData()
     {
         var records = new List<KeyData>();

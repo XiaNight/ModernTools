@@ -1,4 +1,5 @@
 ﻿using Base.Services.Peripheral.Native;
+using System.Text;
 
 namespace Base.Services.Peripheral
 {
@@ -66,7 +67,9 @@ namespace Base.Services.Peripheral
 
             var st = HidNative.HidP_GetUsages(HidNative.HIDP_REPORT_TYPE.HidP_Input, usagePage, linkCollection, usages, ref len, PreparsedData, report, (uint)report.Length);
             if (!NtSuccess(st)) return Array.Empty<ushort>();
-            Array.Resize(ref usages, usages.Length);
+            // HidP_GetUsages sets `len` to the number of usages actually written;
+            // trim to that instead of returning the full 32-slot scratch array.
+            Array.Resize(ref usages, (int)len);
             return usages;
         }
 
@@ -89,6 +92,45 @@ namespace Base.Services.Peripheral
             }
             cap = default;
             return false;
+        }
+
+        /// <summary>
+        /// Human-readable dump of what the device's report descriptor DECLARES for
+        /// input reports (as parsed by the Windows HID parser). Compare this against
+        /// the raw report bytes and the decoded usages to tell whether a wrong-place
+        /// button/axis is caused by the device's descriptor/report layout or by the
+        /// consumer's fixed usage→UI mapping.
+        /// </summary>
+        public string DescribeCapabilities()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"TopLevel usage=0x{Caps.UsagePage:X2}:0x{Caps.Usage:X2}  " +
+                          $"InputReportByteLength={Caps.InputReportByteLength}  " +
+                          $"ButtonCaps={Caps.NumberInputButtonCaps}  ValueCaps={Caps.NumberInputValueCaps}  " +
+                          $"LinkCollectionNodes={Caps.NumberLinkCollectionNodes}");
+
+            foreach (var b in ButtonCaps)
+            {
+                string usages = b.IsRange != 0
+                    ? $"usages=0x{b.Range.UsageMin:X2}..0x{b.Range.UsageMax:X2}"
+                    : $"usage=0x{b.NotRange.Usage:X2}";
+                sb.AppendLine($"  BTN page=0x{b.UsagePage:X2} {usages} reportId={b.ReportID} " +
+                              $"link={b.LinkCollection} linkUsage=0x{b.LinkUsagePage:X2}:0x{b.LinkUsage:X2} " +
+                              $"abs={b.IsAbsolute}");
+            }
+
+            foreach (var v in ValueCaps)
+            {
+                string usages = v.IsRange != 0
+                    ? $"usages=0x{v.Range.UsageMin:X2}..0x{v.Range.UsageMax:X2}"
+                    : $"usage=0x{v.NotRange.Usage:X2}";
+                sb.AppendLine($"  VAL page=0x{v.UsagePage:X2} {usages} bits={v.BitSize} count={v.ReportCount} " +
+                              $"logical=[{v.LogicalMin}..{v.LogicalMax}] reportId={v.ReportID} " +
+                              $"link={v.LinkCollection} linkUsage=0x{v.LinkUsagePage:X2}:0x{v.LinkUsage:X2} " +
+                              $"abs={v.IsAbsolute} hasNull={v.HasNull}");
+            }
+
+            return sb.ToString();
         }
 
         public void Dispose()

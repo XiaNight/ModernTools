@@ -218,10 +218,10 @@ namespace Base.Services.Peripheral.Native
         internal static extern bool HidD_GetAttributes(SafeFileHandle hObject, ref HIDD_ATTRIBUTES Attributes);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
-        internal static extern bool HidD_GetFeature(nint hDevice, nint hReportBuffer, uint ReportBufferLength);
+        internal static extern bool HidD_GetFeature(SafeFileHandle hDevice, IntPtr ReportBuffer, uint ReportBufferLength);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
-        internal static extern bool HidD_SetFeature(nint hDevice, nint ReportBuffer, uint ReportBufferLength);
+        internal static extern bool HidD_SetFeature(SafeFileHandle hDevice, IntPtr ReportBuffer, uint ReportBufferLength);
 
         [DllImport("hid.dll", SetLastError = true, CallingConvention = CallingConvention.StdCall)]
         internal static extern bool HidD_GetProductString(SafeFileHandle hDevice, IntPtr Buffer, uint BufferLength);
@@ -347,6 +347,24 @@ namespace Base.Services.Peripheral.Native
 
         [DllImport(SETUPAPI, SetLastError = true)]
         internal static extern bool SetupDiDestroyDeviceInfoList(IntPtr DeviceInfoSet);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DEVPROPKEY
+        {
+            public Guid fmtid;
+            public uint pid;
+        }
+
+        [DllImport(SETUPAPI, EntryPoint = "SetupDiGetDevicePropertyW", SetLastError = true)]
+        internal static extern bool SetupDiGetDeviceProperty(
+            IntPtr DeviceInfoSet,
+            ref SP_DEVINFO_DATA DeviceInfoData,
+            ref DEVPROPKEY PropertyKey,
+            out uint PropertyType,
+            byte[] PropertyBuffer,
+            uint PropertyBufferSize,
+            out uint RequiredSize,
+            uint Flags);
 
         // ========= kernel32.dll =========
 

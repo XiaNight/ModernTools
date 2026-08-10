@@ -12,7 +12,6 @@ namespace Base.Pages
     {
         void Enable();
         void Disable();
-        Grid Root { get; }
         string PageName { get; }
         string Description { get; }
         bool ShowDeviceSelection { get; }
@@ -52,8 +51,7 @@ namespace Base.Pages
         protected static DeviceSelection.Device ActiveDevice => DeviceSelection.Instance.ActiveDevice;
 
         protected Grid root;
-        Grid IPageBase.Root => root;
-        
+
         private CancellationTokenSource cts;
         private Task updateLoop;
 
@@ -85,6 +83,7 @@ namespace Base.Pages
             return new T();
         }
 
+        [Obsolete("FormPage is deprecated and will be removed in a future release.")]
         private void FormPage()
         {
             Content ??= new Grid();

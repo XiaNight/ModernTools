@@ -1,0 +1,323 @@
+name: .NET Desktop
+
+on:
+  push:
+    tags:
+      - 'V[0-9][0-9]_[0-9][0-9]_[0-9][0-9]'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override version (e.g. V02_00_07). Leave blank to read from csproj.'
+        required: false
+
+permissions:
+  contents: write          # needed by softprops/action-gh-release to create releases
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    env:
+      APP_NAME: ModernToolset
+      MAIN_PROJ: ModernTools\ModernTools.csproj
+      RID: win-x64
+      CONFIG: Release
+
+    steps:
+    # ── Checkout ──────────────────────────────────────────────────────────
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # ── .NET 8 ────────────────────────────────────────────────────────────
+    - name: Install .NET 8
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    # ── Restore NuGet packages for all projects ─────────────────────────
+    - name: Restore packages
+      shell: powershell
+      run: |
+        dotnet restore $env:MAIN_PROJ
+        $plugins = @(
+          'Base\Base.csproj',
+          'Features\Audio\Audio.csproj',
+          'Features\CommonProtocol\CommonProtocol.csproj',
+          'Features\Gamepad\GamePad.csproj',
+          'Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj',
+          'Features\KeyboardHallSensor\KeyboardHallSensor.csproj',
+          'Features\ArmouryProtocol\ArmouryProtocol.csproj',
+          'Features\MouseATE\MouseATE.csproj',
+          'Features\AiComposer\AiComposer.csproj',
+          'Features\MCPServer\MCPServer.csproj'
+        )
+        foreach ($proj in $plugins) {
+          dotnet restore $proj
+          if ($LASTEXITCODE -ne 0) { throw "Restore failed: $proj" }
+        }
+
+    # ── Resolve version ──────────────────────────────────────────────────
+    - name: Resolve version
+      id: version
+      shell: powershell
+      run: |
+        $v = '${{ github.event.inputs.version }}'.Trim()
+        if (-not $v) {
+          # Try the tag name first (refs/tags/V01_00_01)
+          $ref = '${{ github.ref }}'
+          if ($ref -match '^refs/tags/(V\d{2}_\d{2}_\d{2})$') {
+            $v = $Matches[1]
+          }
+        }
+        if (-not $v) {
+          # Fall back to InformationalVersion in the csproj
+          $text = Get-Content '${{ env.MAIN_PROJ }}' -Raw
+          if ($text -match '<InformationalVersion>(.*?)</InformationalVersion>') {
+            $v = $Matches[1].Trim()
+          }
+        }
+        if (-not $v) { throw 'Could not determine version.' }
+        Write-Host "Version: $v"
+        "VERSION=$v" >> $env:GITHUB_OUTPUT
+
+    # ── Host assembly manifest (for plugin dedupe) ───────────────────────
+    - name: Compute host assembly manifest
+      shell: powershell
+      run: |
+        $manifestDir = 'dist\build\_host_manifest'
+        if (Test-Path $manifestDir) { Remove-Item $manifestDir -Recurse -Force }
+        dotnet publish $env:MAIN_PROJ -c $env:CONFIG -r $env:RID `
+          -p:SelfContained=false -p:PublishSingleFile=false -p:PublishReadyToRun=false `
+          -p:SkipPluginPublish=true -p:DebugType=none -p:DebugSymbols=false `
+          -o $manifestDir
+        if ($LASTEXITCODE -ne 0) { throw "Host manifest publish failed." }
+
+    # ── Build standalone zip ─────────────────────────────────────────────
+    - name: Build standalone bundle
+      shell: powershell
+      run: |
+        $version  = '${{ steps.version.outputs.VERSION }}'
+        $folder   = "${{ env.APP_NAME }}_${version}_standalone"
+        $staging  = "dist\build\$folder"
+        $zip      = "dist\$folder.zip"
+
+        if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+        # Main app — self-contained single-file
+        dotnet publish $env:MAIN_PROJ -c $env:CONFIG -r $env:RID `
+          -p:SelfContained=true -p:PublishSingleFile=true -p:PublishReadyToRun=true `
+          -p:SkipPluginPublish=true -p:DebugType=none -p:DebugSymbols=false `
+          -o $staging
+        if ($LASTEXITCODE -ne 0) { throw "Standalone main publish failed." }
+
+        # Plugins
+        $plugins = [ordered]@{
+          'Base'                 = 'Base\Base.csproj'
+          'Audio'                = 'Features\Audio\Audio.csproj'
+          'CommonProtocol'       = 'Features\CommonProtocol\CommonProtocol.csproj'
+          'Gamepad'              = 'Features\Gamepad\GamePad.csproj'
+          'GenericMouseAnalyzer' = 'Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj'
+          'KeyboardHallSensor'   = 'Features\KeyboardHallSensor\KeyboardHallSensor.csproj'
+          'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
+          'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
+          'AiComposer'           = 'Features\AiComposer\AiComposer.csproj'
+        }
+        foreach ($name in $plugins.Keys) {
+          $pluginDir = Join-Path $staging "Plugins\$name"
+          dotnet msbuild $plugins[$name] /t:Publish /p:PublishProfile=FolderProfile "/p:PublishDir=$pluginDir/"
+          if ($LASTEXITCODE -ne 0) { throw "Plugin publish failed: $name" }
+        }
+
+        # Companion: MCPServer
+        $compDir = Join-Path $staging 'MCPServer'
+        dotnet publish 'Features\MCPServer\MCPServer.csproj' -c $env:CONFIG -r $env:RID `
+          -p:SelfContained=true -p:PublishSingleFile=true -p:PublishReadyToRun=true `
+          -p:DebugType=none -p:DebugSymbols=false `
+          -o $compDir
+        if ($LASTEXITCODE -ne 0) { throw "MCPServer publish failed (standalone)." }
+
+        # Bundle MCPServer skill folder if present
+        $skillSrc = 'Features\MCPServer\skill'
+        if (Test-Path $skillSrc) {
+          $skillDst = Join-Path $compDir 'skill'
+          if (Test-Path $skillDst) { Remove-Item $skillDst -Recurse -Force }
+          Copy-Item -LiteralPath $skillSrc -Destination $skillDst -Recurse -Force
+        }
+
+        # Bundle changelog
+        if (Test-Path 'changelog.txt') {
+          Copy-Item 'changelog.txt' -Destination (Join-Path $staging 'changelog.txt') -Force
+        }
+
+        # Dedupe plugin assemblies already in the host
+        $manifestDir = 'dist\build\_host_manifest'
+        $hostFiles = @{}
+        Get-ChildItem $manifestDir -Recurse -File -Filter *.dll | ForEach-Object { $hostFiles[$_.Name] = $true }
+        Get-ChildItem "$staging\Plugins" -Recurse -File -Filter *.dll |
+          Where-Object { $hostFiles.ContainsKey($_.Name) } |
+          ForEach-Object { Remove-Item $_.FullName -Force }
+        Get-ChildItem "$staging\Plugins" -Directory -Recurse |
+          Sort-Object { $_.FullName.Length } -Descending |
+          Where-Object { -not (Get-ChildItem $_.FullName -Recurse -File) } |
+          Remove-Item -Recurse -Force
+
+        # Strip PDBs
+        Get-ChildItem $staging -Recurse -Filter *.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
+
+        # Zip
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        if (Test-Path $zip) { Remove-Item $zip -Force }
+        $base = (Resolve-Path $staging).Path.TrimEnd('\')
+        $archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+          Get-ChildItem $staging -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($base.Length + 1) -replace '\\','/'
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+              $archive, $_.FullName, "$folder/$rel",
+              [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+          }
+        } finally { $archive.Dispose() }
+
+        $sizeMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+        Write-Host "Created $zip ($sizeMB MB)"
+
+    # ── Build framework-dependent zip ────────────────────────────────────
+    - name: Build framework-dependent bundle
+      shell: powershell
+      run: |
+        $version  = '${{ steps.version.outputs.VERSION }}'
+        $folder   = "${{ env.APP_NAME }}_${version}_framework-dependent"
+        $staging  = "dist\build\$folder"
+        $zip      = "dist\$folder.zip"
+
+        if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+        New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+        # Main app — framework-dependent single-file
+        dotnet publish $env:MAIN_PROJ -c $env:CONFIG -r $env:RID `
+          -p:SelfContained=false -p:PublishSingleFile=true -p:PublishReadyToRun=false `
+          -p:SkipPluginPublish=true -p:DebugType=none -p:DebugSymbols=false `
+          -o $staging
+        if ($LASTEXITCODE -ne 0) { throw "Framework-dependent main publish failed." }
+
+        # Plugins (identical to standalone — always framework-dependent DLLs)
+        $plugins = [ordered]@{
+          'Base'                 = 'Base\Base.csproj'
+          'Audio'                = 'Features\Audio\Audio.csproj'
+          'CommonProtocol'       = 'Features\CommonProtocol\CommonProtocol.csproj'
+          'Gamepad'              = 'Features\Gamepad\GamePad.csproj'
+          'GenericMouseAnalyzer' = 'Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj'
+          'KeyboardHallSensor'   = 'Features\KeyboardHallSensor\KeyboardHallSensor.csproj'
+          'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
+          'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
+          'AiComposer'           = 'Features\AiComposer\AiComposer.csproj'
+        }
+        foreach ($name in $plugins.Keys) {
+          $pluginDir = Join-Path $staging "Plugins\$name"
+          dotnet msbuild $plugins[$name] /t:Publish /p:PublishProfile=FolderProfile "/p:PublishDir=$pluginDir/"
+          if ($LASTEXITCODE -ne 0) { throw "Plugin publish failed: $name" }
+        }
+
+        # Companion: MCPServer
+        $compDir = Join-Path $staging 'MCPServer'
+        dotnet publish 'Features\MCPServer\MCPServer.csproj' -c $env:CONFIG -r $env:RID `
+          -p:SelfContained=false -p:PublishSingleFile=true -p:PublishReadyToRun=false `
+          -p:DebugType=none -p:DebugSymbols=false `
+          -o $compDir
+        if ($LASTEXITCODE -ne 0) { throw "MCPServer publish failed (framework-dependent)." }
+
+        # Bundle MCPServer skill folder if present
+        $skillSrc = 'Features\MCPServer\skill'
+        if (Test-Path $skillSrc) {
+          $skillDst = Join-Path $compDir 'skill'
+          if (Test-Path $skillDst) { Remove-Item $skillDst -Recurse -Force }
+          Copy-Item -LiteralPath $skillSrc -Destination $skillDst -Recurse -Force
+        }
+
+        # Bundle changelog
+        if (Test-Path 'changelog.txt') {
+          Copy-Item 'changelog.txt' -Destination (Join-Path $staging 'changelog.txt') -Force
+        }
+
+        # Dedupe plugin assemblies already in the host
+        $manifestDir = 'dist\build\_host_manifest'
+        $hostFiles = @{}
+        Get-ChildItem $manifestDir -Recurse -File -Filter *.dll | ForEach-Object { $hostFiles[$_.Name] = $true }
+        Get-ChildItem "$staging\Plugins" -Recurse -File -Filter *.dll |
+          Where-Object { $hostFiles.ContainsKey($_.Name) } |
+          ForEach-Object { Remove-Item $_.FullName -Force }
+        Get-ChildItem "$staging\Plugins" -Directory -Recurse |
+          Sort-Object { $_.FullName.Length } -Descending |
+          Where-Object { -not (Get-ChildItem $_.FullName -Recurse -File) } |
+          Remove-Item -Recurse -Force
+
+        # Strip PDBs
+        Get-ChildItem $staging -Recurse -Filter *.pdb -ErrorAction SilentlyContinue | Remove-Item -Force
+
+        # Zip
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        if (Test-Path $zip) { Remove-Item $zip -Force }
+        $base = (Resolve-Path $staging).Path.TrimEnd('\')
+        $archive = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+        try {
+          Get-ChildItem $staging -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($base.Length + 1) -replace '\\','/'
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+              $archive, $_.FullName, "$folder/$rel",
+              [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+          }
+        } finally { $archive.Dispose() }
+
+        $sizeMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+        Write-Host "Created $zip ($sizeMB MB)"
+
+    # ── Upload build artifacts ───────────────────────────────────────────
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ModernToolset-${{ steps.version.outputs.VERSION }}
+        path: dist\*.zip
+
+    # ── Tag the commit (if not already tagged) ──────────────────────────
+    - name: Create version tag
+      shell: powershell
+      run: |
+        $tag = '${{ steps.version.outputs.VERSION }}'
+        git tag $tag 2>$null
+        if ($LASTEXITCODE -eq 0) {
+          git push origin $tag
+          Write-Host "Created and pushed tag: $tag"
+        } else {
+          Write-Host "Tag $tag already exists, skipping."
+        }
+
+    # ── Create GitHub Release ────────────────────────────────────────────
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: ModernToolset ${{ steps.version.outputs.VERSION }}
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## ModernToolset ${{ steps.version.outputs.VERSION }}
+
+          ### Downloads
+          - **Standalone** — includes .NET runtime, no prerequisites
+          - **Framework-dependent** — smaller, requires [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+        files: dist\*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ── Cleanup build intermediates ──────────────────────────────────────
+    - name: Cleanup
+      if: always()
+      shell: powershell
+      run: |
+        if (Test-Path 'dist\build') { Remove-Item 'dist\build' -Recurse -Force }

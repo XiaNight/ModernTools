@@ -1,0 +1,35 @@
+<ui:ContentDialog x:Class="CommonProtocol.BusHound.ProtocolTest.ProtocolTestViewDialog"
+				  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+				  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+				  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+				  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+				  xmlns:ui="http://schemas.modernwpf.com/2019"
+				  xmlns:local="clr-namespace:CommonProtocol"
+				  mc:Ignorable="d"
+				  Title="Test details"
+				  CloseButtonText="Close"
+				  DefaultButton="Close">
+	<ui:ContentDialog.Resources>
+		<!-- Feature-local mismatch highlight (self-contained, like the row's status colours). -->
+		<SolidColorBrush x:Key="MismatchFg" Color="#FFE0342B"/>
+		<SolidColorBrush x:Key="MismatchBg" Color="#55FF3B30"/>
+	</ui:ContentDialog.Resources>
+
+	<StackPanel MinWidth="420" Margin="0,4,0,0">
+
+		<TextBlock Text="Request bytes" FontWeight="SemiBold" Margin="0,0,0,4"/>
+		<TextBlock x:Name="RequestText"
+				   FontFamily="Consolas"
+				   TextWrapping="Wrap"
+				   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"
+				   Margin="0,0,0,12"/>
+
+		<TextBlock Text="Response packets" FontWeight="SemiBold" Margin="0,0,0,4"/>
+		<StackPanel x:Name="PacketsPanel" Margin="0,0,0,8"/>
+
+		<TextBlock x:Name="TrailingNote"
+				   FontSize="11"
+				   Opacity="0.7"
+				   TextWrapping="Wrap"/>
+	</StackPanel>
+</ui:ContentDialog>

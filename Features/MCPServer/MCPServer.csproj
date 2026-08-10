@@ -13,4 +13,13 @@
 		<Optimize>true</Optimize>
 	</PropertyGroup>
 
+	<!-- Ship the ModernToolset device-communication skill next to the exe. Copied to the build
+	     and publish output under skill\ so publish.ps1 grabs it with the companion output. -->
+	<ItemGroup>
+		<Content Include="skill\**\*.*">
+			<Link>skill\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
 </Project>

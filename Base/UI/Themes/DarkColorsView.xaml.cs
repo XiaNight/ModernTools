@@ -17,7 +17,7 @@ using Base.Core;
 
 namespace Base.Helpers
 {
-    [PageInfo("Dark Colors", NavOrder = 0)]
+    [PageInfo("Dark Colors", NavOrder = -1)]
     public partial class DarkColorsView : Pages.PageBase
     {
 

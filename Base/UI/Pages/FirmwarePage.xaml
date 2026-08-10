@@ -1,0 +1,228 @@
+<local:PageBase x:Class="Base.Pages.FirmwarePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:local="clr-namespace:Base.Pages"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1080">
+
+    <local:PageBase.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- All surfaces/text/accent resolved via DynamicResource so the page follows the
+             active light/dark theme and accent (ROG red / anniversary gold). -->
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+        </Style>
+
+        <Style x:Key="FieldValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+    </local:PageBase.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Firmware Update"
+                       FontSize="24"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+            <TextBlock Margin="0,4,0,0"
+                       Text="Device Firmware Update packages found in the selected folder."
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </StackPanel>
+
+        <!-- Search + sort -->
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0"
+                     VerticalAlignment="Center"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     ui:ControlHelper.PlaceholderText="Search by device name or version..." />
+
+            <TextBlock Grid.Column="1"
+                       Text="Sort"
+                       VerticalAlignment="Center"
+                       Margin="16,0,8,0"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+
+            <ComboBox Grid.Column="2"
+                      x:Name="SortBox"
+                      Width="200"
+                      VerticalAlignment="Center"
+                      SelectedIndex="0"
+                      SelectionChanged="Sort_Changed">
+                <ComboBoxItem Content="Modified (newest)" />
+                <ComboBoxItem Content="Modified (oldest)" />
+                <ComboBoxItem Content="Created (newest)" />
+                <ComboBoxItem Content="Device name (A–Z)" />
+                <ComboBoxItem Content="Version" />
+            </ComboBox>
+        </Grid>
+
+        <!-- Package list -->
+        <Grid Grid.Row="3">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="0,0,10,0">
+                <ItemsControl ItemsSource="{Binding PackagesView}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource CardStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Info row -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" MinWidth="220" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="130" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Device name + full file name caption -->
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                            <TextBlock Text="{Binding DeviceName}"
+                                                       FontSize="16"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                            <TextBlock Text="{Binding FullName}"
+                                                       FontSize="11"
+                                                       Margin="0,2,0,0"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding FullName}"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="Version" Style="{StaticResource FieldLabelStyle}" />
+                                            <TextBlock Text="{Binding VersionDisplay}" Style="{StaticResource FieldValueStyle}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Text="Created" Style="{StaticResource FieldLabelStyle}" />
+                                            <TextBlock Text="{Binding CreatedText}" Style="{StaticResource FieldValueStyle}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                            <TextBlock Text="Modified" Style="{StaticResource FieldLabelStyle}" />
+                                            <TextBlock Text="{Binding ModifiedText}" Style="{StaticResource FieldValueStyle}" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="4" VerticalAlignment="Center">
+                                            <TextBlock Text="State" Style="{StaticResource FieldLabelStyle}" />
+                                            <Border CornerRadius="4"
+                                                    Padding="8,3"
+                                                    HorizontalAlignment="Left"
+                                                    Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                                                    BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                                                    BorderThickness="1">
+                                                <TextBlock Text="{Binding StateText}"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Action row -->
+                                    <WrapPanel Grid.Row="1" Margin="0,14,0,0">
+                                        <Button Content="Unzip"
+                                                Margin="0,0,8,0"
+                                                Padding="14,6"
+                                                Visibility="{Binding CanUnzip, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.UnzipCommand, RelativeSource={RelativeSource AncestorType={x:Type local:PageBase}}}"
+                                                CommandParameter="{Binding}" />
+
+                                        <Button Content="Update Device"
+                                                Margin="0,0,8,0"
+                                                Padding="14,6"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{Binding CanUpdateDevice, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.UpdateDeviceCommand, RelativeSource={RelativeSource AncestorType={x:Type local:PageBase}}}"
+                                                CommandParameter="{Binding}" />
+
+                                        <Button Content="Update Dongle"
+                                                Margin="0,0,8,0"
+                                                Padding="14,6"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{Binding CanUpdateDongle, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.UpdateDongleCommand, RelativeSource={RelativeSource AncestorType={x:Type local:PageBase}}}"
+                                                CommandParameter="{Binding}" />
+
+                                        <Button Content="Update FOTA"
+                                                Margin="0,0,8,0"
+                                                Padding="14,6"
+                                                Style="{StaticResource AccentButtonStyle}"
+                                                Visibility="{Binding CanUpdateFota, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.UpdateFotaCommand, RelativeSource={RelativeSource AncestorType={x:Type local:PageBase}}}"
+                                                CommandParameter="{Binding}" />
+
+                                        <Button Content="Delete ZIP"
+                                                Margin="0,0,8,0"
+                                                Padding="14,6"
+                                                Visibility="{Binding CanDeleteZip, Converter={StaticResource BoolToVis}}"
+                                                Command="{Binding DataContext.DeleteZipCommand, RelativeSource={RelativeSource AncestorType={x:Type local:PageBase}}}"
+                                                CommandParameter="{Binding}" />
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
+                                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                                            <ui:ProgressRing IsActive="{Binding IsBusy}" Width="16" Height="16" Margin="0,0,8,0" />
+                                            <TextBlock Text="Running..."
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Empty state -->
+            <TextBlock x:Name="EmptyPlaceholder"
+                       Text="No firmware packages found. Choose a folder that contains your DFU packages."
+                       Visibility="Collapsed"
+                       TextWrapping="Wrap"
+                       MaxWidth="420"
+                       TextAlignment="Center"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+        </Grid>
+    </Grid>
+</local:PageBase>

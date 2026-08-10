@@ -109,31 +109,52 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
 
     #region Recording
 
-    [POST("SetRecordKey", true)]
+    [POST("SetRecordKey", true,
+        Summary = "Select which key to record.",
+        Description = "Selects which key's analog stream is recorded. Body: { \"key\": integer } — the device " +
+            "key code (matrix scan code, 0-255) of the single key to capture. Set this before StartRecording; " +
+            "a value of 0 means \"no key\" and recording will not start.")]
     protected void SetRecordKey(byte key)
     {
         targetKey = key;
     }
 
-    [POST("SetRecordDuration", true)]
+    [POST("SetRecordDuration", true,
+        Summary = "Set the recording time limit.",
+        Description = "Sets the maximum recording duration. Body: { \"duration\": integer } in milliseconds. " +
+            "Recording stops automatically once this many milliseconds have elapsed since StartRecording. " +
+            "Use 0 for no time limit.")]
     protected void SetRecordDuration(int duration)
     {
         recordDurationLimitMs = duration;
     }
 
-    [POST("SetRecordCount")]
+    [POST("SetRecordCount",
+        Summary = "Set the recording sample-count limit.",
+        Description = "Sets the maximum number of samples to record. Body: { \"count\": integer }. Recording " +
+            "stops automatically once this many samples (\"Time,Value\" rows) have been captured. Use 0 for " +
+            "no count limit.")]
     protected void SetRecordCount(int count)
     {
         recordCountLimit = count;
     }
 
-    [POST("SetRecordPath")]
+    [POST("SetRecordPath",
+        Summary = "Set the output CSV file path.",
+        Description = "Sets the destination CSV file path for the next recording. Body: { \"path\": string } — " +
+            "an absolute path to the output .csv file. If left unset, StartRecording prompts the user with a " +
+            "save dialog instead.")]
     protected void SetRecordPath(string path)
     {
         recordOutputPath = path;
     }
 
-    [POST("StartRecording")]
+    [POST("StartRecording",
+        Summary = "Start recording the selected key.",
+        Description = "Starts recording the selected key's analog values to the configured CSV file (with a " +
+            "\"Time,Value\" header). Takes no parameters. No-op if a recording is already in progress, if no " +
+            "record key has been set (see SetRecordKey), or if no device is connected. When no output path is " +
+            "set, a save dialog is shown first.")]
     protected void StartRecording()
     {
         if (isRecording) return;
@@ -158,7 +179,10 @@ public abstract class MFGKeyboardStreamingPage : MFGKeyboardBasePage
         startTick = DateTime.UtcNow.Ticks;
     }
 
-    [POST("StopRecording")]
+    [POST("StopRecording",
+        Summary = "Stop the current recording.",
+        Description = "Stops the current recording and flushes and closes the CSV file. Takes no parameters. " +
+            "Safe to call when no recording is in progress (no-op).")]
     protected void StopRecording()
     {
         if (!isRecording) return;

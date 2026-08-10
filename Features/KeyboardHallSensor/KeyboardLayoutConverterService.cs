@@ -4,11 +4,14 @@ using System.Text.RegularExpressions;
 
 namespace Base.Services
 {
+    /// <summary>
+    /// Accept layout from: https://www.keyboard-layout-editor.com/
+    /// </summary>
     public partial class LayoutConverter
     {
-        public static List<KeyDef> Convert()
+        public static List<KeyDef> Convert(string layoutName = "keyboard_layout.txt")
         {
-            string path = Path.Combine(MainWindow.GetConfigFolder(), "keyboard_layout.txt");
+            string path = Path.Combine(MainWindow.GetConfigFolder(), layoutName);
             string kleRaw = File.ReadAllText(path);
 
             var matches = RowRegex().Matches(kleRaw);
@@ -56,25 +59,30 @@ namespace Base.Services
                     if (!string.IsNullOrEmpty(modifier))
                     {
                         var modValues = ModifierValueRegex().Matches(modifier);
-                        foreach (Match modValue in modValues)
+                        keyDef.Mods = new KeyValuePair<string, string>[modValues.Count];
+                        for (int i = 0; i < modValues.Count; i++)
                         {
+                            Match modValue = modValues[i];
                             var modKey = modValue.Groups[1].Value;
-                            var value = float.Parse(modValue.Groups[2].Value);
+                            keyDef.Mods[i] = new KeyValuePair<string, string>(modKey, modValue.Groups[2].Value);
 
-                            switch (modKey)
+                            if(float.TryParse(modValue.Groups[2].Value, out float value))
                             {
-                                case "x":
-                                    keyDef.X = value;
-                                    break;
-                                case "y":
-                                    keyDef.Y = value;
-                                    break;
-                                case "w":
-                                    keyDef.W = value;
-                                    break;
-                                case "h":
-                                    keyDef.H = value;
-                                    break;
+                                switch (modKey)
+                                {
+                                    case "x":
+                                        keyDef.X = value;
+                                        break;
+                                    case "y":
+                                        keyDef.Y = value;
+                                        break;
+                                    case "w":
+                                        keyDef.W = value;
+                                        break;
+                                    case "h":
+                                        keyDef.H = value;
+                                        break;
+                                }
                             }
                         }
                         modifier = null;
@@ -103,7 +111,7 @@ namespace Base.Services
         [GeneratedRegex(@"(\{.*?\})|(\"".*?(?<=(^|[^\\])(\\\\)*)"")")]
         private static partial Regex SlotRegex();
 
-        [GeneratedRegex(@"([xywha]):\s*(-?[0-9.]+)")]
+        [GeneratedRegex(@"([xywhadl]):\s*(-?[0-9.]+|true|false)")]
         private static partial Regex ModifierValueRegex();
 
         public static readonly Dictionary<string, byte> keyLabelToCode = new()
@@ -162,5 +170,6 @@ namespace Base.Services
         public float Y { get; set; }
         public float W { get; set; }
         public float H { get; set; }
+        public KeyValuePair<string, string>[] Mods { get; set; }
     }
 }

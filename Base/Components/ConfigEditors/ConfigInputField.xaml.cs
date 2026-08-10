@@ -10,7 +10,7 @@ namespace Base.Components;
 /// <summary>
 /// Text-box based editor for string, integer, floating-point and hexadecimal members. The concrete
 /// behaviour (input filtering, parsing, formatting) is selected from the bound member's type and the
-/// <see cref="ConfigAttribute.Type"/> hint.
+/// <see cref="FieldAttribute.Type"/> hint.
 /// </summary>
 public partial class ConfigInputField : UserControl, IConfigEditor
 {
@@ -18,6 +18,7 @@ public partial class ConfigInputField : UserControl, IConfigEditor
 
     private ConfigItem _item;
     private InputMode _mode;
+    private int _hexDigits;
     private Brush _defaultBorder;
 
     public ConfigInputField()
@@ -36,9 +37,11 @@ public partial class ConfigInputField : UserControl, IConfigEditor
         else if (ConfigEditorUtil.FloatTypes.Contains(type))
             _mode = InputMode.Float;
         else if (ConfigEditorUtil.IntegerTypes.Contains(type))
-            _mode = item.Attr.Type == ConfigType.Hex ? InputMode.Hex : InputMode.Integer;
+            _mode = ConfigEditorUtil.IsHex(item.Attr.Type) ? InputMode.Hex : InputMode.Integer;
         else
             _mode = InputMode.String; // best-effort fallback
+
+        _hexDigits = ConfigEditorUtil.HexDigits(item.Attr.Type);
 
         switch (_mode)
         {
@@ -70,7 +73,7 @@ public partial class ConfigInputField : UserControl, IConfigEditor
 
     private string FormatCurrent()
         => _mode == InputMode.Hex
-            ? ConfigEditorUtil.FormatHex(_item.Get())
+            ? ConfigEditorUtil.FormatHex(_item.Get(), _hexDigits)
             : ConfigEditorUtil.FormatValue(_item.Get());
 
     private void Commit()

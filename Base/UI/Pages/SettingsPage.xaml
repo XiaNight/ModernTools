@@ -1,0 +1,38 @@
+<local:PageBase x:Class="Base.Pages.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:Base.Pages"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1080">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Settings"
+                   FontSize="24"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,16"
+                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,12,0">
+            <StackPanel x:Name="SettingsContainer"
+                        MaxWidth="640"
+                        HorizontalAlignment="Left" />
+        </ScrollViewer>
+
+        <TextBlock x:Name="EmptyPlaceholder"
+                   Grid.Row="1"
+                   Text="No settings are available."
+                   Visibility="Collapsed"
+                   Opacity="0.7"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+    </Grid>
+</local:PageBase>

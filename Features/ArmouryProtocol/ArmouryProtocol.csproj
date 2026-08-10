@@ -10,10 +10,17 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<!-- Emit XML docs so endpoint <summary>/<param> comments flow into the /api/v1/schema manifest. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\Base\Base.csproj">
+			<Private>false</Private>
+			<ExcludeAssets>runtime</ExcludeAssets>
+		</ProjectReference>
+		<ProjectReference Include="..\KeyboardHallSensor\KeyboardHallSensor.csproj" >
 			<Private>false</Private>
 			<ExcludeAssets>runtime</ExcludeAssets>
 		</ProjectReference>

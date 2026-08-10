@@ -6,6 +6,7 @@ using System.IO;
 using System.Management;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -13,6 +14,8 @@ using System.Windows.Threading;
 namespace Base.Pages
 {
     using Base.Core;
+    using Base.Services;
+    using Base.UI.Controls;
 
     /// <summary>
     /// Interaction logic for HomePage.xaml
@@ -25,7 +28,7 @@ namespace Base.Pages
 
         private string _currentTimeText = DateTime.Now.ToString("dddd, MMM dd yyyy  HH:mm:ss", CultureInfo.InvariantCulture);
         private string _currentMachineText = $"{Environment.UserName}@{Environment.MachineName}";
-        private string _appVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString() ?? "dev";
+        private string _appVersion = MainWindow.version;
         private MachineInfo _machineInfo = new();
         private ObservableCollection<RecentPageItem> _recentPages = new();
 
@@ -61,13 +64,22 @@ namespace Base.Pages
             set => SetField(ref _recentPages, value);
         }
 
+        public bool HasRecentPages => RecentPages.Count > 0;
+        public bool NoRecentPages => RecentPages.Count == 0;
+
         public HomePage()
         {
             InitializeComponent();
             DataContext = this;
 
-            SeedRecentPages();
-            RefreshMachineInfo();
+            LoadRecentPages();
+
+            // The Home instance lives for the app's lifetime, so subscribe once. Also refresh when
+            // the page re-appears (navigating back) to reflect visits made while it was hidden.
+            RecentPagesService.Changed += OnRecentPagesChanged;
+            Loaded += (_, _) => LoadRecentPages();
+
+            RefreshMachineInfoAsync();
 
             _clockTimer = new DispatcherTimer
             {
@@ -76,31 +88,85 @@ namespace Base.Pages
             _clockTimer.Tick += (_, _) =>
             {
                 CurrentTimeText = DateTime.Now.ToString("dddd, MMM dd yyyy  HH:mm:ss", CultureInfo.InvariantCulture);
-                MachineInfo.Uptime = GetUptimeText();
             };
             _clockTimer.Start();
         }
 
         private void RefreshSpecsButton_Click(object sender, RoutedEventArgs e)
         {
-            RefreshMachineInfo();
+            RefreshMachineInfoAsync();
         }
 
-        private void RefreshMachineInfo()
+        // WMI queries (CPU/GPU/RAM) are slow, so gather them off the UI thread to keep the
+        // page responsive. The bound MachineInfo shows "Loading..." until the data arrives.
+        private async void RefreshMachineInfoAsync()
         {
-            MachineInfo = MachineInfoProvider.GetMachineInfo();
-            MachineInfo.Uptime = GetUptimeText();
+            MachineInfo info = await Task.Run(MachineInfoProvider.GetMachineInfo);
+            info.Uptime = GetUptimeText();
+            MachineInfo = info;
         }
 
-        private void SeedRecentPages()
+        // ---- Quick Access / Recent Pages navigation ----
+
+        private void QuickAccess_Click(object sender, RoutedEventArgs e)
         {
-            RecentPages = new ObservableCollection<RecentPageItem>
+            if (sender is not QuickAccessTile tile || string.IsNullOrEmpty(tile.Target))
+                return;
+
+            // "Log" opens the output log panel rather than navigating to a page.
+            if (string.Equals(tile.Target, "Log", StringComparison.OrdinalIgnoreCase))
             {
-                new() { Title = "Keyboard", Subtitle = "Profile editor and macro map", LastOpened = "Today 10:21" },
-                new() { Title = "Gamepad", Subtitle = "Input test and deadzone tuning", LastOpened = "Today 09:48" },
-                new() { Title = "Log", Subtitle = "Recent traces and operation history", LastOpened = "Yesterday 18:05" },
-                new() { Title = "Audio", Subtitle = "Endpoint checks and output test", LastOpened = "Yesterday 16:33" }
-            };
+                Main.ShowLog();
+                return;
+            }
+
+            Main.NavigateTo(tile.Target);
+        }
+
+        private void RecentPage_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is QuickAccessTile tile && !string.IsNullOrEmpty(tile.Target))
+                Main.NavigateTo(tile.Target);
+        }
+
+        private void OnRecentPagesChanged()
+        {
+            if (Dispatcher.CheckAccess())
+                LoadRecentPages();
+            else
+                Dispatcher.Invoke(LoadRecentPages);
+        }
+
+        private void LoadRecentPages()
+        {
+            var list = new ObservableCollection<RecentPageItem>();
+            foreach (RecentPageRecord record in RecentPagesService.Items)
+            {
+                list.Add(new RecentPageItem
+                {
+                    Title = record.Title,
+                    Glyph = record.Glyph,
+                    Subtitle = record.Subtitle,
+                    LastOpened = FormatRelative(record.LastOpenedUtc)
+                });
+            }
+
+            RecentPages = list;
+            OnPropertyChanged(nameof(HasRecentPages));
+            OnPropertyChanged(nameof(NoRecentPages));
+        }
+
+        private static string FormatRelative(DateTime utc)
+        {
+            DateTime local = utc.ToLocalTime();
+            TimeSpan delta = DateTime.Now - local;
+
+            if (delta < TimeSpan.Zero) return local.ToString("HH:mm", CultureInfo.InvariantCulture);
+            if (delta < TimeSpan.FromMinutes(1)) return "Just now";
+            if (delta < TimeSpan.FromHours(1)) return $"{(int)delta.TotalMinutes}m ago";
+            if (local.Date == DateTime.Today) return local.ToString("HH:mm", CultureInfo.InvariantCulture);
+            if (local.Date == DateTime.Today.AddDays(-1)) return "Yesterday";
+            return local.ToString("MMM dd", CultureInfo.InvariantCulture);
         }
 
         private static string GetUptimeText()
@@ -139,8 +205,10 @@ namespace Base.Pages
     public sealed class RecentPageItem
     {
         public string Title { get; set; } = string.Empty;
+        public string Glyph { get; set; } = string.Empty;
         public string Subtitle { get; set; } = string.Empty;
         public string LastOpened { get; set; } = string.Empty;
+        public bool HasSubtitle => !string.IsNullOrWhiteSpace(Subtitle);
     }
 
     public sealed class MachineInfo : INotifyPropertyChanged

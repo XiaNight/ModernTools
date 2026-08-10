@@ -24,11 +24,13 @@ namespace Base.Services.Peripheral
             string id = "",
             ushort versionNumber = 0,
             ushort usage = 0,
-            ushort usagePage = 0)
-            : base(pid, (ushort)vid, product, manufacturer, id, versionNumber, usage, usagePage)
+            ushort usagePage = 0,
+            string containerId = "")
+            : base(pid, (ushort)vid, product, manufacturer, id, versionNumber, usage, usagePage, containerId)
         {
-            
         }
+
+        public override ConnectionType ConnectionType => ConnectionType.HID;
 
         protected override PeripheralInterface CreateConnection(bool useAsyncRead = false)
         {
@@ -107,11 +109,12 @@ namespace Base.Services.Peripheral
         {
             var selector = HidDevice.GetDeviceSelector(usagepage, usageId);
 
-            string[] extraProps = 
+            string[] extraProps =
             {
                 "System.Devices.DeviceInstanceId",
                 "System.ItemNameDisplay",
-                "System.Devices.Manufacturer"
+                "System.Devices.Manufacturer",
+                "System.Devices.ContainerId"
             };
 
             var infos = await DeviceInformation.FindAllAsync(selector, extraProps);
@@ -125,6 +128,9 @@ namespace Base.Services.Peripheral
                 string manufacturer = di.Properties.TryGetValue("System.Devices.Manufacturer", out var oMan) && oMan is string man ? man : string.Empty;
                 string product = di.Properties.TryGetValue("System.ItemNameDisplay", out var oName) && oName is string name ? name : (di.Name ?? string.Empty);
                 string id = di.Id ?? string.Empty;
+                string containerId = di.Properties.TryGetValue("System.Devices.ContainerId", out var oCid) && oCid is Guid gCid
+                    ? gCid.ToString()
+                    : string.Empty;
 
                 var hid = await HidDevice.FromIdAsync(di.Id, FileAccessMode.Read);
                 if (hid != null)
@@ -159,7 +165,8 @@ namespace Base.Services.Peripheral
                     id: id,
                     versionNumber: ver,
                     usage: usage,
-                    usagePage: usagePage));
+                    usagePage: usagePage,
+                    containerId: containerId));
             }
 
             return list;
@@ -216,6 +223,13 @@ namespace Base.Services.Peripheral
             await _writeSem.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                if (TxPipe == PeripheralPipe.Control)
+                {
+                    bool ok = await Task.Run(() => WriteControlReport(data), cancellationToken).ConfigureAwait(false);
+                    if (ok) InvokeDataSent(data);
+                    return ok;
+                }
+
                 var packet = new byte[_cap.OutputReportByteLength];
                 packet[0] = GetReportId();
                 Array.Copy(data, 0, packet, 1, data.Length);
@@ -262,8 +276,106 @@ namespace Base.Services.Peripheral
             }
         }
 
+        public override bool SupportsControlPipe => _cap.OutputReportByteLength > 0 || _cap.FeatureReportByteLength > 0;
+
+        // Builds a report-id-prefixed packet of exactly reportLength bytes (required by the
+        // HID control-pipe APIs, which reject a mismatched length with ERROR_INVALID_PARAMETER).
+        private byte[] BuildControlPacket(byte[] data, int reportLength)
+        {
+            var packet = new byte[reportLength];
+            packet[0] = GetReportId();
+            int copy = Math.Min(data.Length, reportLength - 1);
+            if (copy > 0) Array.Copy(data, 0, packet, 1, copy);
+            return packet;
+        }
+
+        /// <summary>
+        /// Sends a report over the control pipe (EP0) via HID SET_REPORT, using the Output or
+        /// Feature report type per <see cref="PeripheralInterface.ControlKind"/>. Blocking native
+        /// call, so callers marshal it onto a worker thread.
+        /// </summary>
+        private bool WriteControlReport(byte[] data)
+        {
+            bool feature = ControlKind == ControlReportKind.Feature;
+            int len = feature ? _cap.FeatureReportByteLength : _cap.OutputReportByteLength;
+            if (len <= 0)
+            {
+                Debug.Log($"[HID] Control write unavailable: {(feature ? "FeatureReportByteLength" : "OutputReportByteLength")} is 0.");
+                return false;
+            }
+
+            byte[] packet = BuildControlPacket(data, len);
+            IntPtr buf = Marshal.AllocHGlobal(len);
+            try
+            {
+                Marshal.Copy(packet, 0, buf, len);
+                bool ok = feature
+                    ? HidNative.HidD_SetFeature(_handleWrite, buf, (uint)len)
+                    : HidNative.HidD_SetOutputReport(_handleWrite, buf, (uint)len);
+                if (!ok)
+                    Debug.Log($"[HID] {(feature ? "HidD_SetFeature" : "HidD_SetOutputReport")} failed: Win32={Marshal.GetLastWin32Error()}");
+                return ok;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buf);
+            }
+        }
+
+        public override async Task<byte[]> ReadControlAsync(CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            bool feature = ControlKind == ControlReportKind.Feature;
+            int len = feature ? _cap.FeatureReportByteLength : _cap.InputReportByteLength;
+            if (len <= 0) return Array.Empty<byte>();
+
+            return await Task.Run(() =>
+            {
+                IntPtr buf = Marshal.AllocHGlobal(len);
+                try
+                {
+                    // GET_REPORT needs the requested report id in byte 0.
+                    Marshal.WriteByte(buf, 0, GetReportId());
+                    bool ok = feature
+                        ? HidNative.HidD_GetFeature(_handleRead, buf, (uint)len)
+                        : HidNative.HidD_GetInputReport(_handleRead, buf, (uint)len);
+                    if (!ok)
+                    {
+                        Debug.Log($"[HID] {(feature ? "HidD_GetFeature" : "HidD_GetInputReport")} failed: Win32={Marshal.GetLastWin32Error()}");
+                        return Array.Empty<byte>();
+                    }
+
+                    var report = new byte[len];
+                    Marshal.Copy(buf, report, 0, len);
+                    InvokeDataReceived(report);
+                    return report;
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buf);
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// When <see cref="PeripheralInterface.RxPipe"/> is Control the reply is polled with a
+        /// GET_REPORT; otherwise the base implementation waits on the interrupt IN stream
+        /// (the write side still honours <see cref="PeripheralInterface.TxPipe"/>).
+        /// </summary>
+        public override async Task<byte[]> WriteAndReadAsync(byte[] data, CancellationToken cancellationToken = default)
+        {
+            if (RxPipe != PeripheralPipe.Control)
+                return await base.WriteAndReadAsync(data, cancellationToken).ConfigureAwait(false);
+
+            ThrowIfDisposed();
+            await WriteAsync(data, cancellationToken).ConfigureAwait(false);
+            return await ReadControlAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         private byte GetReportId()
         {
+            if (ReportIdOverride >= 0) return (byte)ReportIdOverride;
+
             if (Helpers.Constants.OMNIPIDList?.Any(pid => pid == ProductInfo.PID) == true)
             {
                 return ProductInfo.UsagePage switch
@@ -306,7 +418,7 @@ namespace Base.Services.Peripheral
                 var err = Marshal.GetLastWin32Error();
                 System.Diagnostics.Debug.WriteLine($"CreateFile failed, error={err}");
 
-                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, IntPtr.Zero);
+                _handleRead = HidNative.CreateFile(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                 _handleWrite = HidNative.CreateFile(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
 
 
@@ -342,7 +454,7 @@ namespace Base.Services.Peripheral
 
                 if (asyncReads) StartAsyncRead();
             }
-            catch
+            catch (Exception e)
             {
                 Cleanup();
             }
@@ -399,6 +511,9 @@ namespace Base.Services.Peripheral
 
         public override bool TryGetUsageValue(byte[] inputReport, ushort usagePage, ushort usage, out int value, ushort linkCollection = 0)
             => _descriptorContext?.TryGetUsageValue(inputReport, usagePage, usage, out value, linkCollection) ?? (value = 0) == 0 && false;
+
+        public override string DescribeInputCapabilities()
+            => _descriptorContext?.DescribeCapabilities() ?? "HID report descriptor not available.";
 
         public override bool TryGetValueCap(ushort usagePage, ushort usage, out HidValueCap cap)
         {

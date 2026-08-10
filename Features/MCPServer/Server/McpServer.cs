@@ -190,7 +190,10 @@ public sealed class McpServer
         {
             Name        = r.ToolName,
             Description = r.Description,
-            InputSchema = r.Schema,
+            // Prefer the raw schema from /api/v1/schema (real nested DTO/enum/default info); fall back
+            // to the string-parsed schema only when the manifest endpoint was unavailable.
+            InputSchema  = r.RawInputSchema.HasValue ? r.RawInputSchema.Value : r.Schema,
+            OutputSchema = r.RawOutputSchema.HasValue ? r.RawOutputSchema.Value : (object?)null,
         }));
 
         return new ToolsListResult { Tools = tools };
@@ -424,7 +427,16 @@ public sealed class McpServer
 
     private async Task RefreshRoutesAsync(CancellationToken ct)
     {
-        var routes = await _proxy.DiscoverRoutesAsync(ct).ConfigureAwait(false);
+        // Prefer the structured manifest (rich descriptions + full JSON Schemas). Fall back to parsing
+        // the flat /api/v1/listroute strings only when the schema endpoint is absent (older app builds).
+        var routes = await _proxy.DiscoverSchemaAsync(ct).ConfigureAwait(false);
+        var source = "schema";
+        if (routes.Count == 0)
+        {
+            routes = await _proxy.DiscoverRoutesAsync(ct).ConfigureAwait(false);
+            source = "listroute";
+        }
+
         _routeTable.Clear();
         foreach (var r in routes)
         {
@@ -444,7 +456,7 @@ public sealed class McpServer
             _routeTable[finalName] = r;
         }
 
-        Log($"Route table refreshed: {_routeTable.Count} dynamic tool(s) registered.");
+        Log($"Route table refreshed via {source}: {_routeTable.Count} dynamic tool(s) registered.");
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────────

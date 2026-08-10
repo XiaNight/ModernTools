@@ -1,4 +1,6 @@
-﻿namespace CommonProtocol.Protocols.KBLayoutNation;
+﻿using Base.Protocol;
+
+namespace CommonProtocol.Protocols;
 
 //Get KB layout & nation
 internal class KBLayoutNation : Structure

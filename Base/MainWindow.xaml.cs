@@ -1,6 +1,7 @@
 ﻿using Base.Core;
 using Base.Pages;
 using Base.Services;
+using Base.UI.Themes;
 using ModernWpf;
 using System.IO;
 using System.Reflection;
@@ -50,6 +51,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         WindowChrome.SetIsHitTestVisibleInChrome(ConfigButton, true);
 
         Debug.OnLog += LogMessage;
+
+        // Subscribe once so the window frame and every behaviour react whenever the *actual* theme or
+        // accent changes — this covers live Windows light/dark and accent changes while in Auto mode.
+        // (Registering here, not per-toggle, avoids the handler leak the old toggle had.)
+        ThemeManager.Current.ActualApplicationThemeChanged += (s, e) => OnThemeChangedExternally();
+        ThemeManager.Current.ActualAccentColorChanged += (s, e) => OnThemeChangedExternally();
+
+        // Make the banner system available project-wide, then surface any startup banners.
+        BannerManager.Init(BannerContainer);
+        if (System.Diagnostics.Debugger.IsAttached)
+        {
+            BannerManager.Instance.ShowWarning(
+                "Debug mode: the app was started from a debugger. Report rate might not be accurate.",
+                dismissible: false);
+        }
     }
 
     #region WndProc
@@ -113,24 +129,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     private void ToggleTheme_Click(object sender, RoutedEventArgs e)
     {
-        var currentTheme = ThemeManager.Current.ApplicationTheme;
-        ThemeManager.Current.ApplicationTheme = currentTheme == ApplicationTheme.Light
-            ? ApplicationTheme.Dark
-            : ApplicationTheme.Light;
+        // Flip light/dark through the theme service so the Settings choice stays in sync. The
+        // Black-Gold and Auto modes are selected from the Settings page; this menu toggle only swaps
+        // the two plain themes.
+        ThemeMode next = ThemeManager.Current.ActualApplicationTheme == ApplicationTheme.Dark
+            ? ThemeMode.Light
+            : ThemeMode.Dark;
 
-        ThemeManager.Current.ActualApplicationThemeChanged += (s, ev) =>
-        {
-            foreach (WpfBehaviour wpfObject in registeredWpfObjects)
-            {
-                if (wpfObject.IsEnabled)
-                    wpfObject?.ThemeChanged();
-            }
-        };
+        ThemeService.Instance.SetMode(next);
+        LogMessage($"Theme changed to {next}.");
+    }
 
-        LocalAppDataStore.Instance.Set("Theme", ThemeManager.Current.ApplicationTheme);
+    /// <summary>
+    /// Re-applies the window-frame colour and notifies every enabled behaviour that the theme
+    /// (light/dark or accent) changed. Called by <see cref="Base.UI.Themes.ThemeService"/> after a
+    /// manual change and by the ModernWpf theme/accent-changed events (e.g. Windows changes in Auto).
+    /// </summary>
+    public void OnThemeChangedExternally()
+    {
         ApplyImmersiveDarkMode();
+        BroadcastThemeChanged();
+    }
 
-        LogMessage($"Theme changed to {ThemeManager.Current.ApplicationTheme}.");
+    /// <summary>Notifies every enabled behaviour that the theme changed so it can refresh its visuals.</summary>
+    public void BroadcastThemeChanged()
+    {
+        foreach (WpfBehaviour wpfObject in registeredWpfObjects)
+        {
+            if (wpfObject != null && wpfObject.IsEnabled)
+                wpfObject.ThemeChanged();
+        }
     }
 
     private void ToggleLog_Click(object sender, RoutedEventArgs e)
@@ -169,7 +197,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         await PreloadWpfBehaviourSingletons(AppDomain.CurrentDomain.GetAssemblies());
         await BuildNavigationTabs(AppDomain.CurrentDomain.GetAssemblies());
 
-        SelectTabIndex(0);
+        // Choose the landing page from the user's setting. "Last" reopens the most-recently visited
+        // page (persisted across sessions by RecentPagesService); anything else — or no history —
+        // falls back to Home. Selecting Home by type is robust against nav-order collisions (several
+        // pages declare NavOrder = 0) and tab discovery order.
+        bool landed = false;
+        if (StartupSettings.Instance.Landing == LandingPage.Last)
+        {
+            string lastPage = RecentPagesService.Items.FirstOrDefault()?.Title;
+            if (!string.IsNullOrWhiteSpace(lastPage))
+                landed = NavigateTo(lastPage);
+        }
+
+        if (!landed && !SelectPageByType(typeof(HomePage)))
+            SelectTabIndex(0);
+
         DeviceSelection.Instance.OnActiveDeviceConnected += ReloadPage;
 
         startupSw.Stop();
@@ -260,6 +302,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         // Fired before the window actually closes.
         // You can cancel shutdown by setting e.Cancel = true.
         Debug.Log("MainWindow is closing");
+
+        // Persist app / feature-wide settings alongside each behaviour's own [Persist] fields.
+        SettingRegistry.Instance.SaveAll();
+
         foreach (WpfBehaviour wpfObject in registeredWpfObjects)
         {
             wpfObject?.OnApplicationQuit(e);
@@ -378,6 +424,18 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Selects (and lazily instantiates) the page of the given type, provided a navigation tab
+    /// was registered for it. Returns false when no matching tab exists.
+    /// </summary>
+    public bool SelectPageByType(Type pageType)
+    {
+        if (pageType == null) return false;
+        if (!lazyPageTabMap.ContainsKey(pageType)) return false;
+        SelectPageLazy(pageType);
+        return true;
+    }
+
+    /// <summary>
     /// Instantiates a lazy page on first access and then navigates to it.
     /// Subsequent calls reuse the already-created instance.
     /// </summary>
@@ -412,13 +470,15 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         if (newPage == null)
             return;
 
-        RegisterWpfObject(newPage);
         navPageMap[newPage] = tab;
         lazyPageInstanceMap[pageType] = newPage;
 
-        // Awake() is dispatched at Normal priority by RegisterWpfObject.
-        // Dispatching SelectPage at Loaded (lower priority) ensures Awake runs first.
-        Dispatcher.InvokeAsync(() => SelectPage(newPage), DispatcherPriority.Loaded);
+        // Construction is complete (the base ctor already registered the page), so Awake runs
+        // deterministically here — before the page is enabled. SelectPage -> Enable -> OnEnable
+        // (which subscribes the Update loop) therefore always follows Awake, with no dependence
+        // on dispatcher priority.
+        newPage.Awake();
+        SelectPage(newPage);
     }
 
     public void SelectPage<T>() where T : PageBase
@@ -448,6 +508,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         ContentFrame.Children.Clear();
         ContentFrame.Children.Add(page);
+
+        // Record the visit so the Home page can surface a real "Recent Pages" list.
+        // Home and Settings are excluded — Home is self-referential, and Settings is a
+        // destination users reach deliberately, not something worth resurfacing as "recent".
+        if (page is not HomePage and not SettingsPage)
+            RecentPagesService.Record(page.PageName, page.Description, page.Glyph);
     }
 
     public void ReloadPage()
@@ -456,40 +522,104 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         currentPage?.Enable();
     }
 
+    /// <summary>
+    /// Registers a page instance created at runtime — outside the startup [PageInfo] reflection
+    /// scan — and adds a navigation tab bound to that specific instance. Unlike the type-keyed lazy
+    /// path (<see cref="SelectPageLazy"/>), this supports many pages that share one CLR type, each
+    /// distinguished by the instance. The returned <see cref="INavigationItem"/> lets the caller
+    /// update the tab (Text / Glyph) in place later. The page is registered as a behaviour so it
+    /// receives Awake / theme / quit callbacks, exactly like an attributed page.
+    /// </summary>
+    public INavigationItem RegisterDynamicPage(
+        PageBase page,
+        string text,
+        string[] path,
+        string glyph,
+        string secondaryGlyph = "",
+        string shortName = "",
+        int order = int.MaxValue,
+        PageBase.NavigationAlignment alignment = PageBase.NavigationAlignment.Front)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        INavigationItem tab = alignment == PageBase.NavigationAlignment.Back
+            ? NavTabsManager.AddBottom(text, path, glyph, secondaryGlyph, shortName, order)
+            : NavTabsManager.AddTop(text, path, glyph, secondaryGlyph, shortName, order);
+
+        // The caller hands us a fully-constructed page (the base ctor already registered it), so
+        // Awake it now — before its tab can be clicked and the page enabled.
+        page.Awake();
+        navPageMap[page] = tab;
+        tab.OnClick += () => SelectPage(page);
+        return tab;
+    }
+
+    /// <summary>
+    /// Removes a page previously added with <see cref="RegisterDynamicPage"/>: drops its navigation
+    /// tab (including from a nested group), forgets its behaviour registration, and disables it. If
+    /// it is the current page, navigation falls back to Home (or the first tab). Used by dynamic
+    /// features to delete a page or to destroy-and-recreate one on edit.
+    /// </summary>
+    public void UnregisterDynamicPage(PageBase page)
+    {
+        if (page == null) return;
+
+        if (currentPage == page)
+        {
+            currentPage = null;
+            if (!SelectPageByType(typeof(HomePage)))
+                SelectTabIndex(0);
+        }
+
+        if (navPageMap.TryGetValue(page, out INavigationItem tab))
+        {
+            RemoveNavItem(NavTabsManager.TopButtons, tab);
+            RemoveNavItem(NavTabsManager.BottomButtons, tab);
+            navPageMap.Remove(page);
+        }
+
+        page.Disable();
+        registeredWpfObjects.Remove(page);
+    }
+
+    /// <summary>
+    /// Removes <paramref name="target"/> from the given navigation collection, descending into
+    /// expanders. Returns true once removed so the search can stop.
+    /// </summary>
+    private static bool RemoveNavItem(IList<INavigationItem> items, INavigationItem target)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (ReferenceEquals(items[i], target))
+            {
+                items.RemoveAt(i);
+                return true;
+            }
+            if (items[i] is NavigationExpander expander && RemoveNavItem(expander.Items, target))
+                return true;
+        }
+        return false;
+    }
+
     #endregion
 
     #region WpfBehaviour Assigning
 
     private readonly List<WpfBehaviour> registeredWpfObjects = new();
-    private readonly Queue<WpfBehaviour> newWpfObjects = new();
-    private bool wpfRegisterDispatched = false;
-    private readonly object wpfRegisterLock = new();
+
+    /// <summary>
+    /// Records a behaviour in the registry used for theme broadcast, <see cref="FindObjectOfType{T}"/>,
+    /// and quit-time persistence. Called by the <see cref="WpfBehaviour"/> constructor, so this is a
+    /// plain, synchronous list-add and nothing more — it deliberately does NOT call <c>Awake()</c>,
+    /// because the object is not yet fully constructed at that point. Each creation site
+    /// (<see cref="SelectPageLazy"/>, <see cref="RegisterDynamicPage"/>, <see cref="PreloadWpfBehaviourSingletons"/>)
+    /// calls <c>Awake()</c> itself once construction completes and before the object is enabled.
+    /// </summary>
     public void RegisterWpfObject(WpfBehaviour wpfObject)
     {
-        lock (wpfRegisterLock)
-        {
-            newWpfObjects.Enqueue(wpfObject);
-            if (wpfRegisterDispatched) return;
-            wpfRegisterDispatched = true;
-
-            Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                lock (wpfRegisterLock)
-                {
-                    while (newWpfObjects.Count > 0)
-                    {
-                        WpfBehaviour wpfObject = newWpfObjects.Dequeue();
-                        if (wpfObject == null) continue;
-                        if (registeredWpfObjects.Contains(wpfObject)) continue;
-                        registeredWpfObjects.Add(wpfObject);
-
-                        wpfObject.Awake();
-                    }
-                    newWpfObjects.Clear();
-                    wpfRegisterDispatched = false;
-                }
-            });
-        }
+        if (wpfObject == null) return;
+        if (!registeredWpfObjects.Contains(wpfObject))
+            registeredWpfObjects.Add(wpfObject);
     }
 
     public WpfBehaviour FindObjectOfType(Type type, bool findInactive = false)
@@ -545,16 +675,29 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             jobs[t] = LoadingCover.RentJob(1f);
 
         // All singleton instantiations in one dispatcher call instead of N separate round-trips.
+        List<WpfBehaviour> created = new(singletonTypes.Length);
         await Dispatcher.InvokeAsync(() =>
         {
             foreach (var t in singletonTypes)
             {
                 var closedBase = openBase.MakeGenericType(t);
                 var prop = closedBase.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-                _ = prop?.GetValue(null);
+                if (prop?.GetValue(null) is WpfBehaviour instance)
+                    created.Add(instance);
                 jobs[t].Finish();
             }
         }, DispatcherPriority.Send);
+
+        // Every singleton is now constructed and registered, so Awake them in a single ordered pass.
+        // Doing it here (rather than at construction) means a singleton's Awake/Start can safely
+        // reference any other singleton — they all exist by this point.
+        foreach (WpfBehaviour instance in created)
+            instance.Awake();
+
+        // Catalogue [Setting] members directly off the freshly-created singletons. Doing it here (with
+        // the instances in hand) is deterministic — it does not depend on any deferred registration.
+        // Metadata + persisted values only; no editor UI is built until the Settings page is opened.
+        SettingRegistry.Instance.Build(created);
     }
 
     #endregion
@@ -582,9 +725,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public void SelectTabIndex(int index)
     {
+        // Push Bottom first so Top buttons are popped (and walked) first — index 0 must be the
+        // top-most tab, not the first bottom tab. A stack is LIFO, so the last push wins.
         Stack<IEnumerable<INavigationItem>> stack = new();
-        stack.Push(NavTabsManager.TopButtons);
         stack.Push(NavTabsManager.BottomButtons);
+        stack.Push(NavTabsManager.TopButtons);
         int walk = 0;
 
         while (stack.Count > 0)
@@ -632,6 +777,74 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             }
         }
         return false;
+    }
+
+    /// <summary>
+    /// Navigates to a destination by name (used by the Home quick-access tiles).
+    /// Matches a leaf tab first; if the name refers to a navigation group (expander),
+    /// expands it and selects its first leaf page. Returns false when nothing matched.
+    /// </summary>
+    public bool NavigateTo(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (SelectTabByName(name)) return true;
+
+        if (TryFindExpander(NavTabsManager.TopButtons, name, out NavigationExpander expander)
+            || TryFindExpander(NavTabsManager.BottomButtons, name, out expander))
+        {
+            try { expander.Expand(); } catch { /* not yet loaded — selecting the leaf is enough */ }
+
+            NavigationButton leaf = FindFirstLeaf(expander);
+            if (leaf != null)
+            {
+                leaf.Click();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindExpander(IEnumerable<INavigationItem> items, string name, out NavigationExpander expander)
+    {
+        foreach (INavigationItem item in items)
+        {
+            if (item is NavigationExpander e)
+            {
+                if (string.Equals(e.Text, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    expander = e;
+                    return true;
+                }
+                if (TryFindExpander(e.Items, name, out expander))
+                    return true;
+            }
+        }
+        expander = null;
+        return false;
+    }
+
+    private static NavigationButton FindFirstLeaf(NavigationExpander expander)
+    {
+        foreach (INavigationItem item in expander.Items)
+        {
+            if (item is NavigationButton b)
+                return b;
+            if (item is NavigationExpander e)
+            {
+                NavigationButton nested = FindFirstLeaf(e);
+                if (nested != null)
+                    return nested;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Opens the output log panel (used by the Home quick-access tile).</summary>
+    public void ShowLog()
+    {
+        isLogVisible = true;
+        LogPanel.Visibility = Visibility.Visible;
     }
 
     public IEnumerable<string> ListTabs()

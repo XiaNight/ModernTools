@@ -63,7 +63,7 @@
         <!-- Spectra Line -->
         <Border
             Background="Black"
-            BorderBrush="{DynamicResource SecondaryBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
             BorderThickness="3" CornerRadius="0"
             Grid.Column="2" Grid.Row="1" Grid.RowSpan="2">
         </Border>

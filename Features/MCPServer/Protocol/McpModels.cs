@@ -81,8 +81,18 @@ public sealed class McpTool
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
 
+    /// <summary>
+    /// The tool's input schema. Holds a <see cref="JsonSchema"/> for hand-authored (static) tools or a
+    /// raw <see cref="System.Text.Json.JsonElement"/> passed straight through from the app's
+    /// <c>/api/v1/schema</c> manifest. Both serialize to a valid JSON Schema object.
+    /// </summary>
     [JsonPropertyName("inputSchema")]
-    public JsonSchema InputSchema { get; set; } = new();
+    public object InputSchema { get; set; } = new JsonSchema();
+
+    /// <summary>Optional output schema, populated from the manifest when the endpoint's shape is known.</summary>
+    [JsonPropertyName("outputSchema")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public object? OutputSchema { get; set; }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

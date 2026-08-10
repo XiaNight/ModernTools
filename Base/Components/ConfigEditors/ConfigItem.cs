@@ -3,14 +3,16 @@ using Base.Core;
 namespace Base.Components;
 
 /// <summary>
-/// A single discovered <see cref="ConfigAttribute"/> member (field or property) on a target object,
+/// A single discovered <see cref="FieldAttribute"/> member (field or property) on a target object,
 /// abstracted so editor controls can read / write it without caring whether it is a field or a
-/// property, and reflect any custom setter behaviour by reading the value back.
+/// property, and reflect any custom setter behaviour by reading the value back. The same item type
+/// backs both the per-page config dialog (<see cref="ConfigAttribute"/>) and the app-wide settings
+/// page (<see cref="SettingAttribute"/>).
 /// </summary>
 public sealed class ConfigItem
 {
-    /// <summary>The attribute declared on the member.</summary>
-    public ConfigAttribute Attr { get; init; }
+    /// <summary>The attribute declared on the member (a <see cref="ConfigAttribute"/> or <see cref="SettingAttribute"/>).</summary>
+    public FieldAttribute Attr { get; init; }
 
     /// <summary>The declared member type (may be a <see cref="System.Nullable{T}"/>).</summary>
     public Type ValueType { get; init; }

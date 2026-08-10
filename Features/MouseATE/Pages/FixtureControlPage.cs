@@ -4,7 +4,7 @@ using Base.Pages;
 namespace MouseATE.Pages;
 
 [PageInfo("Fixture Control",
-    Glyph = "",
+    Glyph = "\uE8C9",
     Description = "Connect and manually control the JTB500+TC100 or JTHS300 robot arm fixture.",
     NavOrder = 100,
     Path = ["ATE"],

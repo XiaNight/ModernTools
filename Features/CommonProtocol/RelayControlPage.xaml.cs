@@ -189,9 +189,11 @@ public partial class RelayControlPage : PageBase
     // PUBLIC API
     // =========================================================================
 
-    /// <summary>Turn ON a relay by key and device index.
-    /// Key: <see cref="KeyGroupA"/> (0x04) indices 0–3, or <see cref="KeyGroupB"/> (0x03) indices 0–1.</summary>
-    [POST(requireMainThread:true)]
+    [POST(requireMainThread: true,
+        Summary = "Turn a relay ON.",
+        Description = "Turns ON a single relay, identified by its group key and index within the group. " +
+            "Body: { \"key\": integer, \"idx\": integer }. key = 0x04 (group A, valid idx 0-3) or " +
+            "0x03 (group B, valid idx 0-1). Requires a connected relay device.")]
     public async Task TurnOnRelayAsync(byte key, byte idx)
     {
         int stateIndex = KeyAndIdxToStateIndex(key, idx);
@@ -200,9 +202,11 @@ public partial class RelayControlPage : PageBase
         Dispatcher.Invoke(() => RefreshButtonColor(stateIndex));
     }
 
-    /// <summary>Turn OFF a relay by key and device index.
-    /// Key: <see cref="KeyGroupA"/> (0x04) indices 0–3, or <see cref="KeyGroupB"/> (0x03) indices 0–1.</summary>
-    [POST(requireMainThread:true)]
+    [POST(requireMainThread: true,
+        Summary = "Turn a relay OFF.",
+        Description = "Turns OFF a single relay, identified by its group key and index within the group. " +
+            "Body: { \"key\": integer, \"idx\": integer }. key = 0x04 (group A, valid idx 0-3) or " +
+            "0x03 (group B, valid idx 0-1). Requires a connected relay device.")]
     public async Task TurnOffRelayAsync(byte key, byte idx)
     {
         int stateIndex = KeyAndIdxToStateIndex(key, idx);

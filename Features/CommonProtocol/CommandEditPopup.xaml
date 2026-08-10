@@ -1,4 +1,4 @@
-<UserControl x:Class="Base.UI.Pages.CommandEditPopup"
+<UserControl x:Class="CommonProtocol.CommandEditPopup"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"

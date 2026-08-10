@@ -30,8 +30,14 @@ namespace Base.Services
 
 		public static event Action<CmdData> OnCmdSent;
 		public static event Action<CmdData> OnCmdQueued;
+		// Fired after a wait-for-response command completes, carrying the device's
+		// reply so callers can inspect status codes (e.g. a frame re-send request).
+		public static event Action<CmdData, byte[]> OnCmdResponse;
 
 		private static readonly ConcurrentQueue<CmdData> pendingCommands = new();
+		// Commands inserted here are processed before any remaining normal commands,
+		// used to squeeze an urgent re-send in ahead of the rest of the queue.
+		private static readonly ConcurrentQueue<CmdData> priorityCommands = new();
 		private static readonly SemaphoreSlim queueSignal = new(0, int.MaxValue);
 
 		private static readonly object workerLock = new();
@@ -39,7 +45,7 @@ namespace Base.Services
 		private static Task workerTask;
 
 		private const int DefaultWaitTimeoutMs = 100;
-		private const int DefaultInterCommandDelayMs = 10;
+		private const int DefaultInterCommandDelayMs = 2;
 
 		public static int PendingCmdCount => pendingCommands.Count;
 
@@ -104,13 +110,18 @@ namespace Base.Services
 
 		public static void AppendCmd(Peripheral.PeripheralInterface device, byte[] cmd, bool wait = false, params byte[] parameter)
 		{
+			AppendCmdTimeout(device, cmd, wait, timeoutMs: DefaultWaitTimeoutMs, parameter: parameter);
+		}
+
+		public static void AppendCmdTimeout(Peripheral.PeripheralInterface device, byte[] cmd, bool wait = false, int timeoutMs = DefaultWaitTimeoutMs, params byte[] parameter)
+		{
 			if (device == null) return;
 			if (cmd == null || cmd.Length == 0) return;
 
 			Start();
 
 			byte[] payload = parameter is null || parameter.Length == 0 ? [] : (byte[])parameter.Clone();
-			CmdData item = new(device, cmd, wait, payload);
+			CmdData item = new(device, cmd, wait, timeoutMs, payload);
 			pendingCommands.Enqueue(item);
 			try
 			{
@@ -124,9 +135,72 @@ namespace Base.Services
 			queueSignal.Release();
 		}
 
+		/// <summary>
+		/// Queue a command to be sent before any remaining normal commands (but after
+		/// commands already inserted immediately). Same semantics as AppendCmd otherwise.
+		/// </summary>
+		public static void AppendCmdImmediate(Peripheral.PeripheralInterface device, byte[] cmd, bool wait = false, params byte[] parameter)
+			=> AppendCmdImmediateTimeout(device, cmd, wait, timeoutMs: DefaultWaitTimeoutMs, parameter: parameter);
+
+		public static void AppendCmdImmediateTimeout(Peripheral.PeripheralInterface device, byte[] cmd, bool wait = false, int timeoutMs = DefaultWaitTimeoutMs, params byte[] parameter)
+		{
+			if (device == null) return;
+			if (cmd == null || cmd.Length == 0) return;
+
+			Start();
+
+			byte[] payload = parameter is null || parameter.Length == 0 ? [] : (byte[])parameter.Clone();
+			CmdData item = new(device, cmd, wait, timeoutMs, payload);
+			priorityCommands.Enqueue(item);
+			try
+			{
+				OnCmdQueued?.Invoke(item);
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
+				Debug.Log(e);
+			}
+			queueSignal.Release();
+		}
+
+		/// <summary>
+		/// Sends a single frame through the serialized command queue and asynchronously
+		/// returns the device's reply (or null if none arrives within <paramref name="timeoutMs"/>).
+		/// The frame is the full request bytes (Command, Key, Index, Data); no extra
+		/// parameters are appended. This is the entry point a scan loop awaits per command.
+		/// </summary>
+		public static Task<byte[]> SendAsync(Peripheral.PeripheralInterface device, byte[] frame, int timeoutMs = DefaultWaitTimeoutMs, CancellationToken ct = default)
+		{
+			if (device == null) return Task.FromResult<byte[]>(null);
+			if (frame == null || frame.Length == 0) return Task.FromResult<byte[]>(null);
+
+			Start();
+
+			TaskCompletionSource<byte[]> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+			if (ct.CanBeCanceled)
+				ct.Register(static state => ((TaskCompletionSource<byte[]>)state).TrySetCanceled(), tcs);
+
+			CmdData item = new(device, frame, wait: true, timeoutMs, Array.Empty<byte>(), tcs);
+			pendingCommands.Enqueue(item);
+			try
+			{
+				OnCmdQueued?.Invoke(item);
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[HID] Exception in OnCmdQueued handler: {e.Message}");
+				Debug.Log(e);
+			}
+			queueSignal.Release();
+			return tcs.Task;
+		}
+
 		public static void ClearCmd()
 		{
-			while (pendingCommands.TryDequeue(out _)) { }
+			// Complete any awaiting SendAsync callers so a queue flush never leaves them hung.
+			while (priorityCommands.TryDequeue(out CmdData priority)) priority.Completion?.TrySetResult(null);
+			while (pendingCommands.TryDequeue(out CmdData pending)) pending.Completion?.TrySetResult(null);
 
 			while (queueSignal.CurrentCount > 0)
 			{
@@ -156,11 +230,14 @@ namespace Base.Services
 					break;
 				}
 
-				while (pendingCommands.TryDequeue(out var cmd))
+				// Priority commands (e.g. an urgent re-send triggered by a response)
+				// are always taken before remaining normal commands.
+				while (TryDequeueNext(out var cmd))
 				{
+					byte[] response = null;
 					try
 					{
-						await WriteCmdAsync(cmd.Device, cmd.Cmd, cmd.Wait, cmd.Parameter, ct).ConfigureAwait(false);
+						response = await WriteCmdAsync(cmd.Device, cmd.Cmd, cmd.Wait, cmd.Parameter, cmd.TimeoutMs, ct).ConfigureAwait(false);
 					}
 					catch (OperationCanceledException oce)
 					{
@@ -172,20 +249,36 @@ namespace Base.Services
 					}
 					finally
 					{
-						OnCmdSent?.Invoke(cmd);
+						try { OnCmdSent?.Invoke(cmd); }
+						catch (Exception e) { Log($"[HID] Exception in OnCmdSent handler: {e.Message}"); }
+
+						if (response != null)
+						{
+							try { OnCmdResponse?.Invoke(cmd, response); }
+							catch (Exception e) { Log($"[HID] Exception in OnCmdResponse handler: {e.Message}"); }
+						}
+
+						// Complete any awaiting SendAsync caller (null == timeout/failure).
+						cmd.Completion?.TrySetResult(response);
 					}
 				}
 			}
 		}
 
-		private static async Task WriteCmdAsync(
+		// Takes the next command, preferring the priority queue over the normal one.
+		private static bool TryDequeueNext(out CmdData cmd)
+			=> priorityCommands.TryDequeue(out cmd) || pendingCommands.TryDequeue(out cmd);
+
+		// Returns the device's response for wait commands, otherwise null.
+		private static async Task<byte[]> WriteCmdAsync(
 			Peripheral.PeripheralInterface device,
 			byte[] cmd,
 			bool wait,
 			byte[] parameter,
+			int timeoutMs,
 			CancellationToken ct)
 		{
-			if (device == null) return;
+			if (device == null) return null;
 
 			var param = parameter ?? [];
 			var combined = new byte[cmd.Length + param.Length];
@@ -198,9 +291,10 @@ namespace Base.Services
 				if(wait)
 				{
 					CancellationTokenSource writeCancelationToken = CancellationTokenSource.CreateLinkedTokenSource(ct);
-					writeCancelationToken.CancelAfter(DefaultWaitTimeoutMs);
-					await device.WriteAndReadAsync(combined, writeCancelationToken.Token).ConfigureAwait(false);
+					writeCancelationToken.CancelAfter(timeoutMs);
+					byte[] response = await device.WriteAndReadAsync(combined, writeCancelationToken.Token).ConfigureAwait(false);
 					Log($"[HID] Sent: {BitConverter.ToString(combined)}");
+					return response;
 				}
 				else
 				{
@@ -209,7 +303,7 @@ namespace Base.Services
 						Log($"[HID] Sent: {BitConverter.ToString(combined)}");
 					else
 						Log($"[HID] Failed to send: {BitConverter.ToString(combined)}");
-					await Task.Delay(DefaultInterCommandDelayMs, ct).ConfigureAwait(false);
+					//await Task.Delay(DefaultInterCommandDelayMs, ct).ConfigureAwait(false);
 				}
 			}
 			catch (OperationCanceledException) { throw; }
@@ -217,6 +311,8 @@ namespace Base.Services
 			{
 				Log($"[HID] Failed to send data: {ex.Message}");
 			}
+
+			return null;
 		}
 
 		private static void Log(string message)
@@ -239,18 +335,27 @@ namespace Base.Services
 
 		public readonly struct CmdData
 		{
-			public CmdData(Peripheral.PeripheralInterface device, byte[] cmd, bool wait, byte[] parameter)
+			public CmdData(Peripheral.PeripheralInterface device, byte[] cmd, bool wait, int timeoutMs, byte[] parameter)
+				: this(device, cmd, wait, timeoutMs, parameter, null) { }
+
+			public CmdData(Peripheral.PeripheralInterface device, byte[] cmd, bool wait, int timeoutMs, byte[] parameter, TaskCompletionSource<byte[]> completion)
 			{
 				Device = device;
 				Cmd = cmd;
 				Wait = wait;
 				Parameter = parameter ?? Array.Empty<byte>();
+				TimeoutMs = timeoutMs;
+				Completion = completion;
 			}
 
 			public Peripheral.PeripheralInterface Device { get; }
 			public byte[] Cmd { get; }
 			public byte[] Parameter { get; }
 			public bool Wait { get; }
+			public int TimeoutMs { get; }
+			// When set, the worker completes this after the command is processed, carrying
+			// the device reply (or null on timeout/failure). Lets a caller await one command.
+			public TaskCompletionSource<byte[]> Completion { get; }
 		}
 	}
 }

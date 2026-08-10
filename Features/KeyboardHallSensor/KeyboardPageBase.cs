@@ -20,6 +20,7 @@ namespace KeyboardHallSensor
     /// <typeparam name="T">The type of the page that inherits from KeyboardPageBase for instance management.</typeparam>
     public abstract class KeyboardPageBase : PageBase, IKeyboardPage
     {
+        private const string keyboardLayoutName = "keyboard_layout.txt";
         protected ConcurrentDictionary<byte, KeyDisplay> KeyDisplays { get; private set; } = new();
         private ConcurrentStack<KeyDisplay> spawnedKeys = new();
         protected PeripheralInterface ActiveInterface => KeyboardCommonProtocol.Instance.ActiveInterface;
@@ -108,7 +109,7 @@ namespace KeyboardHallSensor
 
         protected void SetupKeyboard()
         {
-            var keyboardLayout = LayoutConverter.Convert();
+            var keyboardLayout = LayoutConverter.Convert(keyboardLayoutName);
             float unit = 50;
             foreach (KeyDef keyDef in keyboardLayout)
             {
@@ -290,7 +291,11 @@ namespace KeyboardHallSensor
             }
         }
 
-        [GET("/ClearAll", true)]
+        [GET("/ClearAll", true,
+            Summary = "Clear all keys from the keyboard view.",
+            Description = "Clears every key currently rendered on the keyboard view — both laid-out keys and " +
+                "any unmapped (\"rogue\") keys — then rebuilds the empty base keyboard layout. Takes no " +
+                "parameters. Use this to reset the display before capturing a fresh set of keys.")]
         protected virtual void ClearAll()
         {
             foreach (var item in spawnedKeys)

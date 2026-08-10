@@ -1,0 +1,318 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
+using Microsoft.Win32;
+
+namespace Base.Pages;
+
+using Base.Core;
+using Base.Helpers;
+using Base.Services;
+
+/// <summary>
+/// Lists the Device Firmware Update packages found in a developer-chosen folder. Each package may be
+/// a zip, an unzipped folder, or both; the page offers unzip, per-target update (device / dongle /
+/// FOTA) and zip cleanup, driven by the batch files inside each unzipped package.
+/// </summary>
+[PageInfo("Firmware Update",
+	Glyph = "",           // UpdateRestore (Segoe Fluent Icons).
+	ShortName = "FW",
+	Description = "Browse and run Device Firmware Update packages.",
+	ShowDeviceSelection = false)]
+public partial class FirmwarePage : PageBase, INotifyPropertyChanged
+{
+	// Persisted between launches; the developer chooses where the FW packages live.
+	[Persist]
+	private string firmwareFolder = string.Empty;
+
+	private string searchText = string.Empty;
+
+	private readonly ObservableCollection<FirmwarePackage> packages = new();
+
+	public ICollectionView PackagesView { get; }
+
+	public ICommand UnzipCommand { get; }
+	public ICommand UpdateDeviceCommand { get; }
+	public ICommand UpdateDongleCommand { get; }
+	public ICommand UpdateFotaCommand { get; }
+	public ICommand DeleteZipCommand { get; }
+
+	public event PropertyChangedEventHandler PropertyChanged;
+
+	public FirmwarePage()
+	{
+		InitializeComponent();
+		DataContext = this;
+
+		PackagesView = CollectionViewSource.GetDefaultView(packages);
+		PackagesView.Filter = FilterPackage;
+		ApplySort(0);
+
+		UnzipCommand = new RelayCommand<FirmwarePackage>(Unzip);
+		UpdateDeviceCommand = new RelayCommand<FirmwarePackage>(p => RunBat(p, p?.DeviceBatPath));
+		UpdateDongleCommand = new RelayCommand<FirmwarePackage>(p => RunBat(p, p?.DongleBatPath));
+		UpdateFotaCommand = new RelayCommand<FirmwarePackage>(p => RunBat(p, p?.FotaBatPath));
+		DeleteZipCommand = new RelayCommand<FirmwarePackage>(DeleteZip);
+	}
+
+	public string FolderPath
+	{
+		get => firmwareFolder;
+		set
+		{
+			string next = value ?? string.Empty;
+			if (string.Equals(firmwareFolder, next, StringComparison.Ordinal))
+				return;
+
+			firmwareFolder = next;
+			OnPropertyChanged();
+			Rescan();
+		}
+	}
+
+	public string SearchText
+	{
+		get => searchText;
+		set
+		{
+			string next = value ?? string.Empty;
+			if (string.Equals(searchText, next, StringComparison.Ordinal))
+				return;
+
+			searchText = next;
+			OnPropertyChanged();
+			PackagesView.Refresh();
+			UpdateEmptyState();
+		}
+	}
+
+	protected override void OnEnable()
+	{
+		base.OnEnable();
+
+		// The persisted folder is loaded in Awake (before the page is first shown), so surface it now
+		// and rescan on every entry in case the folder's contents changed while we were away.
+		OnPropertyChanged(nameof(FolderPath));
+		Rescan();
+	}
+
+	// ---- Folder / list plumbing ----
+
+	private void Browse_Click(object sender, RoutedEventArgs e)
+	{
+		OpenFolderDialog dialog = new()
+		{
+			Title = "Select firmware folder",
+			Multiselect = false
+		};
+
+		if (Directory.Exists(FolderPath))
+			dialog.InitialDirectory = FolderPath;
+
+		if (dialog.ShowDialog() == true)
+			FolderPath = dialog.FolderName;
+	}
+
+	private void Refresh_Click(object sender, RoutedEventArgs e)
+	{
+		Rescan();
+	}
+
+	private void Sort_Changed(object sender, SelectionChangedEventArgs e)
+	{
+		if (PackagesView == null)
+			return;
+
+		ApplySort(SortBox.SelectedIndex);
+	}
+
+	private void Rescan()
+	{
+		List<FirmwarePackage> found = FirmwareScanner.Scan(FolderPath);
+
+		packages.Clear();
+		foreach (FirmwarePackage package in found)
+			packages.Add(package);
+
+		ApplySort(SortBox?.SelectedIndex ?? 0);
+		PackagesView?.Refresh();
+		UpdateEmptyState();
+	}
+
+	private void ApplySort(int index)
+	{
+		if (PackagesView == null)
+			return;
+
+		PackagesView.SortDescriptions.Clear();
+
+		switch (index)
+		{
+			case 1:
+				PackagesView.SortDescriptions.Add(new SortDescription(nameof(FirmwarePackage.Modified), ListSortDirection.Ascending));
+				break;
+			case 2:
+				PackagesView.SortDescriptions.Add(new SortDescription(nameof(FirmwarePackage.Created), ListSortDirection.Descending));
+				break;
+			case 3:
+				PackagesView.SortDescriptions.Add(new SortDescription(nameof(FirmwarePackage.DeviceName), ListSortDirection.Ascending));
+				break;
+			case 4:
+				PackagesView.SortDescriptions.Add(new SortDescription(nameof(FirmwarePackage.Version), ListSortDirection.Ascending));
+				break;
+			default:
+				// Default: most recently modified first (typically the freshest download).
+				PackagesView.SortDescriptions.Add(new SortDescription(nameof(FirmwarePackage.Modified), ListSortDirection.Descending));
+				break;
+		}
+	}
+
+	private bool FilterPackage(object item)
+	{
+		if (string.IsNullOrWhiteSpace(searchText))
+			return true;
+
+		if (item is not FirmwarePackage package)
+			return false;
+
+		string query = searchText.Trim();
+
+		return Contains(package.DeviceName, query)
+			|| Contains(package.Version, query)
+			|| Contains(package.FullName, query);
+	}
+
+	private static bool Contains(string source, string query)
+	{
+		return !string.IsNullOrEmpty(source)
+			&& source.Contains(query, StringComparison.OrdinalIgnoreCase);
+	}
+
+	private void UpdateEmptyState()
+	{
+		if (EmptyPlaceholder == null)
+			return;
+
+		bool hasVisibleItems = PackagesView != null && PackagesView.Cast<object>().Any();
+		EmptyPlaceholder.Visibility = hasVisibleItems ? Visibility.Collapsed : Visibility.Visible;
+	}
+
+	// ---- Actions ----
+
+	private void Unzip(FirmwarePackage package)
+	{
+		if (package == null || !package.HasZip || string.IsNullOrEmpty(package.ZipPath))
+			return;
+
+		try
+		{
+			string parent = Path.GetDirectoryName(package.ZipPath);
+			string target = Path.Combine(parent ?? FolderPath, package.BaseName);
+
+			ZipFile.ExtractToDirectory(package.ZipPath, target);
+			Debug.Log("Firmware package extracted:", target);
+		}
+		catch (Exception ex)
+		{
+			Debug.Log("Firmware unzip failed:", ex.Message);
+			MessageBox.Show($"Could not unzip the package.\n\n{ex.Message}",
+				"Unzip failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+		}
+
+		Rescan();
+	}
+
+	private void DeleteZip(FirmwarePackage package)
+	{
+		if (package == null || !package.HasZip || string.IsNullOrEmpty(package.ZipPath))
+			return;
+
+		MessageBoxResult confirm = MessageBox.Show(
+			$"Delete the ZIP for \"{package.DeviceName}\"?\n\n{Path.GetFileName(package.ZipPath)}\n\nThe unzipped folder is kept.",
+			"Delete ZIP", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+		if (confirm != MessageBoxResult.Yes)
+			return;
+
+		try
+		{
+			File.Delete(package.ZipPath);
+			Debug.Log("Firmware ZIP deleted:", package.ZipPath);
+		}
+		catch (Exception ex)
+		{
+			Debug.Log("Firmware ZIP delete failed:", ex.Message);
+			MessageBox.Show($"Could not delete the ZIP.\n\n{ex.Message}",
+				"Delete failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+		}
+
+		Rescan();
+	}
+
+	private async void RunBat(FirmwarePackage package, string batPath)
+	{
+		if (package == null || string.IsNullOrEmpty(batPath) || !File.Exists(batPath))
+			return;
+
+		package.IsBusy = true;
+		try
+		{
+			int exitCode = await Task.Run(() => ExecuteBatch(batPath));
+			Debug.Log("Firmware batch finished:", Path.GetFileName(batPath), $"exit={exitCode}");
+		}
+		catch (Exception ex)
+		{
+			Debug.Log("Firmware batch failed:", ex.Message);
+			MessageBox.Show($"Could not run the update.\n\n{ex.Message}",
+				"Update failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+		}
+		finally
+		{
+			package.IsBusy = false;
+		}
+	}
+
+	// Runs the batch hidden with its working directory set to the package folder. Output is captured
+	// (so the child streams never block) but intentionally discarded.
+	private static int ExecuteBatch(string batPath)
+	{
+		ProcessStartInfo psi = new()
+		{
+			FileName = "cmd.exe",
+			Arguments = $"/c \"{batPath}\"",
+			WorkingDirectory = Path.GetDirectoryName(batPath),
+			UseShellExecute = false,
+			CreateNoWindow = true,
+			RedirectStandardOutput = true,
+			RedirectStandardError = true
+		};
+
+		using Process process = Process.Start(psi);
+		if (process == null)
+			return -1;
+
+		process.OutputDataReceived += (_, _) => { };
+		process.ErrorDataReceived += (_, _) => { };
+		process.BeginOutputReadLine();
+		process.BeginErrorReadLine();
+		process.WaitForExit();
+
+		return process.ExitCode;
+	}
+
+	private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+	{
+		PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+	}
+}

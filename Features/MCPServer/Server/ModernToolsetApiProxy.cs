@@ -83,6 +83,73 @@ public sealed class ModernToolsetApiProxy : IDisposable
         }
     }
 
+    /// <summary>
+    /// Retrieves the structured documentation manifest from <c>GET /api/v1/schema</c> and converts it
+    /// into <see cref="ParsedRoute"/> objects carrying real descriptions and full JSON Schemas. Returns
+    /// an empty list when the endpoint is unavailable (e.g. an older app build), signalling the caller
+    /// to fall back to string-based <see cref="DiscoverRoutesAsync"/> discovery.
+    /// </summary>
+    public async Task<IReadOnlyList<ParsedRoute>> DiscoverSchemaAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await _http.GetAsync($"{_baseUrl}/api/v1/schema", ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+                return [];
+
+            var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+
+            // Response shape: { "status": 200, "data": [ { verb, path, description, inputSchema, ... } ] }
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("data", out var dataEl) ||
+                dataEl.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var routes = new List<ParsedRoute>();
+            foreach (var item in dataEl.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+
+                var verb = GetString(item, "verb")?.ToUpperInvariant();
+                var path = GetString(item, "path");
+                if (string.IsNullOrWhiteSpace(verb) || string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                var description = GetString(item, "description") ?? $"[{verb}] {path}";
+
+                // Clone detaches the element from the JsonDocument so it survives disposal.
+                JsonElement? inputSchema = item.TryGetProperty("inputSchema", out var isEl)
+                    ? isEl.Clone()
+                    : null;
+                JsonElement? outputSchema = item.TryGetProperty("outputSchema", out var osEl)
+                    ? osEl.Clone()
+                    : null;
+
+                routes.Add(new ParsedRoute(
+                    Verb:           verb,
+                    Path:           path,
+                    ToolName:       RouteParser.BuildToolName(verb, path),
+                    Description:    description,
+                    Schema:         new JsonSchema(),
+                    Parameters:     [],
+                    RawInputSchema: inputSchema,
+                    RawOutputSchema: outputSchema
+                ));
+            }
+            return routes;
+        }
+        catch (Exception ex)
+        {
+            LogError($"Schema discovery failed: {ex.Message}");
+            return [];
+        }
+    }
+
+    private static string? GetString(JsonElement obj, string name)
+        => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
+
     // ── Tool invocation ───────────────────────────────────────────────────────
 
     /// <summary>

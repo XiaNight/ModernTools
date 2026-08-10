@@ -159,11 +159,12 @@ namespace GenericMouseAnalyzer
         }
 
 
-        /// <summary>
-        /// Export PNG file directly to user's download folder without asking with timestamp.
-        /// </summary>
         [AppMenuItem("Export PNG", Key = System.Windows.Input.Key.F3)]
-        [GET("export_png")]
+        [GET("export_png",
+            Summary = "Export the sensor view as a PNG.",
+            Description = "Exports the current sensor view as a PNG image directly to the user's Downloads " +
+                "folder, using a timestamped filename (SensorData_yyyyMMdd_HHmmss.png). Takes no parameters. " +
+                "No-op if a previous export is still in progress.")]
         private void ExportPNG()
         {
             if (pngExportTask != null && !pngExportTask.IsCompleted)

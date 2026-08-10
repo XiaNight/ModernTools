@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using MCPServer.Protocol;
 
@@ -11,8 +12,10 @@ namespace MCPServer.Server;
 public static class RouteParser
 {
     // Pattern: "VERB /path/segment?param1=TypeName(default)&param2=TypeName => Namespace.Class.Method"
+    // The query segment is matched with \S+ so parameter tokens (which contain '=') are captured
+    // whole, stopping at the space before " => ".
     private static readonly Regex RouteRegex = new(
-        @"^(?<verb>GET|POST|PUT|DELETE|PATCH)\s+(?<path>[^\s?]+)(?:\?(?<params>[^\s=>]+))?\s*=>\s*(?<handler>.+)$",
+        @"^(?<verb>GET|POST|PUT|DELETE|PATCH)\s+(?<path>[^\s?]+)(?:\?(?<params>\S+))?\s*=>\s*(?<handler>.+)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Parameter token: "name=TypeName" or "name=TypeName(defaultValue)"
@@ -68,7 +71,12 @@ public static class RouteParser
 
     // ── Naming ────────────────────────────────────────────────────────────────
 
-    private static string BuildToolName(string verb, string path)
+    /// <summary>
+    /// Derives the snake_case MCP tool name for a route. Public so the structured
+    /// <c>/api/v1/schema</c> discovery path produces names identical to the string-parsing fallback,
+    /// keeping collision handling consistent across both.
+    /// </summary>
+    public static string BuildToolName(string verb, string path)
     {
         // Strip known boilerplate prefixes
         var normalised = path
@@ -181,7 +189,11 @@ public sealed record ParsedRoute(
     string ToolName,
     string Description,
     JsonSchema Schema,
-    List<ParsedParam> Parameters
+    List<ParsedParam> Parameters,
+    // Set only when the route came from the structured /api/v1/schema manifest; carried straight
+    // through to the MCP tool so complex DTO bodies keep their full nested schema and descriptions.
+    JsonElement? RawInputSchema = null,
+    JsonElement? RawOutputSchema = null
 );
 
 public sealed record ParsedParam(

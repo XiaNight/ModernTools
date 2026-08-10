@@ -420,3 +420,7 @@ FodyWeavers.xsd
 
 # Windows system stuff
 **/desktop.ini
+
+# Random AI stuff
+.fuse_hidden*
+docs/maintenance/

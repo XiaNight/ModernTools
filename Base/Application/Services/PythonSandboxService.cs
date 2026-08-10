@@ -65,8 +65,11 @@ namespace Base.Services
 
         // ── HTTP API ──────────────────────────────────────────────────────────────
 
-        /// <summary>Returns the status of a named execution (state + exit code).</summary>
-        [GET("status")]
+        [GET("status",
+            Summary = "Get the status of a named Python execution.",
+            Description = "Returns the status of a named execution — its state (NotStarted/Running/Exited), exit " +
+                "code, and whether the embedded Python runtime is ready. Query: ?name=<execution name> " +
+                "(defaults to \"default\").")]
         private ApiResponse GetStatusApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
@@ -78,16 +81,23 @@ namespace Base.Services
             }
         }
 
-        /// <summary>Downloads and verifies the embedded Python runtime.</summary>
-        [POST("setup")]
+        [POST("setup",
+            Summary = "Download and prepare the embedded Python runtime.",
+            Description = "Downloads and verifies the embedded Python runtime so scripts can run. Takes no " +
+                "parameters. Safe to call repeatedly; returns immediately if Python is already installed. " +
+                "Returns a result with success, message, pythonPath and version.")]
         private async Task<ApiResponse> SetupApi()
         {
             var result = await SetupEnvironmentAsync();
             return new ApiResponse { Status = result.Success ? 200 : 500, Data = result };
         }
 
-        /// <summary>Starts a named Python execution and returns immediately.</summary>
-        [POST("run")]
+        [POST("run",
+            Summary = "Start a Python script running in the background.",
+            Description = "Starts a named Python execution and returns immediately (does not wait for the script " +
+                "to finish). JSON body: { \"name\": string (execution name, defaults to \"default\"; reuse it " +
+                "to read/write/close the same execution later), \"body\": string (the Python source code to " +
+                "run) }. Use read/write/status/close to interact with the running execution.")]
         private ApiResponse RunApi(RunRequest request)
         {
             if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
@@ -99,12 +109,13 @@ namespace Base.Services
             return new ApiResponse { Status = success ? 200 : 400, Data = result };
         }
 
-        /// <summary>
-        /// Runs a Python script, waits until it finishes (or the timeout elapses), and returns
-        /// all stdout/stderr output in a single response.
-        /// If the timeout elapses the process is killed and <c>timedOut</c> is <c>true</c>.
-        /// </summary>
-        [POST("runwait")]
+        [POST("runwait",
+            Summary = "Run a Python script and wait for its output.",
+            Description = "Runs a Python script, waits until it finishes (or the timeout elapses), and returns " +
+                "all stdout/stderr output in a single response. JSON body: { \"name\": string (execution " +
+                "name, defaults to \"default\"), \"body\": string (the Python source code to run), " +
+                "\"timeoutMs\": integer (max time to wait in milliseconds; 0 or negative waits indefinitely; " +
+                "defaults to 30000) }. If the timeout elapses the process is killed and timedOut is true.")]
         private async Task<ApiResponse> RunWaitApi(RunWaitRequest request)
         {
             if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
@@ -114,8 +125,11 @@ namespace Base.Services
             return new ApiResponse { Status = status, Data = result };
         }
 
-        /// <summary>Returns stdout written since the last Read call for a named execution.</summary>
-        [GET("read")]
+        [GET("read",
+            Summary = "Read new stdout from a running execution.",
+            Description = "Returns the stdout written since the last read call for a named execution (a draining " +
+                "read). Query: ?name=<execution name> (defaults to \"default\"). Responds 404 if no execution " +
+                "with that name exists.")]
         private ApiResponse ReadApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
@@ -127,8 +141,11 @@ namespace Base.Services
             }
         }
 
-        /// <summary>Writes a line to the stdin of a named execution.</summary>
-        [POST("write")]
+        [POST("write",
+            Summary = "Write a line to a running execution's stdin.",
+            Description = "Writes a line to the stdin of a named execution (for scripts that call input()). " +
+                "JSON body: { \"name\": string (execution name, defaults to \"default\"), \"input\": string " +
+                "(the text to send; a newline is appended) }. Responds 404 if no execution with that name exists.")]
         private ApiResponse WriteApi(WriteRequest request)
         {
             if (request == null) return new ApiResponse { Status = 400, Data = new { error = "Request body required." } };
@@ -142,8 +159,11 @@ namespace Base.Services
             }
         }
 
-        /// <summary>Kills a named execution and removes it.</summary>
-        [POST("close")]
+        [POST("close",
+            Summary = "Kill and remove a named execution.",
+            Description = "Kills a named execution and removes it (frees the name for reuse). Body or query: " +
+                "name=<execution name> (defaults to \"default\"). Always returns success; closing an unknown " +
+                "execution is a no-op.")]
         private ApiResponse CloseApi(string name = "default")
         {
             if (string.IsNullOrEmpty(name)) name = "default";
