@@ -12,34 +12,7 @@ using System.Windows.Threading;
 
 namespace ArmouryProtocol;
 
-/*
- * 3-1 Set Advance Effect (Layer) - Mode
- * C1 00 00 00 0A 00 13 06
- * 
- * 3-2 Set Advance Effect (Layer) - Dat
- * C1 01 00 00 72 53 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
- * C1 01 00 00 5F 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
- * C1 01 00 00 4C 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
- * C1 01 00 00 39 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
- * C1 01 00 00 26 13 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
- * C1 01 00 00 13 93 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00 FF 00 00
-
- * 3-3 Get Advance Effect (Reactive) - Setting
- * C1 02 03 00 0F 32 01 FF FF 00 00 00 00 00 00 00 00 00 00 00
-
- * 3-3 Get Advance Effect (Ripple ) - Setting
- * C1 02 05 02 64 32 01 FF 01 01 64 00 00 00 00 00 00 00 00
- * C1 02 05 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
- * C1 02 05 00 00 00 00 00 00 00 00 00 00
-
- * 3-4 Set Advance Effect - Brightness
- * C1 03 00 00 32
-
- * 3-5 Set Advance Effect (Layer) - Apply
- * C1 04 00 00 8E 71 00 00 00 00 00 00
- */
-
-[PageInfo("Advanced Lighting", Path = ["Keyboard", "Armoury"])]
+[PageInfo("Armoury Lighting", Glyph = "\uE781", Path = ["Keyboard", "Armoury"])]
 public partial class LightingEffectPage : PageBase
 {
     [Persist]
