@@ -253,6 +253,7 @@ $plugins = [ordered]@{
     'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
     'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
     'AiComposer'           = 'Features\AiComposer\AiComposer.csproj'
+    'CommonTestTools'      = 'Features\CommonTestTools\CommonTestTools.csproj'
 }
 
 # --- Standalone companion executables bundled alongside the app (subfolder => project).

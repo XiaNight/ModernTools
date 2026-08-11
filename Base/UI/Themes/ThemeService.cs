@@ -28,10 +28,6 @@ namespace Base.UI.Themes
 		public override void Start()
 		{
 			base.Start();
-			// The catalogue has already loaded the persisted Mode by now; App.OnStartup applied it
-			// before the window existed, so re-apply here to refresh the window frame and notify any
-			// behaviours that came up early.
-			ApplyAndNotify();
 		}
 
 		/// <summary>Sets the mode programmatically (e.g. from the title-bar theme toggle) and applies it.</summary>

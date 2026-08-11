@@ -7,8 +7,8 @@ namespace Base.Components;
 /// <summary>TimeSpan / duration editor: hour / minute / second boxes.</summary>
 public partial class ConfigTimeSpanField : UserControl, IConfigEditor
 {
-    private ConfigItem _item;
-    private bool _updating;
+    private ConfigItem item;
+    private bool updating;
 
     public ConfigTimeSpanField()
     {
@@ -17,7 +17,7 @@ public partial class ConfigTimeSpanField : UserControl, IConfigEditor
 
     public void Bind(ConfigItem item)
     {
-        _item = item;
+        this.item = item;
 
         ConfigEditorUtil.AttachNumericFilter(Hours, allowNegative: false, allowDecimal: false);
         ConfigEditorUtil.AttachNumericFilter(Minutes, allowNegative: false, allowDecimal: false);
@@ -30,7 +30,7 @@ public partial class ConfigTimeSpanField : UserControl, IConfigEditor
         WireCommit(Seconds);
     }
 
-    private TimeSpan Current() => _item.Get() is TimeSpan ts ? ts : TimeSpan.Zero;
+    private TimeSpan Current() => item.Get() is TimeSpan ts ? ts : TimeSpan.Zero;
 
     private void WriteControls(TimeSpan value)
     {
@@ -54,16 +54,16 @@ public partial class ConfigTimeSpanField : UserControl, IConfigEditor
 
     private void Recompose()
     {
-        if (_updating) return;
+        if (updating) return;
 
         int h = Math.Max(0, ConfigEditorUtil.ReadInt(Hours, 0));
         int m = Math.Max(0, ConfigEditorUtil.ReadInt(Minutes, 0));
         int s = Math.Max(0, ConfigEditorUtil.ReadInt(Seconds, 0));
 
-        _item.Set(new TimeSpan(h, m, s));
+        item.Set(new TimeSpan(h, m, s));
 
-        _updating = true;
+        updating = true;
         WriteControls(Current());
-        _updating = false;
+        updating = false;
     }
 }

@@ -1,18 +1,78 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace Base.Pages;
 
 /// <summary>
 /// Result of parsing a firmware package name into a human-readable device name and version.
 /// </summary>
-public sealed class FirmwareParseResult
+public sealed class FirmwareParseResult(string deviceName, Version version)
 {
-	public string DeviceName { get; init; } = string.Empty;
-	public string Version { get; init; } = string.Empty;
+	public string DeviceName { get; init; } = deviceName;
+	public Version Version { get; init; } = version;
+}
+
+public readonly partial struct Version(int major, int minor, int patch) : IComparable<Version>
+{
+	public int Major { get; init; } = major;
+	public int Minor { get; init; } = minor;
+	public int Patch { get; init; } = patch;
+
+	public static Version Convert(string[] segments)
+	{
+		int major = segments.Length > 0 && int.TryParse(segments[0], out int m) ? m : 0;
+		int minor = segments.Length > 1 && int.TryParse(segments[1], out int n) ? n : 0;
+		int patch = segments.Length > 2 && int.TryParse(segments[2], out int p) ? p : 0;
+		return new Version(major, minor, patch);
+	}
+
+	[GeneratedRegex(@"^[Vv]?(\d+)[^\d]*(\d+)[^\d]*(\d+)")]
+	private static partial Regex VersionRegex();
+
+	/// <summary>
+	/// Tries to parse a version string into a Version struct.
+	/// Ignoring any leading 'V' or 'v' and splitting by any none integers.
+	/// </summary>
+	/// <param name="raw"></param>
+	/// <param name="version"></param>
+	/// <returns></returns>
+	public static bool TryParse(string raw, out Version version)
+	{
+		version = default;
+
+		if (string.IsNullOrWhiteSpace(raw))
+			return false;
+
+		Match match = VersionRegex().Match(raw);
+		if (match.Success)
+		{
+			int major = int.TryParse(match.Groups[1].Value, out int m) ? m : 0;
+			int minor = int.TryParse(match.Groups[2].Value, out int n) ? n : 0;
+			int patch = int.TryParse(match.Groups[3].Value, out int p) ? p : 0;
+			version = new Version(major, minor, patch);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	public bool IsValid => Major > 0 || Minor > 0 || Patch > 0;
+
+	public readonly int CompareTo(Version other)
+	{
+		int cmp = Major.CompareTo(other.Major);
+		if (cmp != 0) return cmp;
+		cmp = Minor.CompareTo(other.Minor);
+		return cmp != 0 ? cmp : Patch.CompareTo(other.Patch);
+	}
+
+	public override readonly string ToString()
+	{
+		return IsValid ? $"V{Major:D2}_{Minor:D2}_{Patch:D2}" : "--";
+	}
 }
 
 /// <summary>
@@ -55,21 +115,17 @@ public static class FirmwareNameParser
 		if (versionIndex < 0)
 		{
 			// No version token at all: treat the whole (prefix-stripped) name as the device name.
-			return new FirmwareParseResult
-			{
-				DeviceName = tokens.Length > 0 ? string.Join(" ", tokens) : rawName ?? string.Empty,
-				Version = string.Empty
-			};
+			return new FirmwareParseResult(tokens.Length > 0 ? string.Join(" ", tokens) : rawName ?? string.Empty, default);
 		}
 
 		string deviceName = versionIndex > 0
 			? string.Join(" ", tokens[..versionIndex])
 			: (rawName ?? string.Empty);
 
-		List<string> segments = new()
-		{
+		List<string> segments =
+		[
 			tokens[versionIndex].Substring(1) // strip the leading 'V'
-		};
+		];
 
 		for (int i = versionIndex + 1; i < tokens.Length; i++)
 		{
@@ -79,11 +135,7 @@ public static class FirmwareNameParser
 			segments.Add(tokens[i]);
 		}
 
-		return new FirmwareParseResult
-		{
-			DeviceName = deviceName,
-			Version = string.Join(".", segments)
-		};
+		return new FirmwareParseResult(deviceName, Version.Convert(segments.ToArray()));
 	}
 
 	/// <summary>A version head is 'V' (or 'v') followed by one or more digits, e.g. "V96".</summary>
@@ -92,7 +144,7 @@ public static class FirmwareNameParser
 		if (token.Length < 2)
 			return false;
 
-		if (token[0] != 'V' && token[0] != 'v')
+		if (token[0] is not 'V' and not 'v')
 			return false;
 
 		for (int i = 1; i < token.Length; i++)
@@ -119,7 +171,7 @@ public sealed class FirmwarePackage : INotifyPropertyChanged
 {
 	public string BaseName { get; init; } = string.Empty;
 	public string DeviceName { get; init; } = string.Empty;
-	public string Version { get; init; } = string.Empty;
+	public Version Version { get; init; } = default;
 	public string FullName { get; init; } = string.Empty;
 
 	public bool HasZip { get; init; }
@@ -161,7 +213,7 @@ public sealed class FirmwarePackage : INotifyPropertyChanged
 
 	public bool IsIdle => !isBusy;
 
-	public string VersionDisplay => string.IsNullOrEmpty(Version) ? "—" : Version;
+	public string VersionDisplay => Version.IsValid ? Version.ToString() : "—";
 	public string CreatedText => Created.ToString("yyyy-MM-dd HH:mm");
 	public string ModifiedText => Modified.ToString("yyyy-MM-dd HH:mm");
 	public string StateText => HasUnzipped ? (HasZip ? "Unzipped (+ ZIP)" : "Unzipped") : "Zipped";
@@ -186,13 +238,13 @@ public sealed class FirmwarePackage : INotifyPropertyChanged
 /// </summary>
 public static class FirmwareScanner
 {
-	public const string DeviceBatName = "fw_update_device.bat";
-	public const string DongleBatName = "fw_update_dongle.bat";
-	public const string FotaBatName = "fw_update_device_FOTA.bat";
+	private static readonly string[] deviceBatNames = ["fw_update_device.bat", "Gamepad_FW_Update.bat"];
+	private static readonly string[] dongleBatNames = ["fw_update_dongle.bat", "Dongle_FW_Update.bat"];
+	private static readonly string[] fotaBatNames = ["fw_update_device_FOTA.bat"];
 
 	public static List<FirmwarePackage> Scan(string folder)
 	{
-		List<FirmwarePackage> result = new();
+		List<FirmwarePackage> result = [];
 
 		if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
 			return result;
@@ -218,13 +270,13 @@ public static class FirmwareScanner
 			Accumulator acc = entry.Value;
 			FirmwareParseResult parsed = FirmwareNameParser.Parse(entry.Key);
 
-			string deviceBat = acc.HasUnzipped ? FindBat(acc.FolderPath, DeviceBatName) : null;
-			string dongleBat = acc.HasUnzipped ? FindBat(acc.FolderPath, DongleBatName) : null;
-			string fotaBat = acc.HasUnzipped ? FindBat(acc.FolderPath, FotaBatName) : null;
+			string deviceBat = acc.HasUnzipped ? FindBat(acc.FolderPath, deviceBatNames) : null;
+			string dongleBat = acc.HasUnzipped ? FindBat(acc.FolderPath, dongleBatNames) : null;
+			string fotaBat = acc.HasUnzipped ? FindBat(acc.FolderPath, fotaBatNames) : null;
 
 			// Keep the list to genuine firmware: either the name parsed to a version, or the
 			// unzipped folder contains one of the known update batch files.
-			bool looksLikeFirmware = !string.IsNullOrEmpty(parsed.Version)
+			bool looksLikeFirmware = parsed.Version.IsValid
 				|| deviceBat != null || dongleBat != null || fotaBat != null;
 
 			if (!looksLikeFirmware)
@@ -277,22 +329,25 @@ public static class FirmwareScanner
 	}
 
 	// The batch file may sit at the folder root or one level down after extraction.
-	private static string FindBat(string folder, string fileName)
+	private static string FindBat(string folder, string[] fileNames)
 	{
 		try
 		{
-			string direct = Path.Combine(folder, fileName);
-			if (File.Exists(direct))
-				return direct;
+			foreach (string fileName in fileNames)
+			{
+				string direct = Path.Combine(folder, fileName);
 
-			return Directory
-				.EnumerateFiles(folder, fileName, SearchOption.AllDirectories)
-				.FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+				if (File.Exists(direct))
+					return direct;
+
+				string result = Directory.EnumerateFiles(folder, fileName, SearchOption.AllDirectories)
+					.FirstOrDefault(f => string.Equals(Path.GetFileName(f), fileName, StringComparison.OrdinalIgnoreCase));
+
+				if (!string.IsNullOrEmpty(result)) return result;
+			}
 		}
-		catch
-		{
-			return null;
-		}
+		catch { }
+		return null;
 	}
 
 	private static Accumulator GetOrAdd(Dictionary<string, Accumulator> map, string key)

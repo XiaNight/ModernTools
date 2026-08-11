@@ -18,7 +18,7 @@ namespace Base.Components;
 /// </summary>
 public partial class ConfigDialog : UserControl
 {
-    private FrameworkElement _dismissCard;
+    private FrameworkElement dismissCard;
 
     public ConfigDialog()
     {
@@ -71,11 +71,11 @@ public partial class ConfigDialog : UserControl
             var tpl = Dialog.Template;
             if (tpl == null) return;
 
-            _dismissCard = tpl.FindName("BackgroundElement", Dialog) as FrameworkElement;
+            dismissCard = tpl.FindName("BackgroundElement", Dialog) as FrameworkElement;
             var overlay = tpl.FindName("Container", Dialog) as FrameworkElement
                        ?? tpl.FindName("LayoutRoot", Dialog) as FrameworkElement;
 
-            if (_dismissCard == null || overlay == null) return;
+            if (dismissCard == null || overlay == null) return;
 
             overlay.PreviewMouseLeftButtonDown -= OnOverlayMouseDown;
             overlay.PreviewMouseLeftButtonDown += OnOverlayMouseDown;
@@ -88,8 +88,8 @@ public partial class ConfigDialog : UserControl
 
     private void OnOverlayMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_dismissCard == null) return;
-        if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, _dismissCard)) return;
+        if (dismissCard == null) return;
+        if (e.OriginalSource is DependencyObject src && IsDescendantOf(src, dismissCard)) return;
         Dialog.Hide();
     }
 

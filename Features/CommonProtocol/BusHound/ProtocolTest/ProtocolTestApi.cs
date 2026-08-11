@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 ///   POST /bushound/tests            create (JSON body: name, requestHex, expectedLines, totalTimeoutMs, allowTrailingWildcard)
 ///   POST /bushound/tests/update     update (JSON body incl. id)
 ///   POST /bushound/tests/delete     ?id=  delete
+///   POST /bushound/tests/reorder    ?oldIndex=&newIndex=  move a test to a new position
 ///   POST /bushound/tests/run        ?id=  run one, returns verdict/elapsed/received
 ///   POST /bushound/tests/runall     run all in order
 /// </summary>
@@ -100,6 +101,20 @@ public partial class ASUSBusHoundPage
 		SaveTests();
 		BuildTestRows();
 		return Ok(new { deleted = id });
+	}
+
+	[POST("~/bushound/tests/reorder", requireMainThread: true,
+		Summary = "Move a protocol test to a new position.",
+		Description = "Reorders the test list by moving the test at oldIndex to newIndex, then persists the new " +
+			"order and refreshes the on-screen rows. Body or query: oldIndex=<current 0-based position>, " +
+			"newIndex=<target 0-based position>. Returns the reordered list (id and name in the new order). " +
+			"Responds 400 if either index is out of range.")]
+	public ApiResponse ApiReorderTest(int oldIndex, int newIndex)
+	{
+		if (!MoveTest(oldIndex, newIndex, rebuildRows: true))
+			return Bad($"Index out of range (list has {testsList.Count} test(s)).");
+
+		return Ok(testsList.Select(t => new { id = t.Id, name = t.Name }).ToList());
 	}
 
 	[POST("~/bushound/tests/run", requireMainThread: true,

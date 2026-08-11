@@ -5,6 +5,7 @@
 			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
 			 xmlns:local="clr-namespace:CommonProtocol"
 			 xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+			 xmlns:mtc="clr-namespace:Base.Components;assembly=Base"
 			 xmlns:ui="http://schemas.modernwpf.com/2019"
 			 mc:Ignorable="d" 
 			 d:DesignHeight="600" d:DesignWidth="1170" d:Background="White">
@@ -13,7 +14,7 @@
 			<RowDefinition Height="Auto"/>
 			<RowDefinition Height="*"/>
 		</Grid.RowDefinitions>
-		<ui:SimpleStackPanel Orientation="Horizontal" Spacing="4" Grid.Row="0" Visibility="Visible">
+		<ui:SimpleStackPanel Orientation="Horizontal" Spacing="4" Margin="4,4" Grid.Row="0" Visibility="Visible">
 			<Button x:Name="CaptureBtn" Width="64" Height="48" Padding="0">
 				<ui:SimpleStackPanel Orientation="Vertical">
 					<ui:FontIcon Glyph="&#xE9D2;" FontSize="22" FontFamily="Segoe Fluent Icons"/>
@@ -87,8 +88,8 @@
 			</Grid>
 
 			<!-- Test list -->
-			<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="4,0">
-				<StackPanel x:Name="TestsListPanel"/>
+			<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="4,0,12,0">
+				<mtc:ReorderableListView x:Name="TestsListPanel"/>
 			</ScrollViewer>
 
 			<TextBlock x:Name="TestsEmptyText" Grid.Row="1"

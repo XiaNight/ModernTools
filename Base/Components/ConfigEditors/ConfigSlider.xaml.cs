@@ -12,12 +12,12 @@ namespace Base.Components;
 /// </summary>
 public partial class ConfigSlider : UserControl, IConfigEditor
 {
-    private ConfigItem _item;
-    private Type _type;
-    private bool _isInteger;
-    private double _min;
-    private double _max;
-    private bool _updating;
+    private ConfigItem item;
+    private Type type;
+    private bool isInteger;
+    private double min;
+    private double max;
+    private bool isUpdating;
 
     public ConfigSlider()
     {
@@ -26,17 +26,17 @@ public partial class ConfigSlider : UserControl, IConfigEditor
 
     public void Bind(ConfigItem item)
     {
-        _item = item;
-        _type = item.UnderlyingType;
-        _isInteger = ConfigEditorUtil.IntegerTypes.Contains(_type);
+        this.item = item;
+        type = item.UnderlyingType;
+        isInteger = ConfigEditorUtil.IntegerTypes.Contains(type);
 
-        _min = item.Attr.HasMin ? item.Attr.Min : 0;
-        _max = item.Attr.HasMax ? item.Attr.Max : 100;
-        if (_max < _min) (_min, _max) = (_max, _min);
+        min = item.Attr.HasMin ? item.Attr.Min : 0;
+        max = item.Attr.HasMax ? item.Attr.Max : 100;
+        if (max < min) (min, max) = (max, min);
 
-        Slider.Minimum = _min;
-        Slider.Maximum = _max;
-        if (_isInteger)
+        Slider.Minimum = min;
+        Slider.Maximum = max;
+        if (isInteger)
         {
             Slider.IsSnapToTickEnabled = true;
             Slider.TickFrequency = 1;
@@ -44,14 +44,14 @@ public partial class ConfigSlider : UserControl, IConfigEditor
 
         ConfigEditorUtil.AttachNumericFilter(
             ValueBox,
-            allowNegative: ConfigEditorUtil.SignedTypes.Contains(_type),
-            allowDecimal: ConfigEditorUtil.FloatTypes.Contains(_type));
+            allowNegative: ConfigEditorUtil.SignedTypes.Contains(type),
+            allowDecimal: ConfigEditorUtil.FloatTypes.Contains(type));
 
         Sync();
 
         Slider.ValueChanged += (s, e) =>
         {
-            if (_updating) return;
+            if (isUpdating) return;
             Commit(Slider.Value);
         };
 
@@ -68,7 +68,7 @@ public partial class ConfigSlider : UserControl, IConfigEditor
 
     private void CommitFromBox()
     {
-        if (ConfigEditorUtil.TryParseNumeric(ValueBox.Text, _type, _item.Attr, out object value, out _))
+        if (ConfigEditorUtil.TryParseNumeric(ValueBox.Text, type, item.Attr, out object value, out _))
             Commit(ConfigEditorUtil.ToDouble(value));
         else
             Sync(); // invalid entry — revert to the current value
@@ -76,24 +76,24 @@ public partial class ConfigSlider : UserControl, IConfigEditor
 
     private void Commit(double raw)
     {
-        double d = ConfigEditorUtil.Clamp(raw, _min, _max);
-        if (_isInteger) d = Math.Round(d);
+        double d = ConfigEditorUtil.Clamp(raw, min, max);
+        if (isInteger) d = Math.Round(d);
 
         object value;
-        try { value = Convert.ChangeType(d, _type, CultureInfo.InvariantCulture); }
+        try { value = Convert.ChangeType(d, type, CultureInfo.InvariantCulture); }
         catch { return; }
 
-        _item.Set(value);
+        item.Set(value);
         Sync();
     }
 
     /// <summary>Pushes the member's current value into both the slider and the value box.</summary>
     private void Sync()
     {
-        _updating = true;
-        object readback = _item.Get();
-        Slider.Value = ConfigEditorUtil.Clamp(ConfigEditorUtil.ToDouble(readback), _min, _max);
+        isUpdating = true;
+        object readback = item.Get();
+        Slider.Value = ConfigEditorUtil.Clamp(ConfigEditorUtil.ToDouble(readback), min, max);
         ValueBox.Text = ConfigEditorUtil.FormatValue(readback);
-        _updating = false;
+        isUpdating = false;
     }
 }

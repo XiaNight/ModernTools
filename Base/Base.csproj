@@ -93,10 +93,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Framework\Behaviors\**" />
-    <EmbeddedResource Remove="Framework\Behaviors\**" />
-    <None Remove="Framework\Behaviors\**" />
-    <Page Remove="Framework\Behaviors\**" />
+    <Compile Remove="Framework\Behaviours\**" />
+    <EmbeddedResource Remove="Framework\Behaviours\**" />
+    <None Remove="Framework\Behaviours\**" />
+    <Page Remove="Framework\Behaviours\**" />
   </ItemGroup>
 
   <ItemGroup>

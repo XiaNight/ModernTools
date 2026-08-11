@@ -161,10 +161,61 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         }
     }
 
+    /// <summary>Remembers the last height the log panel was dragged to so re-opening restores it.</summary>
+    private GridLength lastLogRowHeight = new GridLength(220);
+
     private void ToggleLog_Click(object sender, RoutedEventArgs e)
     {
-        isLogVisible = !isLogVisible;
-        LogPanel.Visibility = isLogVisible ? Visibility.Visible : Visibility.Collapsed;
+        SetLogVisible(!isLogVisible);
+    }
+
+    /// <summary>
+    /// Surfaces pages that opted out of the startup navigation scan via [PageInfo(NavOrder &lt; 0)].
+    /// Each hidden page collected during BuildNavigationTabs gets a navigation tab registered so it
+    /// becomes reachable from the sidebar. Registration happens once; the menu item disables after.
+    /// </summary>
+    private void ShowHiddenPages_Click(object sender, RoutedEventArgs e)
+    {
+        if (hiddenPagesRegistered)
+            return;
+
+        int count = 0;
+        foreach ((Type type, PageInfoAttribute info) in hiddenPages)
+        {
+            if (lazyPageTabMap.ContainsKey(type))
+                continue;
+
+            RegisterPageTab(type, info);
+            count++;
+        }
+
+        hiddenPagesRegistered = true;
+        ShowHiddenPagesMenu.IsEnabled = false;
+        LogMessage($"[Nav] Registered {count} hidden page(s) to navigation.");
+    }
+
+    /// <summary>
+    /// Shows or hides the bottom output log, keeping the panel, the drag splitter, and the
+    /// log row height in sync. Collapsing resets the row to zero height so no empty gap is
+    /// left behind, and remembers the previous height for the next time it is opened.
+    /// </summary>
+    private void SetLogVisible(bool visible)
+    {
+        isLogVisible = visible;
+        if (visible)
+        {
+            LogRow.Height = lastLogRowHeight;
+            LogPanel.Visibility = Visibility.Visible;
+            LogSplitter.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            if (LogRow.ActualHeight > 0)
+                lastLogRowHeight = new GridLength(LogRow.ActualHeight);
+            LogPanel.Visibility = Visibility.Collapsed;
+            LogSplitter.Visibility = Visibility.Collapsed;
+            LogRow.Height = new GridLength(0);
+        }
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e)
@@ -337,6 +388,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private readonly Dictionary<Type, PageBase> lazyPageInstanceMap = new();
     private PageBase currentPage = null;
 
+    // Pages whose [PageInfo(NavOrder < 0)] hides them from the navigation on startup.
+    // Collected during BuildNavigationTabs and registered on demand from the View menu.
+    private readonly List<(Type type, PageInfoAttribute info)> hiddenPages = new();
+    private bool hiddenPagesRegistered = false;
+
     private static bool IsSelfReferencingSingleton(Type t, Type openBase)
     {
         for (var cur = t; cur != null && cur != typeof(object); cur = cur.BaseType!)
@@ -394,33 +450,48 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 }
 
                 if (info.NavOrder >= 0)
-                {
-                    PageBase.NavigationAlignment alignment = info.NavAlignment == 1
-                        ? PageBase.NavigationAlignment.Back
-                        : PageBase.NavigationAlignment.Front;
+                    RegisterPageTab(t, info);
+                else
+                    hiddenPages.Add((t, info));
 
-                    AddButtonDelegate add = alignment switch
-                    {
-                        PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
-                        PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
-                        _ => NavTabsManager.AddTop
-                    };
-
-                    INavigationItem newTab = add(
-                        text: info.PageName,
-                        path: info.Path,
-                        glyph: info.Glyph,
-                        secondaryGlyph: info.SecondaryGlyph,
-                        secondaryText: info.ShortName,
-                        order: info.NavOrder);
-
-                    Type capturedType = t;
-                    newTab.OnClick += () => SelectPageLazy(capturedType);
-                    lazyPageTabMap[t] = newTab;
-                }
                 jobs[t].Finish();
             }
         }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
+    /// Builds a navigation tab for a page type from its <see cref="PageInfoAttribute"/> metadata,
+    /// wires lazy instantiation on click, and records it in <see cref="lazyPageTabMap"/>.
+    /// Must be called on the UI thread. No-op if a tab already exists for the type.
+    /// </summary>
+    private INavigationItem RegisterPageTab(Type t, PageInfoAttribute info)
+    {
+        if (lazyPageTabMap.TryGetValue(t, out INavigationItem existing))
+            return existing;
+
+        PageBase.NavigationAlignment alignment = info.NavAlignment == 1
+            ? PageBase.NavigationAlignment.Back
+            : PageBase.NavigationAlignment.Front;
+
+        AddButtonDelegate add = alignment switch
+        {
+            PageBase.NavigationAlignment.Front => NavTabsManager.AddTop,
+            PageBase.NavigationAlignment.Back => NavTabsManager.AddBottom,
+            _ => NavTabsManager.AddTop
+        };
+
+        INavigationItem newTab = add(
+            text: info.PageName,
+            path: info.Path,
+            glyph: info.Glyph,
+            secondaryGlyph: info.SecondaryGlyph,
+            secondaryText: info.ShortName,
+            order: info.NavOrder);
+
+        Type capturedType = t;
+        newTab.OnClick += () => SelectPageLazy(capturedType);
+        lazyPageTabMap[t] = newTab;
+        return newTab;
     }
 
     /// <summary>
@@ -430,7 +501,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public bool SelectPageByType(Type pageType)
     {
         if (pageType == null) return false;
-        if (!lazyPageTabMap.ContainsKey(pageType)) return false;
+        if (!lazyPageTabMap.ContainsKey(pageType))
+        {
+            (Type type, PageInfoAttribute info) = hiddenPages.FirstOrDefault(p => p.type == pageType);
+            if (type == null)
+                return false;
+
+            RegisterPageTab(type, info);
+        }
         SelectPageLazy(pageType);
         return true;
     }
@@ -843,8 +921,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     /// <summary>Opens the output log panel (used by the Home quick-access tile).</summary>
     public void ShowLog()
     {
-        isLogVisible = true;
-        LogPanel.Visibility = Visibility.Visible;
+        SetLogVisible(true);
     }
 
     public IEnumerable<string> ListTabs()

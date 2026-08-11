@@ -1,0 +1,44 @@
+<UserControl x:Class="Base.Components.ReorderableListViewEntry"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:local="clr-namespace:Base.Components"
+             mc:Ignorable="d"
+             d:DesignHeight="48" d:DesignWidth="400">
+    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="0"
+            CornerRadius="8"
+			Margin="0"
+			Padding="8,0">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Drag handle -->
+            <Border x:Name="DragHandle"
+                    Grid.Column="0"
+                    Background="Transparent"
+                    Cursor="SizeNS"
+                    Padding="0,8"
+                    VerticalAlignment="Stretch"
+                    ToolTip="Drag to reorder">
+                <ui:FontIcon Glyph="&#xE76F;"
+                             FontFamily="Segoe Fluent Icons"
+                             FontSize="18"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+            </Border>
+
+            <!-- Content container: host fills this with whatever the entry should show -->
+            <ContentPresenter x:Name="ContentHost"
+                              Grid.Column="1"
+                              Content="{Binding EntryContent, RelativeSource={RelativeSource AncestorType=local:ReorderableListViewEntry}}"
+                              VerticalAlignment="Center"/>
+        </Grid>
+    </Border>
+</UserControl>

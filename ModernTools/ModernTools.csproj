@@ -9,7 +9,7 @@
 		<Nullable>disable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
-		<InformationalVersion>V02_00_06</InformationalVersion>
+		<InformationalVersion>V02_00_07</InformationalVersion>
 		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
 		<AppName>ModernToolset</AppName>
 		<Company>AsusTek Computer Inc.</Company>
@@ -37,6 +37,7 @@
 		<ProjectReference Include="..\Features\AiComposer\AiComposer.csproj" />
 		<ProjectReference Include="..\Features\Audio\Audio.csproj" />
 		<ProjectReference Include="..\Features\CommonProtocol\CommonProtocol.csproj" />
+		<ProjectReference Include="..\Features\CommonTestTools\CommonTestTools.csproj" />
 		<ProjectReference Include="..\Features\Gamepad\GamePad.csproj" />
 		<ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />

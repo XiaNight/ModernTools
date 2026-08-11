@@ -55,15 +55,15 @@
 			<Grid.RowDefinitions>
 				<!-- Menu Bar -->
 				<RowDefinition Height="Auto"/>
-				<RowDefinition Height="2"/>
-				<RowDefinition Height="2"/>
 				<RowDefinition Height="Auto"/>
+				<RowDefinition Height="2"/>
+				<RowDefinition Height="2"/>
 				<!-- Main Content -->
 				<RowDefinition Height="*"/>
 				<!-- Drag Bar -->
-				<RowDefinition Height="4"/>
-				<!-- Log Window -->
 				<RowDefinition Height="Auto"/>
+				<!-- Log Window -->
+				<RowDefinition x:Name="LogRow" Height="0"/>
 				<!-- Footer -->
 				<RowDefinition Height="Auto"/>
 			</Grid.RowDefinitions>
@@ -109,6 +109,8 @@
 					<MenuItem Header="_View">
 						<MenuItem Header="Toggle _Theme" Click="ToggleTheme_Click"/>
 						<MenuItem Header="Toggle _Log Window" Click="ToggleLog_Click"/>
+						<Separator/>
+						<MenuItem Header="Show _Hidden Pages" x:Name="ShowHiddenPagesMenu" Click="ShowHiddenPages_Click"/>
 					</MenuItem>
 					<MenuItem Header="_Help">
 						<MenuItem Header="_About" Click="ShowAbout"/>
@@ -165,14 +167,14 @@
 			</Grid>
 
 			<!-- Loading Bar -->
-			<Grid Grid.Row="1" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
 			<Grid Grid.Row="2" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+			<Grid Grid.Row="3" Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
 			<ProgressBar Grid.Row="2" IsIndeterminate="True" x:Name="PageLoadingBar" Visibility="Collapsed"
 						 Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
 			</ProgressBar>
 
 			<!-- Banners are added at runtime through BannerManager.Instance. -->
-			<StackPanel x:Name="BannerContainer" Grid.Row="3"/>
+			<StackPanel x:Name="BannerContainer" Grid.Row="1"/>
 
 			<!-- Main Content Area with Navigation -->
 			<Grid Grid.Row="4">
@@ -287,7 +289,7 @@
 			<mtc:Footer x:Name="MainFooter" Grid.Row="7"/>
 
 			<!-- Drag Bar -->
-			<GridSplitter Grid.Row="5" Grid.ColumnSpan="1" Height="8" HorizontalAlignment="Stretch" ResizeDirection="Rows"/>
+			<GridSplitter Grid.Row="5" x:Name="LogSplitter" Grid.ColumnSpan="1" Height="8" HorizontalAlignment="Stretch" ResizeDirection="Rows" Visibility="Collapsed"/>
 
 			<Grid.Effect>
 				<BlurEffect x:Name="LoadingBlur" Radius="20" d:Radius="0"/>

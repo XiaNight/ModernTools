@@ -1,6 +1,7 @@
 ﻿#nullable enable
 using API;
 using Base.Core;
+using System.CodeDom;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
@@ -60,7 +61,7 @@ namespace Base.Services.APIService
         public string Verb = "GET";
         public MethodInfo Method = default!;
         public Type DeclaringType = default!;
-        public ParameterInfo[] Parameters = Array.Empty<ParameterInfo>();
+        public ParameterInfo[] Parameters = [];
         public bool IsStatic;
         public bool RequireMainThread;
 
@@ -122,7 +123,7 @@ namespace Base.Services.APIService
             // off the UI thread. Doing this work inline would block startup (and stall the
             // loading-cover fade-out) for no reason — handlers are marshalled back to
             // uiDispatcher per-request when RequireMainThread is set.
-            Task.Run(() => Start(2345));
+            _ = Task.Run(() => Start(2345));
         }
 
         public override void OnDestroy()
@@ -141,7 +142,7 @@ namespace Base.Services.APIService
                     Port = port;
                     BuildRouteTable(AppDomain.CurrentDomain.GetAssemblies());
 
-                    var prefix = $"{host}:{port}/";
+                    string prefix = $"{host}:{port}/";
                     listener.Prefixes.Clear();
                     listener.Prefixes.Add(prefix);
                     listener.Start();
@@ -168,7 +169,7 @@ namespace Base.Services.APIService
                 if (!IsRunning) return;
                 cts?.Cancel();
                 try { listener.Stop(); } catch { }
-                try { thread?.Join(2000); } catch { }
+                try { _ = (thread?.Join(2000)); } catch { }
                 IsRunning = false;
             }
         }
@@ -180,7 +181,7 @@ namespace Base.Services.APIService
                 HttpListenerContext? ctx = null;
                 try
                 {
-                    var get = listener.BeginGetContext(null, null);
+                    IAsyncResult get = listener.BeginGetContext(null, null);
                     if (WaitHandle.WaitAny(new[] { get.AsyncWaitHandle, ct.WaitHandle }) == 1) break;
                     ctx = listener.EndGetContext(get);
                     _ = ThreadPool.UnsafeQueueUserWorkItem(_ => Handle(ctx), null);
@@ -196,34 +197,34 @@ namespace Base.Services.APIService
         // -------------------------------------------------------
         private async Task Handle(HttpListenerContext ctx)
         {
-            var req = ctx.Request;
-            var res = ctx.Response;
+            HttpListenerRequest req = ctx.Request;
+            HttpListenerResponse res = ctx.Response;
             res.ContentType = "application/json; charset=utf-8";
 
             try
             {
-                var verb = req.HttpMethod.ToUpperInvariant();
-                var path = HttpMethodAttribute.Normalize(req.Url!.AbsolutePath).ToLowerInvariant();
+                string verb = req.HttpMethod.ToUpperInvariant();
+                string path = HttpMethodAttribute.Normalize(req.Url!.AbsolutePath).ToLowerInvariant();
 
-                if (!routes.TryGetValue((verb, path), out var candidates) || candidates.Count == 0)
+                if (!routes.TryGetValue((verb, path), out List<Route>? candidates) || candidates.Count == 0)
                 {
                     WriteJson(res, (int)HttpStatusCode.NotFound, new { status = 404, error = "Not Found", path, verb });
                     return;
                 }
 
-                var queryKV = ParseQuery(req.Url.Query);
+                Dictionary<string, string?> queryKV = ParseQuery(req.Url.Query);
 
-                Dictionary<string, object?> paramsKV = new();
+                Dictionary<string, object?> paramsKV = [];
                 object? bodyRoot = null;
                 if (verb is "POST" or "PUT" or "PATCH")
                 {
-                    using var sr = new StreamReader(req.InputStream, Encoding.UTF8);
-                    var bodyText = sr.ReadToEnd();
+                    using StreamReader sr = new(req.InputStream, Encoding.UTF8);
+                    string bodyText = sr.ReadToEnd();
 
                     if (!string.IsNullOrWhiteSpace(bodyText))
                     {
                         // Parse url encoded into paramsKV
-                        foreach (var kv in ParseQuery("?" + bodyText)) paramsKV[kv.Key] = kv.Value;
+                        foreach (KeyValuePair<string, string?> kv in ParseQuery("?" + bodyText)) paramsKV[kv.Key] = kv.Value;
 
                         if (IsJson(req.ContentType))
                         {
@@ -232,7 +233,7 @@ namespace Base.Services.APIService
                                 bodyRoot = JsonSerializer.Deserialize<object>(bodyText, jsonOptions);
                                 if (bodyRoot is JsonElement je && je.ValueKind == JsonValueKind.Object)
                                 {
-                                    foreach (var p in je.EnumerateObject())
+                                    foreach (JsonProperty p in je.EnumerateObject())
                                         paramsKV[p.Name] = ToObject(p.Value);
                                 }
                             }
@@ -264,7 +265,7 @@ namespace Base.Services.APIService
                     }
                     try
                     {
-                        var (target, args) = Bind(route, queryKV, paramsKV, bodyRoot);
+                        (object target, object?[] args) = Bind(route, queryKV, paramsKV, bodyRoot);
 
                         object? result = route.RequireMainThread ? InvokeOnUI(() => route.Method.Invoke(target, args)) : route.Method.Invoke(target, args);
 
@@ -273,7 +274,7 @@ namespace Base.Services.APIService
                         {
                             await task.ConfigureAwait(false);
 
-                            var returnType = route.Method.ReturnType;
+                            Type returnType = route.Method.ReturnType;
 
                             result = returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(Task<>)
                                 ? returnType.GetProperty(nameof(Task<object>.Result))!.GetValue(result)
@@ -334,15 +335,15 @@ namespace Base.Services.APIService
                          ?? throw new InvalidOperationException($"No instance found for {route.DeclaringType.FullName} via Main.FindObjectOfType<T>().");
             }
 
-            var pars = route.Parameters;
-            var args = new object?[pars.Length];
+            ParameterInfo[] pars = route.Parameters;
+            object?[] args = new object?[pars.Length];
 
             if (pars.Length == 0)
                 return (target, args);
 
             if (pars.Length == 1 && ShouldTreatAsComplex(pars[0].ParameterType))
             {
-                var pType = pars[0].ParameterType;
+                Type pType = pars[0].ParameterType;
                 args[0] = bodyRoot is JsonElement je
                     ? JsonSerializer.Deserialize(je.GetRawText(), pType, jsonOptions)
                     : bodyKV.Count > 0 ? MapDictionaryToObject(bodyKV, pType) : BindSimple(pars[0], queryKV.GetValueOrDefault(pars[0].Name!, null));
@@ -351,11 +352,11 @@ namespace Base.Services.APIService
 
             for (int i = 0; i < pars.Length; i++)
             {
-                var p = pars[i];
-                var name = p.Name!;
-                object? val = queryKV.TryGetValue(name, out var qv)
+                ParameterInfo p = pars[i];
+                string name = p.Name!;
+                object? val = queryKV.TryGetValue(name, out string? qv)
                     ? ConvertTo(qv, p.ParameterType)
-                    : bodyKV.TryGetValue(name, out var bv)
+                    : bodyKV.TryGetValue(name, out object? bv)
                         ? bv is JsonElement je ? JsonToType(je, p.ParameterType) : ChangeTypeFlexible(bv, p.ParameterType)
                         : p.HasDefaultValue
                         ? p.DefaultValue
@@ -366,8 +367,16 @@ namespace Base.Services.APIService
             return (target, args);
         }
 
-        private object? ResolveInstance(Type type)
+        private static WpfBehaviour? ResolveInstance(Type type)
         {
+            WpfBehaviour wpfBehaviour = Main.FindObjectOfType(type, true);
+            if(wpfBehaviour == null)
+            {
+                Main.Dispatcher.InvokeAsync(() =>
+                {
+                    Main.SelectPageByType(type);
+                }).Wait();
+            }
             return Main.FindObjectOfType(type, true);
         }
 
@@ -376,13 +385,13 @@ namespace Base.Services.APIService
         // -------------------------------------------------------
         private T InvokeOnUI<T>(Func<T> func)
         {
-            var d = uiDispatcher;
+            Dispatcher? d = uiDispatcher;
             return d == null ? func() : d.CheckAccess() ? func() : d.Invoke(func);
         }
 
         private void InvokeOnUI(Action action)
         {
-            var d = uiDispatcher;
+            Dispatcher? d = uiDispatcher;
             if (d == null) { action(); return; }
             if (d.CheckAccess()) { action(); return; }
             d.Invoke(action);
@@ -393,12 +402,15 @@ namespace Base.Services.APIService
         // -------------------------------------------------------
         internal static bool ShouldTreatAsComplex(Type t)
         {
-            return t == typeof(string) ? false : t.IsPrimitive ? false : (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true;
+            return t != typeof(string) && (!t.IsPrimitive && (Nullable.GetUnderlyingType(t)?.IsPrimitive) != true);
         }
 
-        private static bool IsNullable(Type t) => !t.IsValueType || Nullable.GetUnderlyingType(t) != null;
+        private static bool IsNullable(Type t)
+        {
+            return !t.IsValueType || Nullable.GetUnderlyingType(t) != null;
+        }
 
-        private object? BindSimple(ParameterInfo p, string? value)
+        private static object? BindSimple(ParameterInfo p, string? value)
         {
             return value is null
                 ? IsNullable(p.ParameterType) ? null : throw new InvalidOperationException($"Missing required parameter '{p.Name}'.")
@@ -408,7 +420,7 @@ namespace Base.Services.APIService
         private static object? ConvertTo(string? input, Type targetType)
         {
             if (input is null) return null;
-            var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            Type t = Nullable.GetUnderlyingType(targetType) ?? targetType;
             if (t.IsEnum) return Enum.Parse(t, input, ignoreCase: true);
             if (t == typeof(Guid)) return Guid.Parse(input);
             if (t == typeof(DateTime)) return DateTime.Parse(input, null, System.Globalization.DateTimeStyles.RoundtripKind);
@@ -427,7 +439,7 @@ namespace Base.Services.APIService
         private object? ChangeTypeFlexible(object? value, Type targetType)
         {
             if (value is null) return null;
-            var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            Type t = Nullable.GetUnderlyingType(targetType) ?? targetType;
             if (value is JsonElement je) return JsonToType(je, t);
             if (t.IsInstanceOfType(value)) return value;
 
@@ -436,7 +448,7 @@ namespace Base.Services.APIService
             try { return Convert.ChangeType(value, t); }
             catch
             {
-                var json = JsonSerializer.Serialize(value, jsonOptions);
+                string json = JsonSerializer.Serialize(value, jsonOptions);
                 return JsonSerializer.Deserialize(json, t, jsonOptions);
             }
         }
@@ -453,8 +465,8 @@ namespace Base.Services.APIService
                 JsonValueKind.Null => null!,
                 JsonValueKind.Undefined => null!,
                 JsonValueKind.String => je.GetString()!,
-                JsonValueKind.Number => je.TryGetInt64(out var l) ? l :
-                                        je.TryGetDouble(out var d) ? d :
+                JsonValueKind.Number => je.TryGetInt64(out long l) ? l :
+                                        je.TryGetDouble(out double d) ? d :
                                         je.GetRawText(),
                 JsonValueKind.True => true,
                 JsonValueKind.False => false,
@@ -470,34 +482,42 @@ namespace Base.Services.APIService
         private const string PLAIN_TEXT = "text/plain";
 
         private static bool IsJson(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType.Contains(APPLICATION_JSON, StringComparison.OrdinalIgnoreCase);
+        {
+            return !string.IsNullOrEmpty(contentType) && contentType.Contains(APPLICATION_JSON, StringComparison.OrdinalIgnoreCase);
+        }
 
         private static bool IsFormUrlEncoded(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType.Contains(FORM_URLENCODED, StringComparison.OrdinalIgnoreCase);
+        {
+            return !string.IsNullOrEmpty(contentType) && contentType.Contains(FORM_URLENCODED, StringComparison.OrdinalIgnoreCase);
+        }
 
         static bool IsMultipartFormData(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType.Contains(MULTIPART_FORM_DATA, StringComparison.OrdinalIgnoreCase);
+        {
+            return !string.IsNullOrEmpty(contentType) && contentType.Contains(MULTIPART_FORM_DATA, StringComparison.OrdinalIgnoreCase);
+        }
 
         static bool IsPlainText(string? contentType)
-            => !string.IsNullOrEmpty(contentType) && contentType.Contains(PLAIN_TEXT, StringComparison.OrdinalIgnoreCase);
+        {
+            return !string.IsNullOrEmpty(contentType) && contentType.Contains(PLAIN_TEXT, StringComparison.OrdinalIgnoreCase);
+        }
 
         private static Dictionary<string, string?> ParseQuery(string query)
         {
-            var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, string?> dict = new(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrEmpty(query)) return dict;
-            if (query.StartsWith("?")) query = query[1..];
+            if (query.StartsWith('?')) query = query[1..];
 
-            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            foreach (string part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
             {
-                var idx = part.IndexOf('=');
+                int idx = part.IndexOf('=');
                 if (idx < 0)
                 {
                     dict[WebUtility.UrlDecode(part)] = null;
                 }
                 else
                 {
-                    var k = WebUtility.UrlDecode(part[..idx]);
-                    var v = WebUtility.UrlDecode(part[(idx + 1)..]);
+                    string k = WebUtility.UrlDecode(part[..idx]);
+                    string v = WebUtility.UrlDecode(part[(idx + 1)..]);
                     dict[k] = v;
                 }
             }
@@ -523,10 +543,10 @@ namespace Base.Services.APIService
         private void WriteJson(HttpListenerResponse res, int statusCode, object obj)
         {
             res.StatusCode = statusCode;
-            var json = JsonSerializer.Serialize(obj, jsonOptions);
-            var buf = Encoding.UTF8.GetBytes(json);
+            string json = JsonSerializer.Serialize(obj, jsonOptions);
+            byte[] buf = Encoding.UTF8.GetBytes(json);
             res.ContentLength64 = buf.Length;
-            using var s = res.OutputStream;
+            using Stream s = res.OutputStream;
             s.Write(buf, 0, buf.Length);
         }
 
@@ -538,43 +558,48 @@ namespace Base.Services.APIService
             static IEnumerable<Type> SafeGetTypes(Assembly a)
             {
                 try { return a.GetTypes(); }
-                catch { return Array.Empty<Type>(); }
+                catch { return []; }
             }
 
-            var allTypes = assemblies.SelectMany(SafeGetTypes);
-            foreach (var t in allTypes)
+            IEnumerable<Type> allTypes = assemblies.SelectMany(SafeGetTypes);
+            foreach (Type t in allTypes)
             {
-                if (t.IsAbstract) continue;
+                RegisterType(t);
+            }
+        }
 
-                IEnumerable<MethodInfo> methods;
-                try
-                {
-                    methods = t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
-                }
-                catch { continue; }
+        public void RegisterType(Type t)
+        {
+            if (t.IsAbstract) return;
 
-                foreach (var m in methods)
-                {
-                    var get = m.GetCustomAttribute<GETAttribute>(true);
-                    if (get != null)
-                        AddRoute("GET", BuildFullPath(get.Path, t, m), m, t, get);
+            IEnumerable<MethodInfo> methods;
+            try
+            {
+                methods = t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static);
+            }
+            catch { return; }
 
-                    var post = m.GetCustomAttribute<POSTAttribute>(true);
-                    if (post != null)
-                        AddRoute("POST", BuildFullPath(post.Path, t, m), m, t, post);
-                }
+            foreach (MethodInfo m in methods)
+            {
+                GETAttribute? get = m.GetCustomAttribute<GETAttribute>(true);
+                if (get != null)
+                    AddRoute("GET", BuildFullPath(get.Path, t, m), m, t, get);
+
+                POSTAttribute? post = m.GetCustomAttribute<POSTAttribute>(true);
+                if (post != null)
+                    AddRoute("POST", BuildFullPath(post.Path, t, m), m, t, post);
             }
         }
 
         private object MapDictionaryToObject(Dictionary<string, object?> dict, Type type)
         {
-            var obj = Activator.CreateInstance(type)
+            object obj = Activator.CreateInstance(type)
                       ?? throw new InvalidOperationException($"Could not create instance of {type.FullName}");
 
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            foreach (PropertyInfo prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
                 if (!prop.CanWrite) continue;
-                if (dict.TryGetValue(prop.Name, out var value) && value != null)
+                if (dict.TryGetValue(prop.Name, out object? value) && value != null)
                 {
                     try
                     {
@@ -595,19 +620,19 @@ namespace Base.Services.APIService
 
         public string[] ListRoute()
         {
-            var list = new List<string>();
-            foreach (var route in routes)
+            List<string> list = [];
+            foreach (KeyValuePair<(string verb, string path), List<Route>> route in routes)
             {
-                foreach (var r in route.Value)
+                foreach (Route r in route.Value)
                 {
-                    var path = r.Path;
+                    string path = r.Path;
                     string staticTag = r.IsStatic ? " (static)" : "";
                     string uiTag = r.RequireMainThread ? " (UI thread)" : "";
 
                     string paramStr = string.Join("&", r.Parameters.Select(p =>
                         {
-                            var typeName = Nullable.GetUnderlyingType(p.ParameterType)?.Name ?? p.ParameterType.Name;
-                            var suffix = p.HasDefaultValue ? $"({p.DefaultValue ?? "null"})" : "";
+                            string typeName = Nullable.GetUnderlyingType(p.ParameterType)?.Name ?? p.ParameterType.Name;
+                            string suffix = p.HasDefaultValue ? $"({p.DefaultValue ?? "null"})" : "";
                             return $"{p.Name}={typeName}{suffix}";
                         }));
 
@@ -628,12 +653,12 @@ namespace Base.Services.APIService
         /// </summary>
         public object[] ListSchema()
         {
-            var list = new List<object>();
-            foreach (var bucket in routes)
+            List<object> list = [];
+            foreach (KeyValuePair<(string verb, string path), List<Route>> bucket in routes)
             {
-                foreach (var r in bucket.Value)
+                foreach (Route r in bucket.Value)
                 {
-                    var descriptor = new Dictionary<string, object>
+                    Dictionary<string, object> descriptor = new()
                     {
                         ["verb"] = r.Verb,
                         ["path"] = r.Path,
@@ -647,7 +672,7 @@ namespace Base.Services.APIService
                     if (!string.IsNullOrWhiteSpace(r.Summary))
                         descriptor["summary"] = r.Summary;
 
-                    var output = ApiSchema.BuildOutputSchema(r.Method.ReturnType);
+                    Dictionary<string, object>? output = ApiSchema.BuildOutputSchema(r.Method.ReturnType);
                     if (output != null)
                         descriptor["outputSchema"] = output;
 
@@ -662,7 +687,7 @@ namespace Base.Services.APIService
 
         private void AddRoute(string verb, string path, MethodInfo m, Type declaring, HttpMethodAttribute attr)
         {
-            var key = (
+            (string, string) key = (
                 verb.ToUpperInvariant(),
                 HttpMethodAttribute.Normalize(path).ToLowerInvariant()
             );
@@ -670,10 +695,10 @@ namespace Base.Services.APIService
             // Resolve documentation. The attribute wins when set; the method's XML <summary> is the
             // fallback. Description falls back to the (attribute or XML) summary when not set explicitly.
             xmlDocs.EnsureAssemblyLoaded(declaring.Assembly);
-            var methodDoc = xmlDocs.GetMethodDoc(m);
-            var summary = !string.IsNullOrWhiteSpace(attr.Summary) ? attr.Summary : methodDoc?.Summary;
+            XmlDocStore.MemberDoc? methodDoc = xmlDocs.GetMethodDoc(m);
+            string? summary = !string.IsNullOrWhiteSpace(attr.Summary) ? attr.Summary : methodDoc?.Summary;
 
-            var route = new Route
+            Route route = new()
             {
                 Verb = key.Item1,
                 Path = key.Item2,
@@ -686,34 +711,37 @@ namespace Base.Services.APIService
                 Description = !string.IsNullOrWhiteSpace(attr.Description) ? attr.Description : summary,
                 ParamDocs = methodDoc?.Params,
             };
-            routes.AddOrUpdate(key,
-                _ => new List<Route> { route },
+            _ = routes.AddOrUpdate(key,
+                _ => [route],
                 (_, list) => { list.Add(route); return list; });
         }
 
         private static string BuildFullPath(string attrPath, Type declaringType, MethodInfo method)
         {
-            // If dev prefixes with "~/", treat as absolute override (keeps current behavior).
+            // If dev prefixes with "~/", treat as absolute override (keeps current Behaviour).
             if (!string.IsNullOrWhiteSpace(attrPath) && attrPath.StartsWith("~/"))
                 return HttpMethodAttribute.Normalize(attrPath[1..]); // remove '~'
 
             // Base: Namespace + Type => "MyGame/Controllers/HealthController"
-            var basePath = (declaringType.FullName ?? "")
+            string basePath = (declaringType.FullName ?? "")
                 .Replace('.', '/')
                 .Trim('/');
 
             // Suffix: normalize attribute path; if empty or "/", fallback to method name
-            var suffix = HttpMethodAttribute.Normalize(attrPath);
+            string suffix = HttpMethodAttribute.Normalize(attrPath);
             if (string.IsNullOrWhiteSpace(attrPath) || suffix == "/")
                 suffix = "/" + method.Name;
 
-            var full = "/" + basePath + suffix;
+            string full = "/" + basePath + suffix;
             return HttpMethodAttribute.Normalize(full);
         }
 
         // -------------------------------------------------------
         // Optional: If you want to manually refresh routes at runtime
         // -------------------------------------------------------
-        public void RebuildRoutes() => BuildRouteTable(AppDomain.CurrentDomain.GetAssemblies());
+        public void RebuildRoutes()
+        {
+            BuildRouteTable(AppDomain.CurrentDomain.GetAssemblies());
+        }
     }
 }
