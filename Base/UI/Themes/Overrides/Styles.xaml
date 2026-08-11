@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+	<!-- ============================================================================================
+	     Theme-agnostic implicit control Styles (resting-state).
+
+	     App.xaml merges this once at the application resource root, after ui:XamlControlsResources.
+	     These Styles use DynamicResource, so a single entry tracks light/dark on its own - they do
+	     NOT belong in the per-theme Light.xaml / Dark.xaml lists. Each is BasedOn a ModernWpf default
+	     style (from XamlControlsResources), which is why this must be merged after it.
+
+	     To add a control's default Style: append a new <Style> block below, grouped by control.
+	     No App.xaml change is needed.
+	     ============================================================================================ -->
+
+	<!-- Button: text-control background instead of ModernWpf's grey; only the resting appearance
+	     changes (template, hover/pressed and theme switching are preserved). -->
+	<Style TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+		<Setter Property="Foreground" Value="{DynamicResource TextControlForeground}"/>
+		<Setter Property="Background" Value="{DynamicResource TextControlBackground}"/>
+		<Setter Property="BorderBrush" Value="{DynamicResource TextControlBorderBrush}"/>
+		<Setter Property="BorderThickness" Value="{DynamicResource TextControlBorderThemeThickness}"/>
+	</Style>
+
+	<!-- ToggleButton: matches the plain Button look while unchecked. The checked ("on") state is left
+	     to ModernWpf's accent fill (see Light.xaml / Dark.xaml - only unchecked states are overridden). -->
+	<Style TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+		<Setter Property="Foreground" Value="{DynamicResource TextControlForeground}"/>
+		<Setter Property="Background" Value="{DynamicResource TextControlBackground}"/>
+		<Setter Property="BorderBrush" Value="{DynamicResource TextControlBorderBrush}"/>
+		<Setter Property="BorderThickness" Value="{DynamicResource TextControlBorderThemeThickness}"/>
+	</Style>
+</ResourceDictionary>

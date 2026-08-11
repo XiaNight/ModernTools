@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>Library</OutputType>
@@ -10,9 +10,6 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
 		<EnableDynamicLoading>true</EnableDynamicLoading>
-		<!-- Emit XML docs so endpoint <summary>/<param> comments flow into the /api/v1/schema manifest. -->
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
-		<NoWarn>$(NoWarn);1591</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -23,11 +20,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Compile Update="BusHound\ASUSBusHoundPage.xaml.cs">
+	  <Compile Update="RelayControlPage.xaml.cs">
 	    <SubType>Code</SubType>
 	  </Compile>
 	</ItemGroup>
-	
+
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">
 		<ItemGroup>
 			<_FilesToDelete Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" />

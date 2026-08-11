@@ -2,16 +2,40 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:ModernTools"
-             xmlns:ui="http://schemas.modernwpf.com/2019">
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:m="clr-namespace:ModernWpf.Markup;assembly=ModernWpf">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!-- Nominal brand default; the actual accent (ROG red / anniversary gold / system)
-                     is set at runtime by ThemeController based on the selected ThemeMode. -->
-                <ui:ThemeResources AccentColor="#FF1929"/>
+                     is set at runtime by ThemeController based on the selected ThemeMode.
+
+                     Per-theme keyed control overrides MUST attach here: ModernWpf applies
+                     theme-dictionary overrides from ThemeResources.Current only (the first
+                     ThemeResources created), which is this one. All override content lives in
+                     Base/UI/Themes/Overrides/; each theme dictionary just merges the aggregator,
+                     so adding controls never touches App.xaml. -->
+                <ui:ThemeResources AccentColor="#FF1929">
+                    <ui:ThemeResources.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Light" ui:ThemeDictionary.Key="Light">
+                            <ResourceDictionary.MergedDictionaries>
+                                <ResourceDictionary Source="/Base;component/UI/Themes/Overrides/Light.xaml"/>
+                            </ResourceDictionary.MergedDictionaries>
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Dark" ui:ThemeDictionary.Key="Dark">
+                            <ResourceDictionary.MergedDictionaries>
+                                <ResourceDictionary Source="/Base;component/UI/Themes/Overrides/Dark.xaml"/>
+                            </ResourceDictionary.MergedDictionaries>
+                        </ResourceDictionary>
+                    </ui:ThemeResources.ThemeDictionaries>
+                </ui:ThemeResources>
                 <ui:XamlControlsResources />
                 <ui:ThemeResources RequestedTheme="Dark" />
                 <ui:ThemeResources RequestedTheme="Light" />
+                <!-- Theme-agnostic control Styles (resting-state). Must come after XamlControlsResources
+                     (Styles use BasedOn="{StaticResource ...}"). Per-theme keyed overrides are wired
+                     into the ThemeResources above; both aggregate from Base/UI/Themes/Overrides/. -->
+                <ResourceDictionary Source="/Base;component/UI/Themes/Overrides/Styles.xaml"/>
                 <ResourceDictionary Source="/Base;component/UI/Themes/Brushes.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

@@ -360,7 +360,7 @@ namespace Base.Components.Chart
             if (sizeInfo.NewSize.Width <= 0 || sizeInfo.NewSize.Height <= 0)
                 return;
 
-            // Scale existing bitmap to new size (original behavior)
+            // Scale existing bitmap to new size (original Behaviour)
             if (_bitmap != null)
             {
                 int w = (int)Math.Max(1, sizeInfo.NewSize.Width);

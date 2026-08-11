@@ -1,7 +1,10 @@
+using Base;
 using Base.Core;
 using Base.Pages;
 using Base.Services;
+using Base.Services.APIService;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,22 +20,22 @@ namespace KeyboardHallSensor;
     ShowDeviceSelection = false)]
 public class GenericKeyboardInspectorPage : PageBase
 {
-    private Canvas _canvas;
-    private TextBlock _statusText;
+    private Canvas canvas;
+    private TextBlock statusText;
 
-    private readonly Dictionary<string, KeyDisplay> _displayByLabel = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _clickCounts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, KeyDisplay> displayByLabel = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> clickCounts = new(StringComparer.Ordinal);
 
-    private static readonly Brush _pressedBorder;
-    private static readonly Brush _releasedBorder;
+    private static readonly Brush pressedBorder;
+    private static readonly Brush releasedBorder;
     static GenericKeyboardInspectorPage()
     {
         // Find color in resource
         var pressed = (Brush)Application.Current.TryFindResource("SystemControlHighlightAccentBrush");
-        _pressedBorder = pressed;
+        pressedBorder = pressed;
 
         var released = (Brush)Application.Current.TryFindResource("SystemControlForegroundBaseLowBrush");
-        _releasedBorder = released;
+        releasedBorder = released;
     }
 
     public override void Awake()
@@ -70,7 +73,7 @@ public class GenericKeyboardInspectorPage : PageBase
             Margin = new Thickness(8, 8, 8, 4)
         };
 
-        _statusText = new TextBlock
+        statusText = new TextBlock
         {
             Text = "Press any key…",
             FontSize = 15,
@@ -78,7 +81,7 @@ public class GenericKeyboardInspectorPage : PageBase
             Margin = new Thickness(0, 0, 24, 0),
             MinWidth = 300
         };
-        bar.Children.Add(_statusText);
+        bar.Children.Add(statusText);
 
         var resetBtn = new Button
         {
@@ -92,12 +95,12 @@ public class GenericKeyboardInspectorPage : PageBase
         outer.Children.Add(bar);
 
         // Scrollable canvas for keyboard layout
-        _canvas = new Canvas { Margin = new Thickness(8) };
+        canvas = new Canvas { Margin = new Thickness(8) };
         var scroll = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
-            Content = _canvas
+            Content = canvas
         };
         Grid.SetRow(scroll, 1);
         outer.Children.Add(scroll);
@@ -122,20 +125,19 @@ public class GenericKeyboardInspectorPage : PageBase
             var display = new KeyDisplay(0, pw, ph, def.Label);
             Canvas.SetLeft(display, px);
             Canvas.SetTop(display, py);
-            _canvas.Children.Add(display);
+            canvas.Children.Add(display);
             //display.ShowLabel();
             display.SetText("0");
-            display.SetBorderColor(_releasedBorder);
+            display.SetBorderColor(releasedBorder);
 
-            _displayByLabel[def.Label] = display;
-            _clickCounts[def.Label]    = 0;
+            displayByLabel[def.Label] = display;
 
             maxX = Math.Max(maxX, px + pw);
             maxY = Math.Max(maxY, py + ph);
         }
 
-        _canvas.Width  = maxX + 8;
-        _canvas.Height = maxY + 8;
+        canvas.Width  = maxX + 8;
+        canvas.Height = maxY + 8;
     }
 
     // ── Key event handlers ───────────────────────────────────────────────
@@ -146,15 +148,15 @@ public class GenericKeyboardInspectorPage : PageBase
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (!_keyToLabel.TryGetValue(key, out var label)) return;
 
-        _clickCounts[label] = _clickCounts.GetValueOrDefault(label) + 1;
+        clickCounts[label] = clickCounts.GetValueOrDefault(label) + 1;
 
-        if (_displayByLabel.TryGetValue(label, out var d))
+        if (displayByLabel.TryGetValue(label, out var d))
         {
-            d.SetBorderColor(_pressedBorder);
-            d.SetText(_clickCounts[label].ToString());
+            d.SetBorderColor(pressedBorder);
+            d.SetText(clickCounts[label].ToString());
         }
 
-        _statusText.Text = $"▼  {label.Replace("\n", " / ")}   ×{_clickCounts[label]}";
+        statusText.Text = $"▼  {label.Replace("\n", " / ")}   ×{clickCounts[label]}";
     }
 
     private void OnPreviewKeyUp(object sender, KeyEventArgs e)
@@ -162,21 +164,36 @@ public class GenericKeyboardInspectorPage : PageBase
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (!_keyToLabel.TryGetValue(key, out var label)) return;
         
-        if (_displayByLabel.TryGetValue(label, out var d))
-            d.SetBorderColor(_releasedBorder);
+        if (displayByLabel.TryGetValue(label, out var d))
+            d.SetBorderColor(releasedBorder);
 
-        _statusText.Text = $"▲  {label.Replace("\n", " / ")}";
+        statusText.Text = $"▲  {label.Replace("\n", " / ")}";
     }
 
+    [POST(requireMainThread: true)]
     private void ResetAll()
     {
-        foreach (var (label, display) in _displayByLabel)
+        clickCounts.Clear();
+        foreach (KeyDisplay display in displayByLabel.Values)
         {
-            _clickCounts[label] = 0;
             display.SetText("0");
-            display.SetBorderColor(_releasedBorder);
+            display.SetBorderColor(releasedBorder);
         }
-        _statusText.Text = "Press any key…";
+        statusText.Text = "Press any key…";
+    }
+
+    [POST, AppMenuItem("Save Click Counts")]
+    /// <summary>
+    /// Append the current click counts to a file in the output folder.
+    /// zero clicks are ignored.
+    /// </summary>
+    private void SaveClickCounts()
+    {
+        var data = new Dictionary<string, int>(clickCounts);
+        var json = System.Text.Json.JsonSerializer.Serialize(data);
+        var path = Path.Join(MainWindow.GetOutputFolder(), "KeyClickCounts.txt");
+
+        System.IO.File.AppendAllText(path, json + Environment.NewLine);
     }
 
     // ── WPF Key → layout label mapping ──────────────────────────────────

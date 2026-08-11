@@ -1,19 +1,14 @@
-﻿// DarkColorsView.xaml.cs (WITH SEARCH)
-
-using System;
+﻿using Base.Core;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
-using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
 using System.Xml;
 using System.Xml.Linq;
-using Base.Core;
 
 namespace Base.Helpers
 {
@@ -21,8 +16,8 @@ namespace Base.Helpers
     public partial class DarkColorsView : Pages.PageBase
     {
 
-        private readonly ObservableCollection<ColorKeyItem> _items = new();
-        private ICollectionView? _view;
+        private readonly ObservableCollection<ColorKeyItem> items = new();
+        private readonly ICollectionView view;
 
         private const string Url =
             "https://raw.githubusercontent.com/Kinnara/ModernWpf/83ecedc452cc9f06c628c0bdadd50cd4ae76f8e5/ModernWpf/ThemeResources/Dark.xaml";
@@ -31,17 +26,20 @@ namespace Base.Helpers
         {
             InitializeComponent();
 
-            GridView.ItemsSource = _items;
-            _view = CollectionViewSource.GetDefaultView(_items);
-            _view.Filter = FilterPredicate;
+            GridView.ItemsSource = items;
+            view = CollectionViewSource.GetDefaultView(items);
+            view.Filter = FilterPredicate;
 
             Loaded += async (_, __) =>
             {
                 try
                 {
-                    var xaml = await new HttpClient().GetStringAsync(Url);
-                    foreach (var i in ParseKeys(xaml))
-                        _items.Add(i);
+                    string xaml = await new HttpClient().GetStringAsync(Url);
+                    foreach (ColorKeyItem i in ParseKeys(xaml))
+                    {
+                        Resolve(i);
+                        items.Add(i);
+                    }
                 }
                 catch
                 {
@@ -50,8 +48,33 @@ namespace Base.Helpers
             };
         }
 
+        public override void ThemeChanged()
+        {
+            base.ThemeChanged();
+            RefreshColors();
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            RefreshColors();
+        }
+
+        private void RefreshColors()
+        {
+            foreach (ColorKeyItem i in items)
+                Resolve(i);
+        }
+
+        private void Resolve(ColorKeyItem item)
+        {
+            Brush brush = CoerceToBrush(TryFindResource(item.Key));
+            item.Swatch = brush;
+            item.Hex = brush.ToString();
+        }
+
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
-            => _view?.Refresh();
+            => view?.Refresh();
 
         private bool FilterPredicate(object obj)
         {
@@ -74,18 +97,6 @@ namespace Base.Helpers
                 .Where(e => !string.IsNullOrWhiteSpace(e.Key))
                 .Select(e => new ColorKeyItem { Key = e.Key!, Kind = e.Kind })
                 .ToArray();
-        }
-
-        private void Swatch_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Border b) return;
-            if (b.DataContext is not ColorKeyItem item) return;
-
-
-            var value = TryFindResource(item.Key);
-            Brush brush = CoerceToBrush(value);
-            b.Background = brush;
-            item.Hex = brush.ToString();
         }
 
         private static Brush CoerceToBrush(object? value)
@@ -116,17 +127,17 @@ namespace Base.Helpers
         private static bool TryParseHex(string text, out Color c)
         {
             c = default;
-            if (text.StartsWith("#")) text = text[1..];
+            if (text.StartsWith('#')) text = text[1..];
 
             if (text.Length == 6)
                 text = "FF" + text;
 
             if (text.Length != 8) return false;
 
-            bool aOk = byte.TryParse(text[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var a);
-            bool rOk = byte.TryParse(text.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var r);
-            bool gOk = byte.TryParse(text.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var g);
-            bool bOk = byte.TryParse(text.Substring(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var b);
+            bool aOk = byte.TryParse(text[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte a);
+            bool rOk = byte.TryParse(text.AsSpan(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte r);
+            bool gOk = byte.TryParse(text.AsSpan(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte g);
+            bool bOk = byte.TryParse(text.AsSpan(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b);
 
             if (!aOk || !rOk || !gOk || !bOk) return false;
 
@@ -135,10 +146,42 @@ namespace Base.Helpers
         }
     }
 
-    public sealed class ColorKeyItem
+    public sealed class ColorKeyItem : INotifyPropertyChanged
     {
         public string Key { get; init; } = "";
         public string Kind { get; init; } = "";
-        public string Hex { get; set; } = "";
+
+        private string hex = "";
+        public string Hex
+        {
+            get => hex;
+            set
+            {
+                if (hex != value)
+                {
+                    hex = value;
+                    Raise(nameof(Hex));
+                }
+            }
+        }
+
+        private Brush swatch = Brushes.Transparent;
+        public Brush Swatch
+        {
+            get => swatch;
+            set
+            {
+                if (!Equals(swatch, value))
+                {
+                    swatch = value;
+                    Raise(nameof(Swatch));
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void Raise(string name)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }

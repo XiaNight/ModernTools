@@ -39,7 +39,7 @@
                                     BorderBrush="#40000000"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
-                                    Loaded="Swatch_Loaded"/>
+                                    Background="{Binding Swatch}"/>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

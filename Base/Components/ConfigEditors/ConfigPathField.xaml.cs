@@ -18,20 +18,22 @@ namespace Base.Components;
 /// </summary>
 public partial class ConfigPathField : UserControl, IConfigEditor
 {
-	private ConfigItem _item;
-	private bool _pickFolder;
-	private Brush _defaultBorder;
+	private ConfigItem item;
+	private bool pickFolder;
+	private Brush defaultBorder;
+	private string[] fileExtensions;
 
 	public ConfigPathField()
 	{
 		InitializeComponent();
-		_defaultBorder = Input.BorderBrush;
+		defaultBorder = Input.BorderBrush;
 	}
 
 	public void Bind(ConfigItem item)
 	{
-		_item = item;
-		_pickFolder = item.Attr.Type == ConfigType.Folder;
+		this.item = item;
+		pickFolder = item.Attr.Type == ConfigType.Folder;
+		fileExtensions = item.Attr.FileExtentions ?? [];
 
 		if (!string.IsNullOrEmpty(item.Attr.Placeholder))
 			ControlHelper.SetPlaceholderText(Input, item.Attr.Placeholder);
@@ -48,11 +50,11 @@ public partial class ConfigPathField : UserControl, IConfigEditor
 		};
 	}
 
-	private string CurrentPath() => ConfigEditorUtil.FormatValue(_item.Get());
+	private string CurrentPath() => ConfigEditorUtil.FormatValue(item.Get());
 
 	private void Browse_Click(object sender, RoutedEventArgs e)
 	{
-		string picked = _pickFolder ? PickFolder() : PickFile();
+		string picked = pickFolder ? PickFolder() : PickFile();
 		if (picked == null) return;
 
 		Input.Text = picked;
@@ -61,12 +63,14 @@ public partial class ConfigPathField : UserControl, IConfigEditor
 
 	private string PickFile()
 	{
-		OpenFileDialog dialog = new()
+		string filter = fileExtensions.Length == 0 ? "All files|*.*" : string.Join("|", fileExtensions.Select(ext => $"{ext} files|*{ext}"));
+        OpenFileDialog dialog = new()
 		{
 			Multiselect = false,
 			CheckFileExists = true,
-			Title = _item.Label,
-		};
+			Title = item.Label,
+			Filter = filter,
+        };
 		SeedInitialDirectory(dir => dialog.InitialDirectory = dir);
 		return dialog.ShowDialog() == true ? dialog.FileName : null;
 	}
@@ -76,7 +80,7 @@ public partial class ConfigPathField : UserControl, IConfigEditor
 		OpenFolderDialog dialog = new()
 		{
 			Multiselect = false,
-			Title = _item.Label,
+			Title = item.Label,
 		};
 		SeedInitialDirectory(dir => dialog.InitialDirectory = dir);
 		return dialog.ShowDialog() == true ? dialog.FolderName : null;
@@ -105,15 +109,15 @@ public partial class ConfigPathField : UserControl, IConfigEditor
 
 	private void Commit()
 	{
-		bool ok = ConfigEditorUtil.TryParseText(Input.Text, _item.UnderlyingType, _item.Attr, out object value, out string err);
+		bool ok = ConfigEditorUtil.TryParseText(Input.Text, item.UnderlyingType, item.Attr, out object value, out string err);
 
 		if (ok)
 		{
-			_item.Set(value);
+			item.Set(value);
 			// Read back so any custom setter normalisation is reflected.
 			Input.Text = CurrentPath();
 			ErrorText.Visibility = Visibility.Collapsed;
-			Input.BorderBrush = _defaultBorder;
+			Input.BorderBrush = defaultBorder;
 		}
 		else
 		{

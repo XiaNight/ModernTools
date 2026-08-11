@@ -1,18 +1,10 @@
-
-using Base.Core;
 using Base.Services;
 using Base.Services.Peripheral;
-using CommonProtocol;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows;
-using static Base.Services.DeviceSelection;
-
 using CommonProtocol.BusHound.ProtocolTest;
+using System.Collections.Concurrent;
+using System.Windows;
+using static Base.Services.BatchService.BatchExecution;
+using static Base.Services.DeviceSelection;
 
 namespace CommonProtocol.BusHound;
 using Debug = Base.Services.Debug;
@@ -36,12 +28,13 @@ public partial class ASUSBusHoundPage
 	// that actually arrived within budget.
 	private const int TimeoutSafetySlackMs = 250;
 
-	private List<TestProtocol> testsList = new();
-	private readonly Dictionary<TestProtocol, ProtocolTestEntry> testRows = new();
 	private bool testsRunning;
+	private List<TestProtocol> testsList = [];
+	private readonly Dictionary<TestProtocol, ProtocolTestEntry> testRows = [];
+	private readonly Dictionary<TestProtocol, TestRunResult> testResults = [];
 
-	// Recording state: an active edit dialog capturing live packets into its expected field.
-	private bool recording;
+    // Recording state: an active edit dialog capturing live packets into its expected field.
+    private bool recording;
 	private ProtocolTestEditDialog recordDialog;
 	private PeripheralInterface recordingInterface;
 	private Action<ReadOnlyMemory<byte>, DateTime> recordHandler;
@@ -52,7 +45,41 @@ public partial class ASUSBusHoundPage
 		TestsBtn.Click += (_, _) => ShowTestsPanel();
 		TestsAddBtn.Click += (_, _) => AddTest();
 		TestsRunAllBtn.Click += (_, _) => RunAllTests();
+		TestsListPanel.OrderChanged += OnTestsReordered;
 		LoadTests();
+	}
+
+	/// <summary>
+	/// Mirrors a drag-reorder of the visible rows into <see cref="testsList"/> and persists it.
+	/// The panel already shows the new order, so this only moves the backing item — it does not
+	/// rebuild the rows.
+	/// </summary>
+	private void OnTestsReordered(object sender, Base.Components.ReorderedEventArgs e)
+		=> MoveTest(e.OldIndex, e.NewIndex);
+
+	/// <summary>
+	/// Moves the test at <paramref name="oldIndex"/> to <paramref name="newIndex"/> in the persisted
+	/// list. Returns false if either index is out of range. When <paramref name="rebuildRows"/> is true
+	/// the visible rows are rebuilt to match (used by the API); when false the rows are assumed to
+	/// already reflect the new order (used by drag-reorder).
+	/// </summary>
+	private bool MoveTest(int oldIndex, int newIndex, bool rebuildRows = false)
+	{
+		if (oldIndex < 0 || oldIndex >= testsList.Count) return false;
+		if (newIndex < 0 || newIndex >= testsList.Count) return false;
+
+		if (oldIndex != newIndex)
+		{
+			TestProtocol test = testsList[oldIndex];
+			testsList.RemoveAt(oldIndex);
+			testsList.Insert(newIndex, test);
+			SaveTests();
+		}
+
+		if (rebuildRows) BuildTestRows();
+		else UpdateTestsSummary();
+
+		return true;
 	}
 
 	private void ShowTestsPanel()
@@ -75,7 +102,7 @@ public partial class ASUSBusHoundPage
 
 	private void BuildTestRows()
 	{
-		TestsListPanel.Children.Clear();
+		TestsListPanel.Clear();
 		testRows.Clear();
 
 		foreach (TestProtocol test in testsList)
@@ -89,7 +116,7 @@ public partial class ASUSBusHoundPage
 			row.Changed += (_, _) => SaveTests();
 
 			testRows[test] = row;
-			TestsListPanel.Children.Add(row);
+			TestsListPanel.Add(row);
 		}
 
 		UpdateTestsSummary();
@@ -103,7 +130,7 @@ public partial class ASUSBusHoundPage
 		TestsRunAllBtn.IsEnabled = count > 0 && !testsRunning;
 	}
 
-	// ---- add / edit / delete ----
+	#region ---- add / edit / delete ----
 
 	private async void AddTest()
 	{
@@ -161,9 +188,11 @@ public partial class ASUSBusHoundPage
 		BuildTestRows();
 	}
 
-	// ---- running ----
+    #endregion
 
-	private async void RunSingleTest(ProtocolTestEntry row)
+    #region  ---- running ----
+
+    private async void RunSingleTest(ProtocolTestEntry row)
 	{
 		if (testsRunning || row?.Test == null) return;
 
@@ -171,7 +200,8 @@ public partial class ASUSBusHoundPage
 		SetTestsBusy(true);
 		try
 		{
-			await RunTestAsync(row.Test, row);
+			TestRunResult result = await RunTestAsync(row.Test, row);
+			testResults[row.Test] = result;
 		}
 		finally
 		{
@@ -191,7 +221,10 @@ public partial class ASUSBusHoundPage
 			foreach (TestProtocol test in testsList)
 			{
 				if (testRows.TryGetValue(test, out ProtocolTestEntry row))
-					await RunTestAsync(test, row);
+				{
+					TestRunResult result = await RunTestAsync(test, row);
+					testResults[row.Test] = result;
+				}
 			}
 		}
 		finally
@@ -381,13 +414,15 @@ public partial class ASUSBusHoundPage
 		return deviceInterface.Connect(true);
 	}
 
-	// ---- recording into the edit dialog ----
+    #endregion
 
-	/// <summary>
-	/// Starts a recording session for the given editor: opens the interface, subscribes to received
-	/// packets (appending each into the expected field), and fires the request once.
-	/// </summary>
-	private void StartRecording(ProtocolTestEditDialog dialog)
+    #region ---- recording into the edit dialog ----
+
+    /// <summary>
+    /// Starts a recording session for the given editor: opens the interface, subscribes to received
+    /// packets (appending each into the expected field), and fires the request once.
+    /// </summary>
+    private void StartRecording(ProtocolTestEditDialog dialog)
 	{
 		if (recording) return;
 
@@ -430,4 +465,6 @@ public partial class ASUSBusHoundPage
 		recordDialog?.NotifyRecordingStopped("Recording stopped.");
 		recordDialog = null;
 	}
+
+    #endregion
 }

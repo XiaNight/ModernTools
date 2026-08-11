@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:m="clr-namespace:ModernWpf.Markup;assembly=ModernWpf">
+
+	<!-- ============================================================================================
+	     Dark-theme keyed brush overrides for controls.
+
+	     App.xaml merges this into the Dark theme dictionary of the primary ThemeResources (the only
+	     instance ModernWpf drives on a theme change). ModernWpf inserts its default Dark resources
+	     ahead of this list, so the aliases resolve against the Dark TextControl* brushes and win by
+	     order. BlackGold mode uses this dictionary too. Keep this in sync with Light.xaml.
+
+	     To add a control's Dark-theme overrides: append its m:StaticResource lines below, grouped by
+	     control (and add the matching lines to Light.xaml). No App.xaml change is needed.
+	     ============================================================================================ -->
+
+	<!-- Button -->
+	<m:StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="TextControlBackgroundPointerOver"/>
+	<m:StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="TextControlBorderBrushPointerOver"/>
+	<m:StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="TextControlBackgroundFocused"/>
+	<m:StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SystemControlForegroundAccentBrush"/>
+
+	<!-- ToggleButton (unchecked states only; checked keeps ModernWpf's accent fill). The unchecked
+	     hover trigger changes Background only, so there is no PointerOver border key to override. -->
+	<m:StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="TextControlBackgroundPointerOver"/>
+	<m:StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="TextControlBackgroundFocused"/>
+	<m:StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SystemControlForegroundAccentBrush"/>
+</ResourceDictionary>

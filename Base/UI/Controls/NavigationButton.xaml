@@ -16,7 +16,7 @@
         <Grid x:Name="Highlight" Visibility="Collapsed" d:Visibility="Visible">
             <Grid.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="#50787878" Offset="0.0" />
+                    <GradientStop Color="#40888888" Offset="0.0" />
                     <GradientStop Color="#00000000" Offset="1.0" />
                 </LinearGradientBrush>
             </Grid.Background>

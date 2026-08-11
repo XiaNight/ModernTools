@@ -107,9 +107,14 @@ namespace Base.Core
 		/// <summary><c>true</c> when a maximum bound has been supplied.</summary>
 		public bool HasMax => !double.IsNaN(Max);
 
-		/// <param name="key">
-		/// Logical key for the entry. Defaults to the member name when omitted or empty.
-		/// </param>
-		protected FieldAttribute(string key = "") => Key = key;
+		/// <summary>
+		/// Optional list of file extensions (without the dot) to filter for when the editor is a file picker. Ignored for non-file members.
+		/// </summary>
+		public string[] FileExtentions { get; set; } = [];
+
+        /// <param name="key">
+        /// Logical key for the entry. Defaults to the member name when omitted or empty.
+        /// </param>
+        protected FieldAttribute(string key = "") => Key = key;
 	}
 }
