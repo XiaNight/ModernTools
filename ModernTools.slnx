@@ -7,9 +7,6 @@
     <Project Path="Features/AiComposer/AiComposer.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="Features/MCPServer/MCPServer.csproj">
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
     <Project Path="Features/ArmouryProtocol/ArmouryProtocol.csproj" Id="5fb62e9c-cb6a-4746-8f6c-e21d8510f1b5">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -29,14 +26,17 @@
     <Project Path="Features/GenericMouseAnalyzer/GenericMouseAnalyzer.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
-    <Project Path="Features/GithubIntegration/GithubIntegration.csproj" DisplayName="GitHubIntegration">
+    <Project Path="Features/GitHubIntegration/GitHubIntegration.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="Features/KeyboardHallSensor/KeyboardHallSensor.csproj">
       <Platform Solution="*|x64" Project="x64" />
       <Platform Solution="Debug|Any CPU" Project="x64" />
     </Project>
-    <Project Path="Features/MouseATE/MouseATE.csproj">
+    <Project Path="Features/MCPServer/MCPServer.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="Features/ATE/ATE.csproj">
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="Features/QuickScan/QuickScan.csproj">

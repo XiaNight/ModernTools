@@ -577,6 +577,20 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             interfaces.Add(@interface);
         }
 
+        public bool FindInterface(ushort usage, ushort usagepage, out PeripheralInterfaceDetail interfaceDetail)
+        {
+            interfaceDetail = null;
+            foreach (var @interface in interfaces)
+            {
+                if (@interface.Usage == usage && @interface.UsagePage == usagepage)
+                {
+                    interfaceDetail = @interface as PeripheralInterfaceDetail;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public void Dispose()
         {
             foreach(var @interface in interfaces)

@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -12,6 +13,19 @@ namespace Base.Components
 {
     public partial class SearchableLogPanel : UserControl, INotifyPropertyChanged
     {
+        public static readonly DependencyProperty OutsideItemsProperty =
+            DependencyProperty.Register(
+                nameof(AdditionalControls),
+                typeof(IEnumerable),
+                typeof(SearchableLogPanel),
+                new PropertyMetadata(null));
+
+        public IEnumerable AdditionalControls
+        {
+            get => (IEnumerable)GetValue(OutsideItemsProperty);
+            set => SetValue(OutsideItemsProperty, value);
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         private readonly Paragraph para = new Paragraph { Margin = new Thickness(0) };
