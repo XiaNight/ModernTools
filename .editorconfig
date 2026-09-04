@@ -1,11 +1,6 @@
 # Remove the line below if you want to inherit .editorconfig settings from higher directories
 root = true
 
-[*]
-indent_style = tab
-indent_size = 4
-tab_width = 4
-
 # C# files
 [*.cs]
 
@@ -13,7 +8,7 @@ tab_width = 4
 
 # Indentation and spacing
 indent_size = 4
-indent_style = tabs
+indent_style = space
 tab_width = 4
 
 # New line preferences
@@ -68,8 +63,8 @@ dotnet_style_operator_placement_when_wrapping = beginning_of_line
 dotnet_style_prefer_auto_properties = true
 dotnet_style_prefer_collection_expression = when_types_loosely_match
 dotnet_style_prefer_compound_assignment = true
-dotnet_style_prefer_conditional_expression_over_assignment = true
-dotnet_style_prefer_conditional_expression_over_return = true
+dotnet_style_prefer_conditional_expression_over_assignment = false
+dotnet_style_prefer_conditional_expression_over_return = false
 dotnet_style_prefer_foreach_explicit_cast_in_source = when_strongly_typed
 dotnet_style_prefer_inferred_anonymous_type_member_names = true
 dotnet_style_prefer_inferred_tuple_names = true
@@ -78,7 +73,7 @@ dotnet_style_prefer_simplified_boolean_expressions = true
 dotnet_style_prefer_simplified_interpolation = true
 
 # Field preferences
-dotnet_style_readonly_field = true
+dotnet_style_readonly_field = true:silent
 
 # Parameter preferences
 dotnet_code_quality_unused_parameters = all
@@ -99,11 +94,11 @@ csharp_style_var_when_type_is_apparent = false
 
 # Expression-bodied members
 csharp_style_expression_bodied_accessors = true
-csharp_style_expression_bodied_constructors = false
+csharp_style_expression_bodied_constructors = when_on_single_line
 csharp_style_expression_bodied_indexers = true
 csharp_style_expression_bodied_lambdas = true
 csharp_style_expression_bodied_local_functions = true
-csharp_style_expression_bodied_methods = false
+csharp_style_expression_bodied_methods = true
 csharp_style_expression_bodied_operators = false
 csharp_style_expression_bodied_properties = true
 
@@ -119,10 +114,10 @@ csharp_style_prefer_switch_expression = true
 csharp_style_conditional_delegate_call = true
 
 # Modifier preferences
-csharp_prefer_static_anonymous_function = false
-csharp_prefer_static_local_function = false
+csharp_prefer_static_anonymous_function = false:silent
+csharp_prefer_static_local_function = false:silent
 csharp_preferred_modifier_order = public,private,protected,internal,file,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async
-csharp_style_prefer_readonly_struct = true
+csharp_style_prefer_readonly_struct = true:silent
 csharp_style_prefer_readonly_struct_member = true
 
 # Code-block preferences
@@ -137,18 +132,18 @@ csharp_style_prefer_top_level_statements = true
 # Expression-level preferences
 csharp_prefer_simple_default_expression = true
 csharp_style_deconstructed_variable_declaration = true
-csharp_style_implicit_object_creation_when_type_is_apparent = true
+csharp_style_implicit_object_creation_when_type_is_apparent = true:silent
 csharp_style_inlined_variable_declaration = true
 csharp_style_prefer_implicitly_typed_lambda_expression = true
-csharp_style_prefer_index_operator = false
+csharp_style_prefer_index_operator = false:silent
 csharp_style_prefer_local_over_anonymous_function = true
 csharp_style_prefer_null_check_over_type_check = true
-csharp_style_prefer_range_operator = false
-csharp_style_prefer_tuple_swap = true
+csharp_style_prefer_range_operator = false:silent
+csharp_style_prefer_tuple_swap = true:warning
 csharp_style_prefer_unbound_generic_type_in_nameof = true
 csharp_style_prefer_utf8_string_literals = true
 csharp_style_throw_expression = true
-csharp_style_unused_value_assignment_preference = discard_variable
+csharp_style_unused_value_assignment_preference = discard_variable:silent
 csharp_style_unused_value_expression_statement_preference = discard_variable
 
 # 'using' directive preferences
@@ -158,7 +153,7 @@ csharp_using_directive_placement = outside_namespace
 csharp_style_allow_blank_line_after_colon_in_constructor_initializer_experimental = false
 csharp_style_allow_blank_line_after_token_in_arrow_expression_clause_experimental = false
 csharp_style_allow_blank_line_after_token_in_conditional_expression_experimental = false
-csharp_style_allow_blank_lines_between_consecutive_braces_experimental = false:suggestion
+csharp_style_allow_blank_lines_between_consecutive_braces_experimental = false
 csharp_style_allow_embedded_statements_on_same_line_experimental = true
 
 #### C# Formatting Rules ####

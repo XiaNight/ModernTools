@@ -75,7 +75,7 @@ namespace CommonProtocol
             logKeys.Clear();
             if (string.IsNullOrWhiteSpace(LogKeys)) return;
 
-            foreach (string tok in LogKeys.Split(new[] { ',', ' ', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (string tok in LogKeys.Split([',', ' ', ';', '\t'], StringSplitOptions.RemoveEmptyEntries))
             {
                 string s = tok.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? tok[2..] : tok;
                 if (byte.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b))

@@ -251,7 +251,7 @@ $plugins = [ordered]@{
     'GenericMouseAnalyzer' = 'Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj'
     'KeyboardHallSensor'   = 'Features\KeyboardHallSensor\KeyboardHallSensor.csproj'
     'ArmouryProtocol'      = 'Features\ArmouryProtocol\ArmouryProtocol.csproj'
-    'MouseATE'             = 'Features\MouseATE\MouseATE.csproj'
+    'ATE'                  = 'Features\ATE\ATE.csproj'
     'AiComposer'           = 'Features\AiComposer\AiComposer.csproj'
     'CommonTestTools'      = 'Features\CommonTestTools\CommonTestTools.csproj'
 }
