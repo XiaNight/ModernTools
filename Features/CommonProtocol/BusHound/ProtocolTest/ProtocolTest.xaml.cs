@@ -3,7 +3,6 @@ using Base.Services.Peripheral;
 using CommonProtocol.BusHound.ProtocolTest;
 using System.Collections.Concurrent;
 using System.Windows;
-using static Base.Services.BatchService.BatchExecution;
 using static Base.Services.DeviceSelection;
 
 namespace CommonProtocol.BusHound;
@@ -17,402 +16,406 @@ using Debug = Base.Services.Debug;
 /// </summary>
 public partial class ASUSBusHoundPage
 {
-	// Bus Hound's capture log shows IN packets with the leading HID report-ID byte stripped
-	// (data[1..]). Matching against that same view lets expected bytes be copied straight from
-	// the log. Set to false to compare against the raw report instead.
-	private const bool StripReportIdOnMatch = true;
+    // Bus Hound's capture log shows IN packets with the leading HID report-ID byte stripped
+    // (data[1..]). Matching against that same view lets expected bytes be copied straight from
+    // the log. Set to false to compare against the raw report instead.
+    private const bool StripReportIdOnMatch = true;
 
-	// Extra wall-clock time, beyond the test's budget, that the read is allowed to block before it
-	// gives up waiting for a reply. This only guards against a silent device — the pass/fail timeout
-	// is judged from packet arrival timestamps, so UI/await scheduling latency never fails a reply
-	// that actually arrived within budget.
-	private const int TimeoutSafetySlackMs = 250;
+    // Extra wall-clock time, beyond the test's budget, that the read is allowed to block before it
+    // gives up waiting for a reply. This only guards against a silent device — the pass/fail timeout
+    // is judged from packet arrival timestamps, so UI/await scheduling latency never fails a reply
+    // that actually arrived within budget.
+    private const int TimeoutSafetySlackMs = 250;
 
-	private bool testsRunning;
-	private List<TestProtocol> testsList = [];
-	private readonly Dictionary<TestProtocol, ProtocolTestEntry> testRows = [];
-	private readonly Dictionary<TestProtocol, TestRunResult> testResults = [];
+    private bool testsRunning;
+    private List<TestProtocol> testsList = [];
+    private readonly Dictionary<TestProtocol, ProtocolTestEntry> testRows = [];
+    private readonly Dictionary<TestProtocol, TestRunResult> testResults = [];
 
     // Recording state: an active edit dialog capturing live packets into its expected field.
     private bool recording;
-	private ProtocolTestEditDialog recordDialog;
-	private PeripheralInterface recordingInterface;
-	private Action<ReadOnlyMemory<byte>, DateTime> recordHandler;
+    private ProtocolTestEditDialog recordDialog;
+    private PeripheralInterface recordingInterface;
+    private Action<ReadOnlyMemory<byte>, DateTime> recordHandler;
 
-	/// <summary>Wires the Tests panel controls and loads persisted tests. Called from Awake.</summary>
-	private void InitTestsPanel()
-	{
-		TestsBtn.Click += (_, _) => ShowTestsPanel();
-		TestsAddBtn.Click += (_, _) => AddTest();
-		TestsRunAllBtn.Click += (_, _) => RunAllTests();
-		TestsListPanel.OrderChanged += OnTestsReordered;
-		LoadTests();
-	}
+    /// <summary>Wires the Tests panel controls and loads persisted tests. Called from Awake.</summary>
+    private void InitTestsPanel()
+    {
+        TestsBtn.Click += (_, _) => ShowTestsPanel();
+        TestsAddBtn.Click += (_, _) => AddTest();
+        TestsRunAllBtn.Click += (_, _) => RunAllTests();
+        TestsListPanel.OrderChanged += OnTestsReordered;
+        LoadTests();
+    }
 
-	/// <summary>
-	/// Mirrors a drag-reorder of the visible rows into <see cref="testsList"/> and persists it.
-	/// The panel already shows the new order, so this only moves the backing item — it does not
-	/// rebuild the rows.
-	/// </summary>
-	private void OnTestsReordered(object sender, Base.Components.ReorderedEventArgs e)
-		=> MoveTest(e.OldIndex, e.NewIndex);
+    /// <summary>
+    /// Mirrors a drag-reorder of the visible rows into <see cref="testsList"/> and persists it.
+    /// The panel already shows the new order, so this only moves the backing item — it does not
+    /// rebuild the rows.
+    /// </summary>
+    private void OnTestsReordered(object sender, Base.Components.ReorderedEventArgs e)
+        => MoveTest(e.OldIndex, e.NewIndex);
 
-	/// <summary>
-	/// Moves the test at <paramref name="oldIndex"/> to <paramref name="newIndex"/> in the persisted
-	/// list. Returns false if either index is out of range. When <paramref name="rebuildRows"/> is true
-	/// the visible rows are rebuilt to match (used by the API); when false the rows are assumed to
-	/// already reflect the new order (used by drag-reorder).
-	/// </summary>
-	private bool MoveTest(int oldIndex, int newIndex, bool rebuildRows = false)
-	{
-		if (oldIndex < 0 || oldIndex >= testsList.Count) return false;
-		if (newIndex < 0 || newIndex >= testsList.Count) return false;
+    /// <summary>
+    /// Moves the test at <paramref name="oldIndex"/> to <paramref name="newIndex"/> in the persisted
+    /// list. Returns false if either index is out of range. When <paramref name="rebuildRows"/> is true
+    /// the visible rows are rebuilt to match (used by the API); when false the rows are assumed to
+    /// already reflect the new order (used by drag-reorder).
+    /// </summary>
+    private bool MoveTest(int oldIndex, int newIndex, bool rebuildRows = false)
+    {
+        if (oldIndex < 0 || oldIndex >= testsList.Count) return false;
+        if (newIndex < 0 || newIndex >= testsList.Count) return false;
 
-		if (oldIndex != newIndex)
-		{
-			TestProtocol test = testsList[oldIndex];
-			testsList.RemoveAt(oldIndex);
-			testsList.Insert(newIndex, test);
-			SaveTests();
-		}
+        if (oldIndex != newIndex)
+        {
+            TestProtocol test = testsList[oldIndex];
+            testsList.RemoveAt(oldIndex);
+            testsList.Insert(newIndex, test);
+            SaveTests();
+        }
 
-		if (rebuildRows) BuildTestRows();
-		else UpdateTestsSummary();
+        if (rebuildRows) BuildTestRows();
+        else UpdateTestsSummary();
 
-		return true;
-	}
+        return true;
+    }
 
-	private void ShowTestsPanel()
-	{
-		devicePanelVisible = false;
-		DevicePanel.Visibility = Visibility.Collapsed;
-		CapturePanel.Visibility = Visibility.Collapsed;
-		TestsPanel.Visibility = Visibility.Visible;
-	}
+    private void ShowTestsPanel()
+    {
+        devicePanelVisible = false;
+        DevicePanel.Visibility = Visibility.Collapsed;
+        CapturePanel.Visibility = Visibility.Collapsed;
+        TestsPanel.Visibility = Visibility.Visible;
+    }
 
-	// ---- loading / persistence ----
-	
-	private void LoadTests()
-	{
-		testsList = ProtocolTestStore.GetAll();
-		BuildTestRows();
-	}
+    // ---- loading / persistence ----
 
-	private void SaveTests() => ProtocolTestStore.SaveAll(testsList);
+    private void LoadTests()
+    {
+        testsList = ProtocolTestStore.GetAll();
+        BuildTestRows();
+    }
 
-	private void BuildTestRows()
-	{
-		TestsListPanel.Clear();
-		testRows.Clear();
+    private void SaveTests() => ProtocolTestStore.SaveAll(testsList);
 
-		foreach (TestProtocol test in testsList)
-		{
-			ProtocolTestEntry row = new();
-			row.Bind(test);
-			row.SendRequested += (sender, _) => RunSingleTest(sender as ProtocolTestEntry);
-			row.EditRequested += (sender, _) => EditTest(sender as ProtocolTestEntry);
-			row.ViewRequested += (sender, _) => ViewTest(sender as ProtocolTestEntry);
-			row.DeleteRequested += (sender, _) => DeleteTest(sender as ProtocolTestEntry);
-			row.Changed += (_, _) => SaveTests();
+    private void BuildTestRows()
+    {
+        TestsListPanel.Clear();
+        testRows.Clear();
 
-			testRows[test] = row;
-			TestsListPanel.Add(row);
-		}
+        foreach (TestProtocol test in testsList)
+        {
+            ProtocolTestEntry row = new();
+            row.Bind(test);
+            row.SendRequested += (sender, _) => RunSingleTest(sender as ProtocolTestEntry);
+            row.EditRequested += (sender, _) => EditTest(sender as ProtocolTestEntry);
+            row.ViewRequested += (sender, _) => ViewTest(sender as ProtocolTestEntry);
+            row.DeleteRequested += (sender, _) => DeleteTest(sender as ProtocolTestEntry);
+            row.Changed += (_, _) => SaveTests();
 
-		UpdateTestsSummary();
-	}
+            testRows[test] = row;
+            TestsListPanel.Add(row);
+        }
 
-	private void UpdateTestsSummary()
-	{
-		int count = testsList.Count;
-		TestsSummaryText.Text = count == 0 ? string.Empty : $"{count} test(s)";
-		TestsEmptyText.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
-		TestsRunAllBtn.IsEnabled = count > 0 && !testsRunning;
-	}
+        UpdateTestsSummary();
+    }
 
-	#region ---- add / edit / delete ----
+    private void UpdateTestsSummary()
+    {
+        int count = testsList.Count;
+        TestsSummaryText.Text = count == 0 ? string.Empty : $"{count} test(s)";
+        TestsEmptyText.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        TestsRunAllBtn.IsEnabled = count > 0 && !testsRunning;
+    }
 
-	private async void AddTest()
-	{
-		TestProtocol test = new();
-		if (await OpenEditor(test))
-		{
-			testsList.Add(test);
-			SaveTests();
-			BuildTestRows();
-		}
-	}
+    #region ---- add / edit / delete ----
 
-	private async void EditTest(ProtocolTestEntry row)
-	{
-		if (row?.Test == null) return;
+    private async void AddTest()
+    {
+        TestProtocol test = new();
+        if (await OpenEditor(test))
+        {
+            testsList.Add(test);
+            SaveTests();
+            BuildTestRows();
+        }
+    }
 
-		if (await OpenEditor(row.Test))
-		{
-			SaveTests();
-			row.Bind(row.Test);
-			UpdateTestsSummary();
-		}
-	}
+    private async void EditTest(ProtocolTestEntry row)
+    {
+        if (row?.Test == null) return;
 
-	/// <summary>Opens the editor, wiring its Record button to the live capture, and always stops recording on close.</summary>
-	private async Task<bool> OpenEditor(TestProtocol test)
-	{
-		ProtocolTestEditDialog dialog = new();
-		dialog.RecordStartRequested += (_, _) => StartRecording(dialog);
-		dialog.RecordStopRequested += (_, _) => StopRecording();
-		try
-		{
-			return await dialog.EditAsync(test);
-		}
-		finally
-		{
-			StopRecording();
-		}
-	}
+        if (await OpenEditor(row.Test))
+        {
+            SaveTests();
+            row.Bind(row.Test);
+            UpdateTestsSummary();
+        }
+    }
 
-	private async void ViewTest(ProtocolTestEntry row)
-	{
-		if (row?.Test == null) return;
+    /// <summary>Opens the editor, wiring its Record button to the live capture, and always stops recording on close.</summary>
+    private async Task<bool> OpenEditor(TestProtocol test)
+    {
+        ProtocolTestEditDialog dialog = new();
+        dialog.RecordStartRequested += (_, _) => StartRecording(dialog);
+        dialog.RecordStopRequested += (_, _) => StopRecording();
+        try
+        {
+            return await dialog.EditAsync(test);
+        }
+        finally
+        {
+            StopRecording();
+        }
+    }
 
-		ProtocolTestViewDialog dialog = new();
-		await dialog.ShowForAsync(row.Test, row.LastReceived);
-	}
+    private async void ViewTest(ProtocolTestEntry row)
+    {
+        if (row?.Test == null) return;
 
-	private void DeleteTest(ProtocolTestEntry row)
-	{
-		if (row?.Test == null) return;
+        ProtocolTestViewDialog dialog = new();
+        await dialog.ShowForAsync(row.Test, row.LastReceived);
+    }
 
-		testsList.Remove(row.Test);
-		SaveTests();
-		BuildTestRows();
-	}
+    private void DeleteTest(ProtocolTestEntry row)
+    {
+        if (row?.Test == null) return;
+
+        testsList.Remove(row.Test);
+        SaveTests();
+        BuildTestRows();
+    }
 
     #endregion
 
     #region  ---- running ----
 
     private async void RunSingleTest(ProtocolTestEntry row)
-	{
-		if (testsRunning || row?.Test == null) return;
+    {
+        if (testsRunning || row?.Test == null) return;
 
-		testsRunning = true;
-		SetTestsBusy(true);
-		try
-		{
-			TestRunResult result = await RunTestAsync(row.Test, row);
-			testResults[row.Test] = result;
-		}
-		finally
-		{
-			testsRunning = false;
-			SetTestsBusy(false);
-		}
-	}
+        testsRunning = true;
+        SetTestsBusy(true);
+        try
+        {
+            TestRunResult result = await RunTestAsync(row.Test, row);
+            testResults[row.Test] = result;
+        }
+        finally
+        {
+            testsRunning = false;
+            SetTestsBusy(false);
+        }
+    }
 
-	private async void RunAllTests()
-	{
-		if (testsRunning || testsList.Count == 0) return;
+    private async void RunAllTests()
+    {
+        if (testsRunning || testsList.Count == 0) return;
 
-		testsRunning = true;
-		SetTestsBusy(true);
-		try
-		{
-			foreach (TestProtocol test in testsList)
-			{
-				if (testRows.TryGetValue(test, out ProtocolTestEntry row))
-				{
-					TestRunResult result = await RunTestAsync(test, row);
-					testResults[row.Test] = result;
-				}
-			}
-		}
-		finally
-		{
-			testsRunning = false;
-			SetTestsBusy(false);
-		}
-	}
+        testsRunning = true;
+        SetTestsBusy(true);
+        try
+        {
+            foreach (TestProtocol test in testsList)
+            {
+                if (testRows.TryGetValue(test, out ProtocolTestEntry row))
+                {
+                    TestRunResult result = await RunTestAsync(test, row);
+                    testResults[row.Test] = result;
+                }
+            }
+        }
+        finally
+        {
+            testsRunning = false;
+            SetTestsBusy(false);
+        }
+    }
 
-	private void SetTestsBusy(bool busy)
-	{
-		TestsAddBtn.IsEnabled = !busy;
-		TestsRunAllBtn.IsEnabled = !busy && testsList.Count > 0;
-	}
+    private void SetTestsBusy(bool busy)
+    {
+        TestsAddBtn.IsEnabled = !busy;
+        TestsRunAllBtn.IsEnabled = !busy && testsList.Count > 0;
+    }
 
-	/// <summary>
-	/// Runs a test and reflects the outcome on its row (running state, received packets, verdict).
-	/// The actual send/match work lives in <see cref="ExecuteTestAsync"/>; this just drives the UI.
-	/// Returns the result so callers (including the API) can report it.
-	/// </summary>
-	private async Task<TestRunResult> RunTestAsync(TestProtocol test, ProtocolTestEntry row)
-	{
-		if (test == null)
-			return new TestRunResult { Verdict = TestVerdict.Error, Message = "No test." };
+    /// <summary>
+    /// Runs a test and reflects the outcome on its row (running state, received packets, verdict).
+    /// The actual send/match work lives in <see cref="ExecuteTestAsync"/>; this just drives the UI.
+    /// Returns the result so callers (including the API) can report it.
+    /// </summary>
+    private async Task<TestRunResult> RunTestAsync(TestProtocol test, ProtocolTestEntry row)
+    {
+        if (test == null)
+            return new TestRunResult { Verdict = TestVerdict.Error, Message = "No test." };
 
-		row?.ShowRunning();
+        row?.ShowRunning();
 
-		TestRunResult result = await ExecuteTestAsync(test, packets => row?.ShowReceived(packets));
+        TestRunResult result = await ExecuteTestAsync(test, packets => row?.ShowReceived(packets));
 
-		if (row != null)
-		{
-			row.ShowReceived(result.Received);
-			row.ShowResult(result.Verdict, result.Message, TimeSpan.FromMilliseconds(result.ElapsedMs));
-		}
+        if (row != null)
+        {
+            row.ShowReceived(result.Received);
+            row.ShowResult(result.Verdict, result.Message, TimeSpan.FromMilliseconds(result.ElapsedMs));
+        }
 
-		return result;
-	}
+        return result;
+    }
 
-	/// <summary>
-	/// Sends the request, then reads and matches one packet per expected line, with no UI dependency.
-	/// All reads share the test's total timeout budget; the first mismatch, over-budget reply, or
-	/// silent device fails. Received packets are reported through <paramref name="onProgress"/> as they
-	/// arrive. Timing is taken from the packet I/O events (OnDataSent / OnDataReceived) captured on the
-	/// device thread — never wall-clock around the awaits — so scheduling latency can't skew it.
-	/// </summary>
-	private async Task<TestRunResult> ExecuteTestAsync(TestProtocol test, Action<IReadOnlyList<byte[]>> onProgress = null)
-	{
-		TestRunResult result = new();
-		List<byte[]> received = result.Received;
+    /// <summary>
+    /// Sends the request, then reads and matches one packet per expected line, with no UI dependency.
+    /// All reads share the test's total timeout budget; the first mismatch, over-budget reply, or
+    /// silent device fails. Received packets are reported through <paramref name="onProgress"/> as they
+    /// arrive. Timing is taken from the packet I/O events (OnDataSent / OnDataReceived) captured on the
+    /// device thread — never wall-clock around the awaits — so scheduling latency can't skew it.
+    /// </summary>
+    private async Task<TestRunResult> ExecuteTestAsync(TestProtocol test, Action<IReadOnlyList<byte[]>> onProgress = null)
+    {
+        TestRunResult result = new();
+        List<byte[]> received = result.Received;
 
-		byte[] request = ParseCommand(test.RequestHex);
-		if (request == null || request.Length == 0)
-		{
-			result.Verdict = TestVerdict.Error;
-			result.Message = "Invalid or empty request bytes.";
-			return result;
-		}
+        byte[] request = ParseCommand(test.RequestHex);
+        if (request == null || request.Length == 0)
+        {
+            result.Verdict = TestVerdict.Error;
+            result.Message = "Invalid or empty request bytes.";
+            return result;
+        }
 
-		List<ExpectedPacket> expected = new();
-		for (int i = 0; i < test.ExpectedLines.Count; i++)
-		{
-			if (!ExpectedPacket.TryParse(test.ExpectedLines[i], out ExpectedPacket packet, out string parseError))
-			{
-				result.Verdict = TestVerdict.Error;
-				result.Message = $"Expected line {i + 1}: {parseError}";
-				return result;
-			}
+        List<ExpectedPacket> expected = new();
+        for (int i = 0; i < test.ExpectedLines.Count; i++)
+        {
+            if (!ExpectedPacket.TryParse(test.ExpectedLines[i], out ExpectedPacket packet, out string parseError))
+            {
+                result.Verdict = TestVerdict.Error;
+                result.Message = $"Expected line {i + 1}: {parseError}";
+                return result;
+            }
 
-			expected.Add(packet);
-		}
+            expected.Add(packet);
+        }
 
-		if (expected.Count == 0)
-		{
-			result.Verdict = TestVerdict.Error;
-			result.Message = "No expected packets defined.";
-			return result;
-		}
+        if (expected.Count == 0)
+        {
+            result.Verdict = TestVerdict.Error;
+            result.Message = "No expected packets defined.";
+            return result;
+        }
 
-		PeripheralInterface targetInterface = ResolveTestInterface();
-		if (targetInterface == null)
-		{
-			result.Verdict = TestVerdict.Error;
-			result.Message = "Not connected — start capturing a device first.";
-			return result;
-		}
+        PeripheralInterface targetInterface = ResolveTestInterface();
+        if (targetInterface == null)
+        {
+            result.Verdict = TestVerdict.Error;
+            result.Message = "Not connected — start capturing a device first.";
+            return result;
+        }
 
-		ConcurrentQueue<(byte[] data, DateTime time)> rx = new();
-		SemaphoreSlim rxSignal = new(0);
-		DateTime sentTime = default;
+        ConcurrentQueue<(byte[] data, DateTime time)> rx = new();
+        SemaphoreSlim rxSignal = new(0);
+        DateTime sentTime = default;
 
-		Action<ReadOnlyMemory<byte>, DateTime> sentProbe = (_, t) =>
-		{
-			if (sentTime == default) sentTime = t;
-		};
-		Action<ReadOnlyMemory<byte>, DateTime> recvProbe = (data, t) =>
-		{
-			rx.Enqueue((data.ToArray(), t));
-			rxSignal.Release();
-		};
+        Action<ReadOnlyMemory<byte>, DateTime> sentProbe = (_, t) =>
+        {
+            if (sentTime == default) sentTime = t;
+        };
+        Action<ReadOnlyMemory<byte>, DateTime> recvProbe = (data, t) =>
+        {
+            rx.Enqueue((data.ToArray(), t));
+            rxSignal.Release();
+        };
 
-		int budgetMs = Math.Max(1, test.TotalTimeoutMs);
+        int budgetMs = Math.Max(1, test.TotalTimeoutMs);
 
-		// The token is a generous safety cap (budget + slack) so it only trips when the device is
-		// genuinely silent. The real pass/fail timeout is judged from arrival timestamps below.
-		using CancellationTokenSource cts = new(budgetMs + TimeoutSafetySlackMs);
-		try
-		{
-			// Drain any stale reports, then start listening for this request's replies only.
-			targetInterface.ClearPendingReports();
-			targetInterface.OnDataSent += sentProbe;
-			targetInterface.OnDataReceived += recvProbe;
+        // The token is a generous safety cap (budget + slack) so it only trips when the device is
+        // genuinely silent. The real pass/fail timeout is judged from arrival timestamps below.
+        using CancellationTokenSource cts = new(budgetMs + TimeoutSafetySlackMs);
+        try
+        {
+            // Drain any stale reports, then start listening for this request's replies only.
+            targetInterface.ClearPendingReports();
+            targetInterface.OnDataSent += sentProbe;
+            targetInterface.OnDataReceived += recvProbe;
 
-			await targetInterface.WriteAsync(request, cts.Token);
+            await targetInterface.WriteAsync(request, cts.Token);
 
-			TimeSpan elapsed = TimeSpan.Zero;
-			for (int i = 0; i < expected.Count; i++)
-			{
-				await rxSignal.WaitAsync(cts.Token);
-				rx.TryDequeue(out (byte[] data, DateTime time) item);
+            TimeSpan elapsed = TimeSpan.Zero;
+            for (int i = 0; i < expected.Count; i++)
+            {
+                await rxSignal.WaitAsync(cts.Token);
+                rx.TryDequeue(out (byte[] data, DateTime time) item);
 
-				byte[] compare = StripReportIdOnMatch && item.data.Length > 0 ? item.data[1..] : item.data;
-				if (sentTime != default && item.time >= sentTime)
-					elapsed = item.time - sentTime;
+                byte[] compare = StripReportIdOnMatch && item.data.Length > 0 ? item.data[1..] : item.data;
+                if (sentTime != default && item.time >= sentTime)
+                    elapsed = item.time - sentTime;
 
-				received.Add(compare);
-				result.ElapsedMs = elapsed.TotalMilliseconds;
-				onProgress?.Invoke(received);
+                received.Add(compare);
+                result.ElapsedMs = elapsed.TotalMilliseconds;
+                onProgress?.Invoke(received);
 
-				// Judge the timeout on real device latency (send → arrival), not wall-clock around
-				// the awaits — a reply that landed within budget must never be failed as a timeout.
-				if (elapsed.TotalMilliseconds > budgetMs)
-				{
-					result.Verdict = TestVerdict.Timeout;
-					result.Message = $"Reply arrived in {elapsed.TotalMilliseconds:0.###} ms, over the {budgetMs} ms budget.";
-					return result;
-				}
+                // Judge the timeout on real device latency (send → arrival), not wall-clock around
+                // the awaits — a reply that landed within budget must never be failed as a timeout.
+                if (elapsed.TotalMilliseconds > budgetMs)
+                {
+                    result.Verdict = TestVerdict.Timeout;
+                    result.Message = $"Reply arrived in {elapsed.TotalMilliseconds:0.###} ms, over the {budgetMs} ms budget.";
+                    return result;
+                }
 
-				if (!expected[i].Matches(compare, test.AllowTrailingWildcard))
-				{
-					result.Verdict = TestVerdict.Mismatch;
-					result.Message = $"Packet {i + 1} mismatch. Expected {expected[i]}, got {ByteToString(compare, false)}.";
-					return result;
-				}
-			}
+                if (!expected[i].Matches(compare, test.AllowTrailingWildcard))
+                {
+                    result.Verdict = TestVerdict.Mismatch;
+                    result.Message = $"Packet {i + 1} mismatch. Expected {expected[i]}, got {ByteToString(compare, false)}.";
+                    return result;
+                }
+            }
 
-			result.Verdict = TestVerdict.Pass;
-			result.Message = $"{expected.Count} packet(s) matched.";
-			result.ElapsedMs = elapsed.TotalMilliseconds;
-		}
-		catch (OperationCanceledException)
-		{
-			result.Verdict = TestVerdict.Timeout;
-			result.Message = $"No reply within {budgetMs} ms.";
-		}
-		catch (Exception ex)
-		{
-			result.Verdict = TestVerdict.Error;
-			result.Message = ex.Message;
-			Debug.Log($"[BusHound.Tests] '{test.Name}' failed: {ex.Message}");
-		}
-		finally
-		{
-			targetInterface.OnDataSent -= sentProbe;
-			targetInterface.OnDataReceived -= recvProbe;
-		}
+            result.Verdict = TestVerdict.Pass;
+            result.Message = $"{expected.Count} packet(s) matched.";
+            result.ElapsedMs = elapsed.TotalMilliseconds;
+        }
+        catch (OperationCanceledException)
+        {
+            result.Verdict = TestVerdict.Timeout;
+            result.Message = $"No reply within {budgetMs} ms.";
+        }
+        catch (Exception ex)
+        {
+            result.Verdict = TestVerdict.Error;
+            result.Message = ex.Message;
+            Debug.Log($"[BusHound.Tests] '{test.Name}' failed: {ex.Message}");
+        }
+        finally
+        {
+            targetInterface.OnDataSent -= sentProbe;
+            targetInterface.OnDataReceived -= recvProbe;
+        }
 
-		return result;
-	}
+        return result;
+    }
 
-	/// <summary>
-	/// Resolves and opens the vendor interface for the active device, matching the page's normal
-	/// selection (usage page 0xFF02 for PID 0x1ACE, otherwise 0xFF00; top-level usage 1).
-	/// </summary>
-	private PeripheralInterface ResolveTestInterface()
-	{
-		Device device = DeviceSelection.Instance.ActiveDevice;
-		if (device == null || device.interfaces.Count == 0)
-			return null;
+    /// <summary>
+    /// Resolves and opens the vendor interface for the active device, matching the page's normal
+    /// selection (usage page 0xFF02 for PID 0x1ACE, otherwise 0xFF00; top-level usage 1).
+    /// </summary>
+    private PeripheralInterface ResolveTestInterface()
+    {
+        Device device = DeviceSelection.Instance.ActiveDevice;
+        if (device == null || device.interfaces.Count == 0)
+            return null;
 
-		int usagePage = device.PID == 0x1ACE ? 0xFF02 : 0xFF00;
-		IPeripheralDetail deviceInterface = device.interfaces.FirstOrDefault(
-			@interface => @interface.UsagePage == usagePage && @interface.Usage == 1,
-			device.interfaces[0]);
-		if (deviceInterface == null)
-			return null;
+        int[] usagePages = { 0xFF01, 0xFF02, 0xFF00 };
 
-		return deviceInterface.Connect(true);
-	}
+        IPeripheralDetail deviceInterface = usagePages
+            .Select(usagePage => device.interfaces.FirstOrDefault(
+                @interface => @interface.UsagePage == usagePage &&
+                              @interface.Usage == 1))
+            .FirstOrDefault(@interface => @interface != null);
+
+        if (deviceInterface == null)
+            return null;
+
+        return deviceInterface.Connect(true);
+    }
 
     #endregion
 
@@ -423,48 +426,48 @@ public partial class ASUSBusHoundPage
     /// packets (appending each into the expected field), and fires the request once.
     /// </summary>
     private void StartRecording(ProtocolTestEditDialog dialog)
-	{
-		if (recording) return;
+    {
+        if (recording) return;
 
-		PeripheralInterface targetInterface = ResolveTestInterface();
-		if (targetInterface == null)
-		{
-			dialog.NotifyRecordingStopped("Not connected — start capturing a device first.");
-			return;
-		}
+        PeripheralInterface targetInterface = ResolveTestInterface();
+        if (targetInterface == null)
+        {
+            dialog.NotifyRecordingStopped("Not connected — start capturing a device first.");
+            return;
+        }
 
-		recordDialog = dialog;
-		recordingInterface = targetInterface;
-		recording = true;
-		dialog.ClearExpectedForRecording();
+        recordDialog = dialog;
+        recordingInterface = targetInterface;
+        recording = true;
+        dialog.ClearExpectedForRecording();
 
-		recordHandler = (data, time) =>
-		{
-			byte[] actual = data.ToArray();
-			byte[] line = StripReportIdOnMatch && actual.Length > 0 ? actual[1..] : actual;
-			string text = ByteToString(line, false);
-			Dispatcher.InvokeAsync(() => recordDialog?.AppendRecordedPacket(text));
-		};
-		targetInterface.OnDataReceived += recordHandler;
+        recordHandler = (data, time) =>
+        {
+            byte[] actual = data.ToArray();
+            byte[] line = StripReportIdOnMatch && actual.Length > 0 ? actual[1..] : actual;
+            string text = ByteToString(line, false);
+            Dispatcher.InvokeAsync(() => recordDialog?.AppendRecordedPacket(text));
+        };
+        targetInterface.OnDataReceived += recordHandler;
 
-		byte[] request = ParseCommand(dialog.CurrentRequestHex);
-		if (request != null && request.Length > 0)
-			_ = targetInterface.WriteAsync(request, CancellationToken.None);
-	}
+        byte[] request = ParseCommand(dialog.CurrentRequestHex);
+        if (request != null && request.Length > 0)
+            _ = targetInterface.WriteAsync(request, CancellationToken.None);
+    }
 
-	private void StopRecording()
-	{
-		if (!recording) return;
-		recording = false;
+    private void StopRecording()
+    {
+        if (!recording) return;
+        recording = false;
 
-		if (recordingInterface != null && recordHandler != null)
-			recordingInterface.OnDataReceived -= recordHandler;
+        if (recordingInterface != null && recordHandler != null)
+            recordingInterface.OnDataReceived -= recordHandler;
 
-		recordHandler = null;
-		recordingInterface = null;
-		recordDialog?.NotifyRecordingStopped("Recording stopped.");
-		recordDialog = null;
-	}
+        recordHandler = null;
+        recordingInterface = null;
+        recordDialog?.NotifyRecordingStopped("Recording stopped.");
+        recordDialog = null;
+    }
 
     #endregion
 }
