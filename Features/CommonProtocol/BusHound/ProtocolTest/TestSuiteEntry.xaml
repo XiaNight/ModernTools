@@ -1,0 +1,126 @@
+<UserControl x:Class="CommonProtocol.BusHound.ProtocolTest.TestSuiteEntry"
+			 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+			 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+			 xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+			 xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+			 xmlns:local="clr-namespace:CommonProtocol.BusHound.ProtocolTest"
+			 mc:Ignorable="d"
+			 d:DesignHeight="120" d:DesignWidth="800">
+	<UserControl.Resources>
+		<SolidColorBrush x:Key="PassBg" Color="#3327C93F"/>
+		<SolidColorBrush x:Key="FailBg" Color="#33FF3B30"/>
+		<SolidColorBrush x:Key="SkipBg" Color="#22888888"/>
+		<SolidColorBrush x:Key="PassFg" Color="#FF2FA84A"/>
+		<SolidColorBrush x:Key="FailFg" Color="#FFE0342B"/>
+	</UserControl.Resources>
+
+	<Border CornerRadius="4"
+			Padding="5,4,4,4"
+			Margin="-5,2,-5,2"
+			BorderThickness="0"
+			Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}">
+
+		<StackPanel>
+			<!-- Suite header (always visible) -->
+			<Grid x:Name="SuiteHeader" Cursor="Hand">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="Auto"/>
+					<!-- Expand/collapse -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Run button -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Badge -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Response time -->
+					<ColumnDefinition Width="*"/>
+					<!-- Name -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Step count -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Edit -->
+					<ColumnDefinition Width="Auto"/>
+					<!-- Delete -->
+				</Grid.ColumnDefinitions>
+
+				<!-- Expand/collapse chevron -->
+				<ui:FontIcon x:Name="ExpandIcon" Grid.Column="0"
+							 Glyph="&#xE76C;" FontSize="12" FontFamily="Segoe Fluent Icons"
+							 VerticalAlignment="Center" Margin="4,0"
+							 Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+				<!-- Run suite button -->
+				<Button x:Name="RunButton" Grid.Column="1"
+						Padding="6 4" Margin="4,0"
+						VerticalAlignment="Stretch"
+						ToolTip="Run this suite">
+					<ui:FontIcon Glyph="&#xE768;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+
+				<!-- Suite verdict badge -->
+				<Border x:Name="Badge" Grid.Column="2"
+						Width="86" CornerRadius="4" Margin="4,0"
+						VerticalAlignment="Stretch" Background="{StaticResource SkipBg}">
+					<TextBlock x:Name="BadgeText" Text="--" FontWeight="SemiBold" FontSize="14"
+							   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+				</Border>
+
+				<!-- Suite response time -->
+				<Border x:Name="ResponseTime" Grid.Column="3"
+						Width="56" CornerRadius="4" Margin="4,0"
+						VerticalAlignment="Stretch" Background="{StaticResource SkipBg}">
+					<TextBlock x:Name="ResponseTimeText" Text="--" FontWeight="SemiBold" FontSize="14"
+							   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+				</Border>
+
+				<!-- Suite name -->
+				<TextBlock x:Name="NameBlock" Grid.Column="4"
+						   FontSize="14" FontWeight="SemiBold"
+						   VerticalAlignment="Center"
+						   TextTrimming="CharacterEllipsis"
+						   Margin="8,0,4,0"
+						   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+
+				<!-- Step count -->
+				<TextBlock x:Name="StepCountText" Grid.Column="5"
+						   FontSize="12"
+						   VerticalAlignment="Center"
+						   Margin="4,0"
+						   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+
+				<!-- Edit suite button -->
+				<Button x:Name="EditButton" Grid.Column="6"
+						Padding="8 6" Margin="4,0"
+						VerticalAlignment="Stretch"
+						ToolTip="Edit suite properties">
+					<ui:FontIcon Glyph="&#xE70F;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+
+				<!-- Delete suite button -->
+				<Button x:Name="DeleteButton" Grid.Column="7"
+						Padding="8 6" Margin="4,0"
+						VerticalAlignment="Stretch"
+						ToolTip="Delete suite">
+					<ui:FontIcon Glyph="&#xE74D;" FontSize="16" FontFamily="Segoe Fluent Icons"/>
+				</Button>
+			</Grid>
+
+			<!-- Expandable steps area -->
+			<StackPanel x:Name="StepsPanel" Visibility="Collapsed" Margin="0,4,0,0">
+
+				<!-- Steps list -->
+				<StackPanel x:Name="StepsList"/>
+
+				<!-- Add step button row -->
+				<ui:SimpleStackPanel Orientation="Horizontal" Spacing="4" Margin="20,4,0,4">
+					<Button x:Name="AddStepBtn" Padding="6,3" ToolTip="Add a new step">
+						<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
+							<ui:FontIcon Glyph="&#xE710;" FontSize="12" FontFamily="Segoe Fluent Icons"/>
+							<TextBlock Text="Add Step" FontSize="12"/>
+						</ui:SimpleStackPanel>
+					</Button>
+				</ui:SimpleStackPanel>
+			</StackPanel>
+		</StackPanel>
+	</Border>
+</UserControl>

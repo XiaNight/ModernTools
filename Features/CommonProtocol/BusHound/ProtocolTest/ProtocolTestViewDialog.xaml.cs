@@ -8,12 +8,6 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using ModernWpf.Controls;
 
-/// <summary>
-/// Read-only view of a <see cref="TestProtocol"/>: its request bytes and, per packet, the expected
-/// line paired with the most recent actual reply. Bytes on the actual line that fail to match are
-/// highlighted red. Opened by clicking a row's OUT/IN preview text; editing is only reachable via
-/// the edit button.
-/// </summary>
 public partial class ProtocolTestViewDialog : ContentDialog
 {
 	public ProtocolTestViewDialog()
@@ -21,32 +15,86 @@ public partial class ProtocolTestViewDialog : ContentDialog
 		InitializeComponent();
 	}
 
-	/// <summary>
-	/// Populates the view from <paramref name="test"/> and the packets captured by the most recent
-	/// run (<paramref name="received"/>, may be empty) and shows it.
-	/// </summary>
-	public async System.Threading.Tasks.Task ShowForAsync(TestProtocol test, IReadOnlyList<byte[]> received)
+	public async System.Threading.Tasks.Task ShowForStepAsync(TestStep step, StepRunResult result)
 	{
-		if (test == null)
+		if (step == null)
 			return;
 
-		Title = string.IsNullOrWhiteSpace(test.Name) ? "Test details" : test.Name;
-		RequestText.Text = string.IsNullOrWhiteSpace(test.RequestHex) ? "(no request)" : test.RequestHex.Trim();
+		Title = string.IsNullOrWhiteSpace(step.Name) ? "Step details" : step.Name;
 
-		BuildPackets(test, received ?? Array.Empty<byte[]>());
+		IReadOnlyList<byte[]> received = result?.Received ?? new List<byte[]>();
 
-		TrailingNote.Text = test.AllowTrailingWildcard
-			? "Extra trailing bytes on received packets are ignored (trailing wildcard on)."
-			: "Received packets must match the expected length exactly.";
+		switch (step)
+		{
+			case SendStep send:
+				RequestText.Text = string.IsNullOrWhiteSpace(send.RequestHex) ? "(no request)" : send.RequestHex.Trim();
+				BuildSendOnlyView();
+				TrailingNote.Text = string.Empty;
+				break;
+
+			case SendAndWaitStep wait:
+				RequestText.Text = string.IsNullOrWhiteSpace(wait.RequestHex) ? "(no request)" : wait.RequestHex.Trim();
+				BuildWaitView(received, wait.ExpectedCount);
+				TrailingNote.Text = string.Empty;
+				break;
+
+			case SendAndAssertStep assert:
+				RequestText.Text = string.IsNullOrWhiteSpace(assert.RequestHex) ? "(no request)" : assert.RequestHex.Trim();
+				BuildAssertView(assert, received);
+				TrailingNote.Text = assert.AllowTrailingWildcard
+					? "Extra trailing bytes on received packets are ignored (trailing wildcard on)."
+					: "Received packets must match the expected length exactly.";
+				break;
+
+			case SleepStep sleep:
+				RequestText.Text = $"Sleep {sleep.DurationMs}ms";
+				PacketsPanel.Children.Clear();
+				PacketsPanel.Children.Add(MutedLine(result?.Message ?? "(no result)"));
+				TrailingNote.Text = string.Empty;
+				break;
+		}
 
 		await ShowAsync();
 	}
 
-	private void BuildPackets(TestProtocol test, IReadOnlyList<byte[]> received)
+	private void BuildSendOnlyView()
+	{
+		PacketsPanel.Children.Clear();
+		PacketsPanel.Children.Add(MutedLine("(fire and forget — no response captured)"));
+	}
+
+	private void BuildWaitView(IReadOnlyList<byte[]> received, int expectedCount)
 	{
 		PacketsPanel.Children.Clear();
 
-		List<string> expectedLines = test.ExpectedLines ?? new List<string>();
+		if (received.Count == 0)
+		{
+			PacketsPanel.Children.Add(MutedLine("(no packets received)"));
+			return;
+		}
+
+		Brush labelBrush = (Brush)FindResource("SystemControlForegroundBaseMediumBrush");
+		Brush normalBrush = (Brush)FindResource("SystemControlForegroundBaseHighBrush");
+
+		for (int i = 0; i < received.Count; i++)
+		{
+			StackPanel group = new() { Margin = new Thickness(0, i == 0 ? 0 : 8, 0, 0) };
+			group.Children.Add(new TextBlock
+			{
+				Text = $"Packet {i + 1}",
+				FontWeight = FontWeights.SemiBold,
+				Margin = new Thickness(0, 0, 0, 2),
+			});
+			group.Children.Add(LabeledLine("Received", HexFormat.FormatBrief(received[i]), labelBrush, normalBrush));
+			PacketsPanel.Children.Add(group);
+		}
+	}
+
+	private void BuildAssertView(SendAndAssertStep assert, IReadOnlyList<byte[]> received)
+	{
+		PacketsPanel.Children.Clear();
+
+		List<string> expectedLines = assert.ExpectedLines ?? new List<string>();
 		int groups = Math.Max(expectedLines.Count, received.Count);
 
 		if (groups == 0)
@@ -76,19 +124,21 @@ public partial class ProtocolTestViewDialog : ContentDialog
 				Margin = new Thickness(0, 0, 0, 2),
 			});
 
-			// Expected line (plain text; X marks wildcard nibbles).
 			string expectedText = hasExpected
 				? (expected != null ? expected.ToString() : expectedLines[i].Trim())
 				: "(no expected line)";
 			group.Children.Add(LabeledLine("Expected", expectedText, labelBrush, normalBrush));
 
-			// Actual line, colouring each mismatched byte red.
 			byte[] actual = i < received.Count ? received[i] : null;
 			if (actual == null)
+			{
 				group.Children.Add(LabeledLine("Actual", "(none received)", labelBrush, labelBrush));
+			}
 			else
-				group.Children.Add(ActualLine(actual, expected, test.AllowTrailingWildcard,
+			{
+				group.Children.Add(ActualLine(actual, expected, assert.AllowTrailingWildcard,
 					labelBrush, normalBrush, mismatchFg, mismatchBg));
+			}
 
 			PacketsPanel.Children.Add(group);
 		}
@@ -120,7 +170,6 @@ public partial class ProtocolTestViewDialog : ContentDialog
 
 		for (int i = 0; i < actual.Length; i++)
 		{
-			// No expected line at all means every received byte is unexpected.
 			bool matched = expected != null && expected.ByteMatches(i, actual[i], allowTrailing);
 
 			Run run = new(actual[i].ToString("X2"));
