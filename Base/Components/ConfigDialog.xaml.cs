@@ -114,66 +114,12 @@ public partial class ConfigDialog : UserControl
 
         var items = target == null
             ? new List<ConfigItem>()
-            : GetConfigItems(target).ToList();
+            : ConfigEditorFactory.GetConfigItems(target).ToList();
 
         foreach (var item in items)
             ConfigContainer.Children.Add(ConfigEditorFactory.BuildRow(item));
 
         EmptyPlaceholder.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    #endregion
-
-    #region Reflection
-
-    private static IEnumerable<ConfigItem> GetConfigItems(object target)
-    {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public |
-                                   BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
-
-        var results = new List<ConfigItem>();
-        var seenNames = new HashSet<string>();
-
-        for (var t = target.GetType(); t != null && t != typeof(object); t = t.BaseType)
-        {
-            foreach (var field in t.GetFields(flags))
-            {
-                var attr = field.GetCustomAttribute<ConfigAttribute>(inherit: true);
-                if (attr == null || !seenNames.Add(field.Name)) continue;
-                if (!MemberBinding.EvaluateCondition(target, attr.Condition)) continue;
-
-                results.Add(new ConfigItem
-                {
-                    Attr = attr,
-                    ValueType = field.FieldType,
-                    Label = MemberBinding.ResolveLabel(attr, field.Name),
-                    Get = () => field.GetValue(target),
-                    Set = MemberBinding.WrapSet(target, attr.Changed,
-                        () => field.GetValue(target), v => field.SetValue(target, v)),
-                });
-            }
-
-            foreach (var prop in t.GetProperties(flags))
-            {
-                var attr = prop.GetCustomAttribute<ConfigAttribute>(inherit: true);
-                if (attr == null || !seenNames.Add(prop.Name)) continue;
-                if (!prop.CanRead || !prop.CanWrite) continue;
-                if (prop.GetIndexParameters().Length > 0) continue;
-                if (!MemberBinding.EvaluateCondition(target, attr.Condition)) continue;
-
-                results.Add(new ConfigItem
-                {
-                    Attr = attr,
-                    ValueType = prop.PropertyType,
-                    Label = MemberBinding.ResolveLabel(attr, prop.Name),
-                    Get = () => prop.GetValue(target),
-                    Set = MemberBinding.WrapSet(target, attr.Changed,
-                        () => prop.GetValue(target), v => prop.SetValue(target, v)),
-                });
-            }
-        }
-
-        return results;
     }
 
     #endregion

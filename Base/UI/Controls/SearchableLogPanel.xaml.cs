@@ -128,25 +128,15 @@ namespace Base.Components
             UpdateMatchLabel();
         }
 
-        public void AppendLog(string text, bool addNewline = true, bool autoScrollIfAtBottom = true)
+        public void AppendLog(string line, bool addNewline = true, bool autoScrollIfAtBottom = true)
         {
-            if (text == null) return;
+            if (line == null) return;
 
             bool atBottom = IsAtBottom();
 
-            if(para.Inlines.LastInline is Run lastrun)
-            {
-                lastrun.Text += text;
-            }
-            else
-            {
-                para.Inlines.Add(new Run(text));
-            }
+            string text = addNewline ? line + Environment.NewLine : line;
 
-            if(addNewline)
-            {
-                para.Inlines.Add(new LineBreak());
-            }
+            para.Inlines.Add(new Run(text));
 
             logVersion++;
             isMatchDirty = true;
@@ -704,7 +694,7 @@ namespace Base.Components
         #endregion
 
         public T GetAdditionalControlByTag<T>(string tag) where T : class
-        {
+        {   
             if (AdditionalControls == null) return null;
             foreach (var item in AdditionalControls)
             {

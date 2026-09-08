@@ -68,7 +68,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         ApplyComboxStyle();
 
         OnConnectedDevicesUpdated += UpdatePortComboBox;
-        OnConnectedDevicesUpdated += (_) => RemoveUnavailableDevices(); 
+        OnConnectedDevicesUpdated += (_) => RemoveUnavailableDevices();
         var deviceName = Main.MainFooter.AddLeft();
         pendingCmdCountText = new TextBlock()
         {
@@ -237,7 +237,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
 
     public void ScheduleRefresh()
     {
-        if(refreshSchedulerTimer != null)
+        if (refreshSchedulerTimer != null)
         {
             refreshSchedulerTimer.Change(REFRESH_INTERVAL_MS, Timeout.Infinite);
             return;
@@ -430,23 +430,63 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             "on each entry from ListDiscoveredDevices). Body: { \"productIdentifier\": string }. Any currently " +
             "connected device is disconnected first. Returns true on success, false if no discovered device " +
             "matches the identifier.")]
-    public async Task<bool> Connect(string productIdentifier)
+    public async Task<ApiResponse> ConnectIdentifier(string productIdentifier)
     {
         await Disconnect();
+
         var device = DiscoveredDevices.FirstOrDefault(d => d.MatchesIdentifier(productIdentifier));
-        return device == null ? false : Connect(device);
+        if (device == null)
+        {
+            return new ApiResponse()
+            {
+                Status = 404,
+                Data = $"No device found with identifier: {productIdentifier}"
+            };
+        }
+
+        return Connect(device)
+        ? new ApiResponse()
+        {
+            Status = 200,
+            Data = $"Connected to device: {device.ProductName} VID: {device.VID:X4} PID: {device.PID:X4}"
+        }
+        : new ApiResponse()
+        {
+            Status = 500,
+            Data = $"Failed to connect to device: {device.ProductName} VID: {device.VID:X4} PID: {device.PID:X4}"
+        };
     }
 
     [POST(requireMainThread: true,
-        Summary = "Connect to a device by USB Vendor ID and Product ID.",
-        Description = "Connects to a discovered device by its USB Vendor ID and Product ID. " +
-            "Body: { \"vid\": integer, \"pid\": integer } (decimal or hex). Any currently connected device is " +
-            "disconnected first. Returns true on success, false if no discovered device has that VID and PID.")]
-    public async Task<bool> Connect(ushort vid, ushort pid)
+    Summary = "Connect to a device by USB Vendor ID and Product ID.",
+    Description = "Connects to a discovered device by its USB Vendor ID and Product ID. " +
+        "Body: { \"vid\": integer, \"pid\": integer } (decimal or hex). Any currently connected device is " +
+        "disconnected first. Returns an ApiResponse describing the connection result.")]
+    public async Task<ApiResponse> ConnectVidPid(ushort vid, ushort pid)
     {
         await Disconnect();
+
         var device = DiscoveredDevices.FirstOrDefault(d => d.VID == vid && d.PID == pid);
-        return device == null ? false : Connect(device);
+        if (device == null)
+        {
+            return new ApiResponse()
+            {
+                Status = 404,
+                Data = $"No device found with VID: {vid:X4} PID: {pid:X4}"
+            };
+        }
+
+        return Connect(device)
+        ? new ApiResponse()
+        {
+            Status = 200,
+            Data = $"Connected to device: {device.ProductName} VID: {device.VID:X4} PID: {device.PID:X4}"
+        }
+        : new ApiResponse()
+        {
+            Status = 500,
+            Data = $"Failed to connect to device: {device.ProductName} VID: {device.VID:X4} PID: {device.PID:X4}"
+        };
     }
 
     public bool Connect(ushort vid, ushort pid, string name, params IPeripheralDetail[] interfaces)
@@ -479,6 +519,7 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
         Application.Current.Shutdown(0);
     }
 
+    [POST]
     public async Task Disconnect()
     {
         if (ActiveDevice == null) return;
@@ -577,9 +618,23 @@ public class DeviceSelection : WpfBehaviourSingleton<DeviceSelection>
             interfaces.Add(@interface);
         }
 
+        public bool FindInterface(ushort usage, ushort usagepage, out PeripheralInterfaceDetail interfaceDetail)
+        {
+            interfaceDetail = null;
+            foreach (var @interface in interfaces)
+            {
+                if (@interface.Usage == usage && @interface.UsagePage == usagepage)
+                {
+                    interfaceDetail = @interface as PeripheralInterfaceDetail;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public void Dispose()
         {
-            foreach(var @interface in interfaces)
+            foreach (var @interface in interfaces)
             {
                 @interface.Dispose();
             }
