@@ -5,6 +5,9 @@ using Base.Services.Peripheral;
 using ModernWpf.Controls;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace CommonProtocol
@@ -43,6 +46,9 @@ namespace CommonProtocol
             Changed = nameof(OnLogKeysChanged))]
         private readonly string LogKeys = "A0";
 
+        [Config]
+        private readonly List<LogKeyInfo> logKeyInfos = [];
+
         [Persist, Config("Timestamp Each Line",
             Header = "Logging",
             Hint = "Prefix every line with a [HH:mm:ss.fff] timestamp before the key tag.")]
@@ -60,6 +66,15 @@ namespace CommonProtocol
             Type = ConfigType.Hex,
             Changed = nameof(ApplyPipeMode))]
         private readonly byte LogReportId = 0x00;
+
+        //- Start / Pause
+        private bool isLogEnabled = true;
+        private Button logStartBtn;
+        private Button logPauseBtn;
+
+        //- Logging
+        private volatile bool commandPending;
+        private byte lastKey = 0x00;
 
         private void OnLogKeysChanged()
         {
@@ -113,6 +128,8 @@ namespace CommonProtocol
         public DeviceLogPage()
         {
             InitializeComponent();
+            logStartBtn = LogPanel.GetAdditionalControlByTag<Button>("LogStartBtn");
+            logPauseBtn = LogPanel.GetAdditionalControlByTag<Button>("LogPauseBtn");
         }
 
         public override void Awake()
@@ -121,7 +138,7 @@ namespace CommonProtocol
 
             timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(1)
+                Interval = TimeSpan.FromMilliseconds(IntervalMs),
             };
             timer.Tick += OnTick;
 
@@ -155,13 +172,21 @@ namespace CommonProtocol
         private void OnTick(object sender, EventArgs e)
         {
             if (activeInterface == null) return;
+            if (!isLogEnabled) return;
+            if (commandPending) return;
             if (logKeys.Count == 0) ParseLogKeys();
             if (logKeys.Count == 0) return;
 
-            // Cycle through the configured targets, one request per tick.
             byte key = logKeys[cycleIndex % logKeys.Count];
-            cycleIndex = (cycleIndex + 1) % logKeys.Count;
+            AppendLogQuerry(key);
 
+            // Cycle through the configured targets, one request per tick.
+            cycleIndex = (cycleIndex + 1) % logKeys.Count;
+        }
+
+        private void AppendLogQuerry(byte key)
+        {
+            commandPending = true;
             ProtocolService.AppendCmd(activeInterface, [0xFD, key, 0x00, 0x00], true);
         }
 
@@ -221,6 +246,7 @@ namespace CommonProtocol
 
         private void Parse(ReadOnlyMemory<byte> arg1, DateTime arg2)
         {
+            commandPending = false;
             ReadOnlySpan<byte> span = arg1.Span;
 
             // Reply layout: [reportId] FD <key> <idx> <idx> <ascii...>. Match FD and a key we poll.
@@ -267,12 +293,54 @@ namespace CommonProtocol
             {
                 foreach (string l in lines) LogPanel.AppendLog(l, true);
             });
+
+            if (end >= 58)
+            {
+                AppendLogQuerry(key);
+            }
         }
 
         private string FormatLine(byte key, string line, DateTime timeUtc)
         {
             string ts = ShowTimestamp ? $"[{timeUtc.ToLocalTime():HH:mm:ss.fff}]" : string.Empty;
             return $"{ts}[{key:X2}] {line}";
+        }
+
+        private void OnStartButtonClick(object sender, RoutedEventArgs e)
+        {
+            isLogEnabled = true;
+            logStartBtn.Visibility = Visibility.Collapsed;
+            logPauseBtn.Visibility = Visibility.Visible;
+        }
+
+        private void OnPauseButtonClick(object sender, RoutedEventArgs e)
+        {
+            isLogEnabled = false;
+            logPauseBtn.Visibility = Visibility.Collapsed;
+            logStartBtn.Visibility = Visibility.Visible;
+        }
+
+        private void OnExportButtonClick(object sender, RoutedEventArgs e)
+        {
+            Microsoft.Win32.SaveFileDialog dialog = new()
+            {
+                Filter = "Text Files (*.txt)|*.txt|Log Files (*.log)|*.log|All Files (*.*)|*.*",
+                DefaultExt = ".txt",
+                FileName = $"DeviceLog_{DateTime.Now:yyyyMMdd_HHmmss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                string text = LogPanel.GetAllText();
+                System.IO.File.WriteAllText(dialog.FileName, text);
+            }
+        }
+
+        private class LogKeyInfo
+        {
+            public byte Key { get; set; }
+            public string KeyName { get; set; }
+            public Color Color { get; set; }
         }
     }
 }

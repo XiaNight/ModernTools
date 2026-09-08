@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -12,6 +13,19 @@ namespace Base.Components
 {
     public partial class SearchableLogPanel : UserControl, INotifyPropertyChanged
     {
+        public static readonly DependencyProperty OutsideItemsProperty =
+            DependencyProperty.Register(
+                nameof(AdditionalControls),
+                typeof(IEnumerable),
+                typeof(SearchableLogPanel),
+                new PropertyMetadata(null));
+
+        public IEnumerable AdditionalControls
+        {
+            get => (IEnumerable)GetValue(OutsideItemsProperty);
+            set => SetValue(OutsideItemsProperty, value);
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         private readonly Paragraph para = new Paragraph { Margin = new Thickness(0) };
@@ -114,15 +128,25 @@ namespace Base.Components
             UpdateMatchLabel();
         }
 
-        public void AppendLog(string line, bool addNewline = true, bool autoScrollIfAtBottom = true)
+        public void AppendLog(string text, bool addNewline = true, bool autoScrollIfAtBottom = true)
         {
-            if (line == null) return;
+            if (text == null) return;
 
             bool atBottom = IsAtBottom();
 
-            string text = addNewline ? line + Environment.NewLine : line;
+            if(para.Inlines.LastInline is Run lastrun)
+            {
+                lastrun.Text += text;
+            }
+            else
+            {
+                para.Inlines.Add(new Run(text));
+            }
 
-            para.Inlines.Add(new Run(text));
+            if(addNewline)
+            {
+                para.Inlines.Add(new LineBreak());
+            }
 
             logVersion++;
             isMatchDirty = true;
@@ -678,5 +702,18 @@ namespace Base.Components
         }
 
         #endregion
+
+        public T GetAdditionalControlByTag<T>(string tag) where T : class
+        {
+            if (AdditionalControls == null) return null;
+            foreach (var item in AdditionalControls)
+            {
+                if (item is FrameworkElement fe && fe.Tag is string t && t == tag)
+                {
+                    return item as T;
+                }
+            }
+            return null;
+        }
     }
 }
