@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -128,7 +129,7 @@ namespace Base.Components
             UpdateMatchLabel();
         }
 
-        public void AppendLog(string line, bool addNewline = true, bool autoScrollIfAtBottom = true)
+        public void AppendLog(string line, bool addNewline = true, bool autoScrollIfAtBottom = true, Brush colorBrush = null)
         {
             if (line == null) return;
 
@@ -136,7 +137,10 @@ namespace Base.Components
 
             string text = addNewline ? line + Environment.NewLine : line;
 
-            para.Inlines.Add(new Run(text));
+            Run newRun = new Run(text);
+            if (colorBrush != null) newRun.Foreground = colorBrush;
+
+            para.Inlines.Add(newRun);
 
             logVersion++;
             isMatchDirty = true;

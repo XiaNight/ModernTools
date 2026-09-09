@@ -121,7 +121,9 @@ public static class ConfigEditorFactory
 			editor = new ConfigPathField();
 		else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
 			editor = new ConfigListField { Depth = depth };
-		else if (HasConfigMembers(type))
+		else if (type == typeof(Color))
+			editor = new ConfigColorField();
+        else if (HasConfigMembers(type))
 		{
 			// A composite member expands into a nested block of its own rows, rather than being
 			// stringified into the text box below, which could neither display nor parse it.
