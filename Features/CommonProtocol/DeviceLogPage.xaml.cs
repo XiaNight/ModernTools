@@ -4,7 +4,11 @@ using Base.Services;
 using Base.Services.Peripheral;
 using ModernWpf.Controls;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace CommonProtocol
@@ -27,7 +31,7 @@ namespace CommonProtocol
             Changed = nameof(UpdateInterval))]
         private long IntervalMs = 1000;
 
-        private enum CommandPipeMode { Interrupt, ControlOutput, ControlFeature }
+        private enum CommandPipeMode { Interrupt, ControlOutput }
 
         [Persist, Config("Command Pipe",
             Header = "Transport",
@@ -38,18 +42,15 @@ namespace CommonProtocol
 
         [Persist, Config("Log Target Keys",
             Header = "Logging",
-            Hint = "One or more target keys in hex, comma-separated. The log cycles through them.",
-            HelpBox = "e.g. \"A0, A1, A2\" for B701 dongle / left / right. Each line is tagged with its key.",
+            HelpBox = "e.g. \"A0, A1, A2\" for B701 dongle / left / right.",
             Changed = nameof(OnLogKeysChanged))]
-        private readonly string LogKeys = "A0";
+        private readonly List<LogKeyInfo> logKeys = [];
 
         [Persist, Config("Timestamp Each Line",
             Header = "Logging",
             Hint = "Prefix every line with a [HH:mm:ss.fff] timestamp before the key tag.")]
         private readonly bool ShowTimestamp = false;
 
-        // Parsed form of LogKeys, plus per-key partial-line assembly and round-robin state.
-        private readonly List<byte> logKeys = new();
         private readonly Dictionary<byte, System.Text.StringBuilder> lineBuffers = new();
         private int cycleIndex;
 
@@ -61,25 +62,28 @@ namespace CommonProtocol
             Changed = nameof(ApplyPipeMode))]
         private readonly byte LogReportId = 0x00;
 
+        //- Start / Pause
+        private bool isLogEnabled = true;
+        private Button logStartBtn;
+        private Button logPauseBtn;
+
+        //- Logging
+        private volatile bool commandPending;
+        private byte lastKey = 0x00;
+
         private void OnLogKeysChanged()
         {
             // Target set changed: previous lines no longer apply, so start clean.
-            ParseLogKeys();
             lineBuffers.Clear();
             cycleIndex = 0;
             LogPanel?.Clear();
-        }
 
-        private void ParseLogKeys()
-        {
-            logKeys.Clear();
-            if (string.IsNullOrWhiteSpace(LogKeys)) return;
-
-            foreach (string tok in LogKeys.Split(new[] { ',', ' ', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var keyInfo in logKeys)
             {
-                string s = tok.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? tok[2..] : tok;
-                if (byte.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte b))
-                    logKeys.Add(b);
+                if (keyInfo.Brush is SolidColorBrush solidBrush)
+                {
+                    solidBrush.Color = keyInfo.Color;
+                }
             }
         }
 
@@ -98,11 +102,6 @@ namespace CommonProtocol
                     activeInterface.ControlKind = ControlReportKind.Output;
                     activeInterface.RxPipe = PeripheralPipe.Interrupt;
                     break;
-                case CommandPipeMode.ControlFeature:
-                    activeInterface.TxPipe = PeripheralPipe.Control;
-                    activeInterface.ControlKind = ControlReportKind.Feature;
-                    activeInterface.RxPipe = PeripheralPipe.Interrupt;
-                    break;
                 default:
                     activeInterface.TxPipe = PeripheralPipe.Interrupt;
                     activeInterface.RxPipe = PeripheralPipe.Interrupt;
@@ -113,6 +112,8 @@ namespace CommonProtocol
         public DeviceLogPage()
         {
             InitializeComponent();
+            logStartBtn = LogPanel.GetAdditionalControlByTag<Button>("LogStartBtn");
+            logPauseBtn = LogPanel.GetAdditionalControlByTag<Button>("LogPauseBtn");
         }
 
         public override void Awake()
@@ -121,11 +122,9 @@ namespace CommonProtocol
 
             timer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(1)
+                Interval = TimeSpan.FromMilliseconds(IntervalMs),
             };
             timer.Tick += OnTick;
-
-            ParseLogKeys();
         }
 
         protected override void OnEnable()
@@ -155,13 +154,20 @@ namespace CommonProtocol
         private void OnTick(object sender, EventArgs e)
         {
             if (activeInterface == null) return;
-            if (logKeys.Count == 0) ParseLogKeys();
+            if (!isLogEnabled) return;
+            if (commandPending) return;
             if (logKeys.Count == 0) return;
 
-            // Cycle through the configured targets, one request per tick.
-            byte key = logKeys[cycleIndex % logKeys.Count];
-            cycleIndex = (cycleIndex + 1) % logKeys.Count;
+            LogKeyInfo keyInfo = logKeys[cycleIndex % logKeys.Count];
+            AppendLogQuerry(keyInfo.Key);
 
+            // Cycle through the configured targets, one request per tick.
+            cycleIndex = (cycleIndex + 1) % logKeys.Count;
+        }
+
+        private void AppendLogQuerry(byte key)
+        {
+            commandPending = true;
             ProtocolService.AppendCmd(activeInterface, [0xFD, key, 0x00, 0x00], true);
         }
 
@@ -221,14 +227,18 @@ namespace CommonProtocol
 
         private void Parse(ReadOnlyMemory<byte> arg1, DateTime arg2)
         {
+            commandPending = false;
             ReadOnlySpan<byte> span = arg1.Span;
 
             // Reply layout: [reportId] FD <key> <idx> <idx> <ascii...>. Match FD and a key we poll.
             if (span.Length < 6 || span[1] != 0xFD) return;
 
+            // Find key and key info.
             byte key = span[2];
-            if (!logKeys.Contains(key)) return;
+            LogKeyInfo keyInfo = logKeys.Find(info => info.Key == key);
+            if (keyInfo == null) return;
 
+            // Slice header off the data.
             ReadOnlySpan<byte> data = span.Slice(5);
             int end = data.IndexOf((byte)0);
             if (end < 0) end = data.Length;
@@ -244,7 +254,7 @@ namespace CommonProtocol
             }
             sb.Append(chunk);
 
-            List<string> lines = new();
+            List<string> lines = [];
             string buffered = sb.ToString();
             int nl;
             while ((nl = buffered.IndexOf('\n')) >= 0)
@@ -252,27 +262,87 @@ namespace CommonProtocol
                 string line = buffered[..nl].TrimEnd('\r');
                 buffered = buffered[(nl + 1)..];
                 if (line.Trim().Length == 0) continue; // ignore empty lines
-                lines.Add(FormatLine(key, line, arg2));
+                lines.Add(FormatLine(keyInfo.KeyName, line, arg2));
             }
             sb.Clear();
 
             if(buffered.Trim().Length > 0)
             {
-                lines.Add(FormatLine(key, buffered, arg2));
+                lines.Add(FormatLine(keyInfo.KeyName, buffered, arg2));
             }
 
             if (lines.Count == 0) return;
 
             Application.Current.Dispatcher.Invoke(() =>
             {
-                foreach (string l in lines) LogPanel.AppendLog(l, true);
+                foreach (string l in lines) LogPanel.AppendLog(l, true, colorBrush: keyInfo.Brush);
             });
+
+            if (end >= 58)
+            {
+                AppendLogQuerry(key);
+            }
         }
 
-        private string FormatLine(byte key, string line, DateTime timeUtc)
+        private string FormatLine(string key, string line, DateTime timeUtc)
         {
             string ts = ShowTimestamp ? $"[{timeUtc.ToLocalTime():HH:mm:ss.fff}]" : string.Empty;
-            return $"{ts}[{key:X2}] {line}";
+            return $"{ts}[{key}] {line}";
+        }
+
+        private void OnStartButtonClick(object sender, RoutedEventArgs e)
+        {
+            isLogEnabled = true;
+            logStartBtn.Visibility = Visibility.Collapsed;
+            logPauseBtn.Visibility = Visibility.Visible;
+        }
+
+        private void OnPauseButtonClick(object sender, RoutedEventArgs e)
+        {
+            isLogEnabled = false;
+            logPauseBtn.Visibility = Visibility.Collapsed;
+            logStartBtn.Visibility = Visibility.Visible;
+        }
+
+        private void OnExportButtonClick(object sender, RoutedEventArgs e)
+        {
+            Microsoft.Win32.SaveFileDialog dialog = new()
+            {
+                Filter = "Text Files (*.txt)|*.txt|Log Files (*.log)|*.log|All Files (*.*)|*.*",
+                DefaultExt = ".txt",
+                FileName = $"DeviceLog_{DateTime.Now:yyyyMMdd_HHmmss}"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                string text = LogPanel.GetAllText();
+                System.IO.File.WriteAllText(dialog.FileName, text);
+            }
+        }
+
+        private class LogKeyInfo
+        {
+            [Config(Type = ConfigType.Hex)]
+            public byte Key { get; set; }
+            [Config]
+            public string KeyName { get; set; } = "Key Name";
+            [Config(Type = ConfigType.Hex_RGB)]
+            public Color Color { get; set; } = Colors.Gray;
+
+            [JsonIgnore]
+            private Brush brush;
+            [JsonIgnore]
+            public Brush Brush
+            {
+                get
+                {
+                    if (brush == null)
+                    {
+                        brush = new SolidColorBrush(Color);
+                    }
+                    return brush;
+                }
+            }
         }
     }
 }

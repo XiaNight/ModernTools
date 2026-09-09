@@ -1,0 +1,46 @@
+<UserControl x:Class="Base.Components.ConfigListField"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Base.Components"
+			 xmlns:mtc="clr-namespace:Base.Components"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+    <Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="Auto"/>
+			<RowDefinition Height="Auto"/>
+		</Grid.RowDefinitions>
+		<Border Grid.Row="0" Background="#33777777" CornerRadius="4">
+			<Grid Margin="4">
+				<!-- Placeholder for an empty list, so the control does not collapse to a bare strip. -->
+				<TextBlock x:Name="EmptyText"
+						   Text="No entries — use + to add one."
+						   FontSize="12"
+						   Margin="4,6"
+						   TextWrapping="Wrap"
+						   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+				<mtc:ReorderableListView x:Name="ContentList"/>
+			</Grid>
+		</Border>
+		<Grid Grid.Row="1">
+			<Grid.ColumnDefinitions>
+				<ColumnDefinition Width="*"/>
+				<ColumnDefinition Width="Auto"/>
+				<ColumnDefinition Width="8"/>
+			</Grid.ColumnDefinitions>
+			<Border Grid.Column="1" Background="#33777777" CornerRadius="0 0 4 4" Padding="4">
+				<ui:SimpleStackPanel Orientation="Horizontal" Spacing="0">
+					<Button x:Name="AddButton" Margin="2" Padding="2,2" Click="AddButton_Click" ToolTip="Add an entry">
+						<ui:FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/>
+					</Button>
+					<Button x:Name="RemoveButton" Margin="2" Padding="2,2" Click="RemoveButton_Click" ToolTip="Remove the selected entry">
+						<ui:FontIcon Glyph="&#xE711;" FontFamily="Segoe Fluent Icons" FontSize="14"/>
+					</Button>
+				</ui:SimpleStackPanel>
+			</Border>
+		</Grid>
+	</Grid>
+</UserControl>

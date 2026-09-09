@@ -232,7 +232,7 @@ namespace Base.Services
 
 				// Priority commands (e.g. an urgent re-send triggered by a response)
 				// are always taken before remaining normal commands.
-				while (TryDequeueNext(out var cmd))
+				while (TryDequeueNext(out CmdData cmd))
 				{
 					byte[] response = null;
 					try
