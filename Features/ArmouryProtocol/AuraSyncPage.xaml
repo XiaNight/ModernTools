@@ -1,0 +1,25 @@
+﻿<base:PageBase x:Class="ArmouryProtocol.AuraSyncPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:ArmouryProtocol"
+			 xmlns:cts="clr-namespace:Base.UI.Controls;assembly=Base"
+			 xmlns:base="clr-namespace:Base.Pages;assembly=Base"
+			 xmlns:cvt="clr-namespace:Base;assembly=Base"
+			 xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d" 
+             d:DesignHeight="450" d:DesignWidth="800">
+	<UserControl.Resources>
+		<cvt:BooleanVisibilityConverter x:Key="BoolVisibilityConverter"/>
+		<cvt:InverseBooleanVisibilityConverter x:Key="InverseBoolVisibilityConverter"/>
+	</UserControl.Resources>
+	<Grid>
+		<ui:SimpleStackPanel Orientation="Horizontal" Spacing="4">
+			<Button Content="Start" Width="100" Click="StartButtonClicked"
+					Visibility="{Binding IsAuraSyncActive, Converter={StaticResource InverseBoolVisibilityConverter}}"/>
+			<Button Content="Stop" Width="100" Click="StopButtonClicked"
+					Visibility="{Binding IsAuraSyncActive, Converter={StaticResource BoolVisibilityConverter}}"/>
+		</ui:SimpleStackPanel>
+    </Grid>
+</base:PageBase>
