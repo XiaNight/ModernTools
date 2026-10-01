@@ -10,6 +10,17 @@
              mc:Ignorable="d" 
              d:DesignHeight="450" d:DesignWidth="800" d:Background="White">
     <Grid>
-        <components:SearchableLogPanel x:Name="LogPanel"/>
-    </Grid>
+		<components:SearchableLogPanel x:Name="LogPanel">
+			<components:SearchableLogPanel.AdditionalControls>
+				<x:Array Type="{x:Type UIElement}">
+					<Button Padding="4" Margin="0 0 8 0">
+						<ui:FontIcon Glyph="&#xE768;" FontFamily="Segoe Fluent Icons" FontSize="22"/>
+					</Button>
+					<Button Padding="4" Margin="0 0 8 0" d:Visibility="Collapsed">
+						<ui:FontIcon Glyph="&#xE769;" FontFamily="Segoe Fluent Icons" FontSize="22"/>
+					</Button>
+				</x:Array>
+			</components:SearchableLogPanel.AdditionalControls>
+		</components:SearchableLogPanel>
+	</Grid>
 </base:PageBase>

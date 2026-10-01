@@ -364,7 +364,7 @@ public partial class FirmwarePage : PageBase, INotifyPropertyChanged
 
 	// Runs the batch hidden with its working directory set to the package folder. Output is captured
 	// (so the child streams never block) but intentionally discarded.
-	private static int ExecuteBatch(string batPath)
+	public static int ExecuteBatch(string batPath)
 	{
 		ProcessStartInfo psi = new()
 		{
@@ -373,6 +373,7 @@ public partial class FirmwarePage : PageBase, INotifyPropertyChanged
 			WorkingDirectory = Path.GetDirectoryName(batPath),
 			UseShellExecute = false,
 			CreateNoWindow = true,
+			RedirectStandardInput = true,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true
 		};
@@ -385,6 +386,11 @@ public partial class FirmwarePage : PageBase, INotifyPropertyChanged
 		process.ErrorDataReceived += (_, _) => { };
 		process.BeginOutputReadLine();
 		process.BeginErrorReadLine();
+
+		// Satisfy "Press any key to continue..."
+		process.StandardInput.WriteLine();
+		process.StandardInput.Flush();
+
 		process.WaitForExit();
 
 		return process.ExitCode;

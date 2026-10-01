@@ -1,142 +1,149 @@
 namespace CommonProtocol.BusHound;
 
 using Base.Services.APIService;
+using Base.Services.Peripheral;
 using BusHound.ProtocolTest;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-/// <summary>
-/// HTTP API surface for the Bus Hound protocol tests (create / read / update / delete / run). Every
-/// endpoint runs on the UI thread (<c>requireMainThread</c>) because it touches the shared test list,
-/// the on-screen rows, and the device interface. Persistence and the visible panel stay in sync with
-/// every change. Routes:
-///   GET  /bushound/tests            list all tests (with each one's last verdict)
-///   GET  /bushound/tests/detail     ?id=  one test with its last run details
-///   POST /bushound/tests            create (JSON body: name, requestHex, expectedLines, totalTimeoutMs, allowTrailingWildcard)
-///   POST /bushound/tests/update     update (JSON body incl. id)
-///   POST /bushound/tests/delete     ?id=  delete
-///   POST /bushound/tests/reorder    ?oldIndex=&newIndex=  move a test to a new position
-///   POST /bushound/tests/run        ?id=  run one, returns verdict/elapsed/received
-///   POST /bushound/tests/runall     run all in order
-/// </summary>
 public partial class ASUSBusHoundPage
 {
-	[GET("~/bushound/tests", requireMainThread: true,
-		Summary = "List all Bus Hound protocol tests.",
-		Description = "Lists every saved Bus Hound protocol test. Takes no parameters. Each entry includes the " +
-			"test's definition (request bytes, expected packets, timeout) plus the result of its most recent " +
-			"run (last verdict, elapsed time, message and received packets), if it has been run this session.")]
-	public ApiResponse ApiListTests()
-		=> Ok(testsList.Select(TestToDto).ToList());
+	[GET("~/bushound/suites", requireMainThread: true,
+		Summary = "List all test suites.",
+		Description = "Lists every saved test suite with its steps and last-run verdict.")]
+	public ApiResponse ApiListSuites()
+		=> Ok(suitesList.Select(SuiteToDto).ToList());
 
-	[GET("~/bushound/tests/detail", requireMainThread: true,
-		Summary = "Get one protocol test with its last-run details.",
-		Description = "Returns a single saved test by id, including its last-run details. Query: ?id=<test id> " +
-			"(as returned by the list/create endpoints). Responds 404 if no test with that id exists.")]
-	public ApiResponse ApiGetTest(string id)
+	[GET("~/bushound/suites/detail", requireMainThread: true,
+		Summary = "Get one test suite by id.",
+		Description = "Returns a single suite by id, including steps and last-run details. Query: ?id=<suite id>.")]
+	public ApiResponse ApiGetSuite(string id)
 	{
-		TestProtocol test = testsList.FirstOrDefault(t => t.Id == id);
-		return test == null ? NotFound(id) : Ok(TestToDto(test));
+		TestSuite suite = suitesList.FirstOrDefault(s => s.Id == id);
+		return suite == null ? NotFound(id) : Ok(SuiteToDto(suite));
 	}
 
-	[POST("~/bushound/tests", requireMainThread: true,
-		Summary = "Create a new protocol test.",
-		Description = "Creates a new protocol test from a JSON body and persists it. The server assigns the id " +
-			"(any id in the body is ignored) and returns the created test. JSON body: { \"name\": string, " +
-			"\"requestHex\": string (request bytes as hex, e.g. \"02 00 B5 00\"), \"expectedLines\": string[] " +
-			"(one expected reply packet per entry, hex where any nibble may be the wildcard X), " +
-			"\"totalTimeoutMs\": integer (budget to receive and match all packets), \"allowTrailingWildcard\": " +
-			"boolean (when true, extra trailing bytes on a received packet are ignored) }. Responds 400 if the " +
-			"request hex or an expected line is malformed, or if no expected lines are supplied.")]
-	public ApiResponse ApiCreateTest(TestProtocol test)
+	[POST("~/bushound/suites", requireMainThread: true,
+		Summary = "Create a new test suite.",
+		Description = "Creates a new test suite. JSON body: { name, description, resetWhenDone, stopOnFirstFailure, steps[] }.")]
+	public ApiResponse ApiCreateSuite(TestSuite suite)
 	{
-		if (test == null) return Bad("Missing test body.");
+		if (suite == null) return Bad("Missing suite body.");
 
-		test.Id = Guid.NewGuid().ToString("N");
-		if (string.IsNullOrWhiteSpace(test.Name)) test.Name = "New test";
-		test.ExpectedLines ??= new List<string>();
-		if (!ValidateTest(test, out string error)) return Bad(error);
+		suite.Id = Guid.NewGuid().ToString("N");
+		if (string.IsNullOrWhiteSpace(suite.Name)) suite.Name = "New suite";
+		suite.Steps ??= new List<TestStep>();
+		foreach (TestStep step in suite.Steps)
+			step.Id = Guid.NewGuid().ToString("N");
 
-		testsList.Add(test);
-		SaveTests();
-		BuildTestRows();
-		return Ok(TestToDto(test));
+		suitesList.Add(suite);
+		SaveSuites();
+		BuildSuiteRows();
+		return Ok(SuiteToDto(suite));
 	}
 
-	[POST("~/bushound/tests/update", requireMainThread: true,
-		Summary = "Update an existing protocol test.",
-		Description = "Updates an existing test in place, matched by the id in the body, then persists it. JSON " +
-			"body is the full test definition including \"id\" (the test to replace); uses the same fields as " +
-			"create (name, requestHex, expectedLines, totalTimeoutMs, allowTrailingWildcard). Omitting name " +
-			"keeps the existing name. Responds 400 if the id is missing or the definition is invalid, and 404 " +
-			"if no test with that id exists.")]
-	public ApiResponse ApiUpdateTest(TestProtocol test)
+	[POST("~/bushound/suites/update", requireMainThread: true,
+		Summary = "Update a test suite.",
+		Description = "Updates a suite's properties (name, description, resetWhenDone, stopOnFirstFailure). " +
+			"Does not replace steps — use the step endpoints for that.")]
+	public ApiResponse ApiUpdateSuite(TestSuite patch)
 	{
-		if (test == null || string.IsNullOrWhiteSpace(test.Id)) return Bad("Missing test id.");
+		if (patch == null || string.IsNullOrWhiteSpace(patch.Id)) return Bad("Missing suite id.");
 
-		int index = testsList.FindIndex(t => t.Id == test.Id);
-		if (index < 0) return NotFound(test.Id);
+		TestSuite existing = suitesList.FirstOrDefault(s => s.Id == patch.Id);
+		if (existing == null) return NotFound(patch.Id);
 
-		if (string.IsNullOrWhiteSpace(test.Name)) test.Name = testsList[index].Name;
-		test.ExpectedLines ??= new List<string>();
-		if (!ValidateTest(test, out string error)) return Bad(error);
+		if (!string.IsNullOrWhiteSpace(patch.Name)) existing.Name = patch.Name;
+		if (patch.Description != null) existing.Description = patch.Description;
+		existing.ResetWhenDone = patch.ResetWhenDone;
+		existing.StopOnFirstFailure = patch.StopOnFirstFailure;
 
-		testsList[index] = test;
-		SaveTests();
-		BuildTestRows();
-		return Ok(TestToDto(test));
+		SaveSuites();
+		BuildSuiteRows();
+		return Ok(SuiteToDto(existing));
 	}
 
-	[POST("~/bushound/tests/delete", requireMainThread: true,
-		Summary = "Delete a protocol test.",
-		Description = "Deletes the test with the given id and persists the change. Body or query: id=<test id>. " +
-			"Responds 400 if the id is missing and 404 if no test with that id exists.")]
-	public ApiResponse ApiDeleteTest(string id)
+	[POST("~/bushound/suites/delete", requireMainThread: true,
+		Summary = "Delete a test suite.",
+		Description = "Deletes the suite with the given id. Query: ?id=<suite id>.")]
+	public ApiResponse ApiDeleteSuite(string id)
 	{
-		if (string.IsNullOrWhiteSpace(id)) return Bad("Missing test id.");
-		if (testsList.RemoveAll(t => t.Id == id) == 0) return NotFound(id);
+		if (string.IsNullOrWhiteSpace(id)) return Bad("Missing suite id.");
+		if (suitesList.RemoveAll(s => s.Id == id) == 0) return NotFound(id);
 
-		SaveTests();
-		BuildTestRows();
+		SaveSuites();
+		BuildSuiteRows();
 		return Ok(new { deleted = id });
 	}
 
-	[POST("~/bushound/tests/reorder", requireMainThread: true,
-		Summary = "Move a protocol test to a new position.",
-		Description = "Reorders the test list by moving the test at oldIndex to newIndex, then persists the new " +
-			"order and refreshes the on-screen rows. Body or query: oldIndex=<current 0-based position>, " +
-			"newIndex=<target 0-based position>. Returns the reordered list (id and name in the new order). " +
-			"Responds 400 if either index is out of range.")]
-	public ApiResponse ApiReorderTest(int oldIndex, int newIndex)
+	[POST("~/bushound/suites/steps/add", requireMainThread: true,
+		Summary = "Add a step to a suite.",
+		Description = "Adds a step to the end of the given suite. Query: ?suiteId=<suite id>. Body: the step JSON.")]
+	public ApiResponse ApiAddStep(string suiteId, TestStep step)
 	{
-		if (!MoveTest(oldIndex, newIndex, rebuildRows: true))
-			return Bad($"Index out of range (list has {testsList.Count} test(s)).");
+		if (string.IsNullOrWhiteSpace(suiteId)) return Bad("Missing suiteId.");
+		if (step == null) return Bad("Missing step body.");
 
-		return Ok(testsList.Select(t => new { id = t.Id, name = t.Name }).ToList());
+		TestSuite suite = suitesList.FirstOrDefault(s => s.Id == suiteId);
+		if (suite == null) return NotFound(suiteId);
+
+		step.Id = Guid.NewGuid().ToString("N");
+		suite.Steps.Add(step);
+		SaveSuites();
+		if (suiteRows.TryGetValue(suite, out TestSuiteEntry row)) row.RebuildStepRows();
+		UpdateTestsSummary();
+		return Ok(StepToDto(step));
 	}
 
-	[POST("~/bushound/tests/run", requireMainThread: true,
-		Summary = "Run a single protocol test.",
-		Description = "Runs one test against the connected device: sends its request frame and matches the reply " +
-			"against the expected packets. Body or query: id=<test id>. Returns the outcome — verdict, message, " +
-			"measured response time (elapsedMs) and the received packets as hex strings. Responds 400 if the " +
-			"id is missing, 404 if the test is not found, and 409 if a test run is already in progress.")]
-	public async Task<ApiResponse> ApiRunTest(string id)
+	[POST("~/bushound/suites/steps/delete", requireMainThread: true,
+		Summary = "Delete a step from a suite.",
+		Description = "Removes a step by id from a suite. Query: ?suiteId=<suite id>&stepId=<step id>.")]
+	public ApiResponse ApiDeleteStep(string suiteId, string stepId)
 	{
-		if (string.IsNullOrWhiteSpace(id)) return Bad("Missing test id.");
+		if (string.IsNullOrWhiteSpace(suiteId)) return Bad("Missing suiteId.");
+		if (string.IsNullOrWhiteSpace(stepId)) return Bad("Missing stepId.");
+
+		TestSuite suite = suitesList.FirstOrDefault(s => s.Id == suiteId);
+		if (suite == null) return NotFound(suiteId);
+
+		if (suite.Steps.RemoveAll(s => s.Id == stepId) == 0)
+			return NotFound(stepId);
+
+		SaveSuites();
+		if (suiteRows.TryGetValue(suite, out TestSuiteEntry row)) row.RebuildStepRows();
+		UpdateTestsSummary();
+		return Ok(new { deleted = stepId });
+	}
+
+	[POST("~/bushound/suites/run", requireMainThread: true,
+		Summary = "Run a single test suite.",
+		Description = "Runs all steps of a suite against the connected device. Query: ?id=<suite id>.")]
+	public async Task<ApiResponse> ApiRunSuite(string id)
+	{
+		if (string.IsNullOrWhiteSpace(id)) return Bad("Missing suite id.");
 		if (testsRunning) return Busy();
 
-		TestProtocol test = testsList.FirstOrDefault(t => t.Id == id);
-		if (test == null) return NotFound(id);
+		TestSuite suite = suitesList.FirstOrDefault(s => s.Id == id);
+		if (suite == null) return NotFound(id);
 
 		testsRunning = true;
 		SetTestsBusy(true);
 		try
 		{
-			TestRunResult result = await RunTestAsync(test, testRows.GetValueOrDefault(test));
-			return Ok(ResultToDto(test, result));
+			PeripheralInterface targetInterface = ResolveTestInterface();
+			if (targetInterface == null)
+				return Bad("Not connected — start capturing a device first.");
+
+			TestSuiteRunner runner = new(targetInterface);
+			SuiteRunResult result = await runner.RunAsync(suite);
+			suiteResults[suite] = result;
+
+			if (suiteRows.TryGetValue(suite, out TestSuiteEntry row))
+				row.ShowSummary(result);
+
+			return Ok(SuiteResultToDto(suite, result));
 		}
 		finally
 		{
@@ -145,12 +152,10 @@ public partial class ASUSBusHoundPage
 		}
 	}
 
-	[POST("~/bushound/tests/runall", requireMainThread: true,
-		Summary = "Run all protocol tests in order.",
-		Description = "Runs every saved test in order against the connected device and returns an array of " +
-			"per-test results (id, name, verdict, message, elapsedMs, received). Takes no parameters. Responds " +
-			"409 if a test run is already in progress.")]
-	public async Task<ApiResponse> ApiRunAll()
+	[POST("~/bushound/suites/runall", requireMainThread: true,
+		Summary = "Run all test suites.",
+		Description = "Runs every suite in order against the connected device.")]
+	public async Task<ApiResponse> ApiRunAllSuites()
 	{
 		if (testsRunning) return Busy();
 
@@ -158,11 +163,20 @@ public partial class ASUSBusHoundPage
 		SetTestsBusy(true);
 		try
 		{
+			PeripheralInterface targetInterface = ResolveTestInterface();
+			if (targetInterface == null)
+				return Bad("Not connected — start capturing a device first.");
+
 			List<object> results = new();
-			foreach (TestProtocol test in testsList)
+			TestSuiteRunner runner = new(targetInterface);
+
+			foreach (TestSuite suite in suitesList)
 			{
-				TestRunResult result = await RunTestAsync(test, testRows.GetValueOrDefault(test));
-				results.Add(ResultToDto(test, result));
+				SuiteRunResult result = await runner.RunAsync(suite);
+				suiteResults[suite] = result;
+				if (suiteRows.TryGetValue(suite, out TestSuiteEntry row))
+					row.ShowSummary(result);
+				results.Add(SuiteResultToDto(suite, result));
 			}
 
 			return Ok(results);
@@ -174,35 +188,93 @@ public partial class ASUSBusHoundPage
 		}
 	}
 
-	// ---- DTOs / helpers ----
-
-	private object TestToDto(TestProtocol test)
+	[POST("~/bushound/suites/examples", requireMainThread: true,
+		Summary = "Load example test suites.",
+		Description = "Appends four example suites demonstrating all step types (Send, SendAndWait, SendAndAssert, Sleep) " +
+			"and suite features (stopOnFirstFailure, resetWhenDone). Returns the created suites.")]
+	public ApiResponse ApiLoadExamples()
 	{
-		ProtocolTestEntry row = testRows.GetValueOrDefault(test);
+		LoadExampleSuites();
+		return Ok(suitesList.Select(SuiteToDto).ToList());
+	}
+
+	// ---- DTOs ----
+
+	private object SuiteToDto(TestSuite suite)
+	{
+		SuiteRunResult lastResult = suiteResults.GetValueOrDefault(suite);
 		return new
 		{
-			id = test.Id,
-			name = test.Name,
-			requestHex = test.RequestHex,
-			expectedLines = test.ExpectedLines,
-			totalTimeoutMs = test.TotalTimeoutMs,
-			allowTrailingWildcard = test.AllowTrailingWildcard,
-			lastVerdict = row?.LastVerdict?.ToString(),
-			lastElapsedMs = row?.LastElapsedMs,
-			lastMessage = row?.LastMessage,
-			lastReceived = row == null ? null : HexList(row.LastReceived),
+			id = suite.Id,
+			name = suite.Name,
+			description = suite.Description,
+			resetWhenDone = suite.ResetWhenDone,
+			stopOnFirstFailure = suite.StopOnFirstFailure,
+			steps = suite.Steps.Select(StepToDto).ToList(),
+			lastVerdict = lastResult?.Verdict.ToString(),
+			lastMessage = lastResult?.Message,
+			lastTotalElapsedMs = lastResult?.TotalElapsedMs,
 		};
 	}
 
-	private static object ResultToDto(TestProtocol test, TestRunResult result)
+	private static object StepToDto(TestStep step)
+	{
+		return step switch
+		{
+			SendStep send => new
+			{
+				id = step.Id,
+				name = step.Name,
+				type = "send",
+				requestHex = send.RequestHex,
+			},
+			SendAndWaitStep wait => new
+			{
+				id = step.Id,
+				name = step.Name,
+				type = "send_wait",
+				requestHex = wait.RequestHex,
+				totalTimeoutMs = wait.TotalTimeoutMs,
+				expectedCount = wait.ExpectedCount,
+			},
+			SendAndAssertStep assert => (object)new
+			{
+				id = step.Id,
+				name = step.Name,
+				type = "send_assert",
+				requestHex = assert.RequestHex,
+				expectedLines = assert.ExpectedLines,
+				totalTimeoutMs = assert.TotalTimeoutMs,
+				allowTrailingWildcard = assert.AllowTrailingWildcard,
+			},
+			SleepStep sleep => new
+			{
+				id = step.Id,
+				name = step.Name,
+				type = "sleep",
+				durationMs = sleep.DurationMs,
+			},
+			_ => new { id = step.Id, name = step.Name, type = "unknown" },
+		};
+	}
+
+	private static object SuiteResultToDto(TestSuite suite, SuiteRunResult result)
 		=> new
 		{
-			id = test.Id,
-			name = test.Name,
+			id = suite.Id,
+			name = suite.Name,
 			verdict = result.Verdict.ToString(),
 			message = result.Message,
-			elapsedMs = result.ElapsedMs,
-			received = HexList(result.Received),
+			totalElapsedMs = result.TotalElapsedMs,
+			stepResults = result.StepResults.Select((sr, i) => new
+			{
+				stepIndex = i,
+				stepName = i < suite.Steps.Count ? suite.Steps[i].Name : null,
+				verdict = sr.Verdict.ToString(),
+				message = sr.Message,
+				elapsedMs = sr.ElapsedMs,
+				received = HexList(sr.Received),
+			}).ToList(),
 		};
 
 	private static List<string> HexList(IEnumerable<byte[]> packets)
@@ -214,36 +286,8 @@ public partial class ASUSBusHoundPage
 		return list;
 	}
 
-	private static bool ValidateTest(TestProtocol test, out string error)
-	{
-		error = null;
-
-		if (!HexBytes.TryParse(test.RequestHex, out _, out string requestError))
-		{
-			error = $"Request bytes: {requestError}";
-			return false;
-		}
-
-		if (test.ExpectedLines == null || test.ExpectedLines.Count == 0)
-		{
-			error = "At least one expected line is required.";
-			return false;
-		}
-
-		for (int i = 0; i < test.ExpectedLines.Count; i++)
-		{
-			if (!ExpectedPacket.TryParse(test.ExpectedLines[i], out _, out string lineError))
-			{
-				error = $"Expected line {i + 1}: {lineError}";
-				return false;
-			}
-		}
-
-		return true;
-	}
-
 	private static ApiResponse Ok(object data) => new() { Status = 200, Data = data };
 	private static ApiResponse Bad(string message) => new() { Status = 400, Data = new { error = message } };
-	private static ApiResponse NotFound(string id) => new() { Status = 404, Data = new { error = $"No test with id '{id}'." } };
+	private static ApiResponse NotFound(string id) => new() { Status = 404, Data = new { error = $"No item with id '{id}'." } };
 	private static ApiResponse Busy() => new() { Status = 409, Data = new { error = "A test run is already in progress." } };
 }

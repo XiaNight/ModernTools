@@ -25,6 +25,10 @@
 	  </Compile>
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="NewFolder\" />
+	</ItemGroup>
+
 	<Target Name="RemoveCommonDll" AfterTargets="Publish">
 		<ItemGroup>
 			<_FilesToDelete Include="$(PublishDir)Microsoft.Windows.SDK.NET.dll" />

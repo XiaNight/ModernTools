@@ -3,52 +3,67 @@ namespace CommonProtocol.BusHound.ProtocolTest;
 using System;
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Controls;
 using ModernWpf.Controls;
 
-/// <summary>
-/// Modal editor for a single <see cref="TestProtocol"/>: name, request bytes, expected return
-/// packets (one per line), total timeout, and the trailing-wildcard option. Hex is parsed the same
-/// way as the Bus Hound page's ParseCommand (whitespace-insensitive). The Record button lets the
-/// hosting page fire the request and stream received packets straight into the expected field.
-/// </summary>
-public partial class ProtocolTestEditDialog : ContentDialog
+public partial class StepEditDialog : ContentDialog
 {
 	private bool recording;
+	private StepType currentType = StepType.Send;
 
-	public ProtocolTestEditDialog()
+	public StepEditDialog()
 	{
 		InitializeComponent();
 		PrimaryButtonClick += OnPrimaryButtonClick;
 		RecordButton.Click += (_, _) => ToggleRecord();
 		Closing += (_, _) => StopRecordingIfActive();
+		TypeCombo.SelectionChanged += TypeCombo_SelectionChanged;
 	}
 
-	/// <summary>Raised when the user starts recording; the page should send the request and stream packets in.</summary>
 	public event EventHandler RecordStartRequested;
-
-	/// <summary>Raised when the user stops recording (or the dialog closes mid-recording).</summary>
 	public event EventHandler RecordStopRequested;
 
-	/// <summary>Current request text, so the page knows what frame to send when recording.</summary>
 	public string CurrentRequestHex => RequestBox.Text;
-
-	/// <summary>Whether a recording session is currently active.</summary>
 	public bool IsRecording => recording;
 
-	/// <summary>
-	/// Shows the dialog populated from <paramref name="test"/>. Returns true and applies the edits
-	/// to <paramref name="test"/> if the user saved; false if cancelled.
-	/// </summary>
-	public async System.Threading.Tasks.Task<bool> EditAsync(TestProtocol test)
+	public async System.Threading.Tasks.Task<bool> EditAsync(TestStep step)
 	{
-		if (test == null) return false;
+		if (step == null) return false;
 
-		Title = string.IsNullOrWhiteSpace(test.Name) ? "New test" : $"Edit '{test.Name}'";
-		NameBox.Text = test.Name ?? string.Empty;
-		RequestBox.Text = test.RequestHex ?? string.Empty;
-		ExpectedBox.Text = string.Join(Environment.NewLine, test.ExpectedLines ?? new List<string>());
-		TimeoutBox.Value = test.TotalTimeoutMs;
-		TrailingWildcardCheck.IsChecked = test.AllowTrailingWildcard;
+		Title = string.IsNullOrWhiteSpace(step.Name) || step.Name == "New step"
+			? "New step"
+			: $"Edit '{step.Name}'";
+
+		NameBox.Text = step.Name ?? string.Empty;
+
+		switch (step)
+		{
+			case SendStep send:
+				SelectType(StepType.Send);
+				RequestBox.Text = send.RequestHex ?? string.Empty;
+				break;
+
+			case SendAndWaitStep wait:
+				SelectType(StepType.SendAndWait);
+				RequestBox.Text = wait.RequestHex ?? string.Empty;
+				TimeoutBox.Value = wait.TotalTimeoutMs;
+				ExpectedCountBox.Value = wait.ExpectedCount;
+				break;
+
+			case SendAndAssertStep assert:
+				SelectType(StepType.SendAndAssert);
+				RequestBox.Text = assert.RequestHex ?? string.Empty;
+				ExpectedBox.Text = string.Join(Environment.NewLine, assert.ExpectedLines ?? new List<string>());
+				TimeoutBox.Value = assert.TotalTimeoutMs;
+				TrailingWildcardCheck.IsChecked = assert.AllowTrailingWildcard;
+				break;
+
+			case SleepStep sleep:
+				SelectType(StepType.Sleep);
+				DurationBox.Value = sleep.DurationMs;
+				break;
+		}
+
 		SetRecordStatus(string.Empty);
 		HideError();
 
@@ -56,20 +71,120 @@ public partial class ProtocolTestEditDialog : ContentDialog
 		if (result != ContentDialogResult.Primary)
 			return false;
 
-		test.Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "Untitled test" : NameBox.Text.Trim();
-		test.RequestHex = RequestBox.Text.Trim();
-		test.ExpectedLines = SplitLines(ExpectedBox.Text);
-		test.TotalTimeoutMs = double.IsNaN(TimeoutBox.Value) ? 0 : (int)TimeoutBox.Value;
-		test.AllowTrailingWildcard = TrailingWildcardCheck.IsChecked == true;
+		ApplyToStep(step);
 		return true;
 	}
 
-	// ---- recording (driven by the hosting page) ----
+	public async System.Threading.Tasks.Task<TestStep> CreateNewAsync(StepType defaultType = StepType.SendAndAssert)
+	{
+		Title = "New step";
+		NameBox.Text = "New step";
+		RequestBox.Text = string.Empty;
+		ExpectedBox.Text = string.Empty;
+		TimeoutBox.Value = defaultType == StepType.SendAndWait ? 100 : 10;
+		ExpectedCountBox.Value = 1;
+		DurationBox.Value = 100;
+		TrailingWildcardCheck.IsChecked = true;
+		SelectType(defaultType);
+		SetRecordStatus(string.Empty);
+		HideError();
 
-	/// <summary>Clears the expected field in preparation for a fresh recording session.</summary>
+		ContentDialogResult result = await ShowAsync();
+		if (result != ContentDialogResult.Primary)
+			return null;
+
+		TestStep step = currentType switch
+		{
+			StepType.Send => new SendStep(),
+			StepType.SendAndWait => new SendAndWaitStep(),
+			StepType.SendAndAssert => new SendAndAssertStep(),
+			StepType.Sleep => new SleepStep(),
+			_ => new SendStep(),
+		};
+
+		ApplyToStep(step);
+		return step;
+	}
+
+	private void ApplyToStep(TestStep step)
+	{
+		step.Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "Untitled step" : NameBox.Text.Trim();
+
+		switch (step)
+		{
+			case SendStep send:
+				send.RequestHex = RequestBox.Text.Trim();
+				break;
+
+			case SendAndWaitStep wait:
+				wait.RequestHex = RequestBox.Text.Trim();
+				wait.TotalTimeoutMs = double.IsNaN(TimeoutBox.Value) ? 100 : (int)TimeoutBox.Value;
+				wait.ExpectedCount = double.IsNaN(ExpectedCountBox.Value) ? 1 : (int)ExpectedCountBox.Value;
+				break;
+
+			case SendAndAssertStep assert:
+				assert.RequestHex = RequestBox.Text.Trim();
+				assert.ExpectedLines = SplitLines(ExpectedBox.Text);
+				assert.TotalTimeoutMs = double.IsNaN(TimeoutBox.Value) ? 10 : (int)TimeoutBox.Value;
+				assert.AllowTrailingWildcard = TrailingWildcardCheck.IsChecked == true;
+				break;
+
+			case SleepStep sleep:
+				sleep.DurationMs = double.IsNaN(DurationBox.Value) ? 100 : (int)DurationBox.Value;
+				break;
+		}
+	}
+
+	private void SelectType(StepType type)
+	{
+		currentType = type;
+		int index = type switch
+		{
+			StepType.Send => 0,
+			StepType.SendAndWait => 1,
+			StepType.SendAndAssert => 2,
+			StepType.Sleep => 3,
+			_ => 0,
+		};
+		TypeCombo.SelectedIndex = index;
+		UpdateFieldVisibility();
+	}
+
+	private void TypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (TypeCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+		{
+			currentType = tag switch
+			{
+				"Send" => StepType.Send,
+				"SendAndWait" => StepType.SendAndWait,
+				"SendAndAssert" => StepType.SendAndAssert,
+				"Sleep" => StepType.Sleep,
+				_ => StepType.Send,
+			};
+			UpdateFieldVisibility();
+		}
+	}
+
+	private void UpdateFieldVisibility()
+	{
+		bool hasSend = currentType != StepType.Sleep;
+		bool hasExpected = currentType == StepType.SendAndAssert;
+		bool hasTimeout = currentType == StepType.SendAndWait || currentType == StepType.SendAndAssert;
+		bool hasExpectedCount = currentType == StepType.SendAndWait;
+		bool hasSleep = currentType == StepType.Sleep;
+
+		RequestPanel.Visibility = hasSend ? Visibility.Visible : Visibility.Collapsed;
+		ExpectedPanel.Visibility = hasExpected ? Visibility.Visible : Visibility.Collapsed;
+		TimeoutPanel.Visibility = hasTimeout ? Visibility.Visible : Visibility.Collapsed;
+		ExpectedCountPanel.Visibility = hasExpectedCount ? Visibility.Visible : Visibility.Collapsed;
+		SleepPanel.Visibility = hasSleep ? Visibility.Visible : Visibility.Collapsed;
+	}
+
+	// ---- recording ----
+
 	public void ClearExpectedForRecording() => ExpectedBox.Text = string.Empty;
 
-	/// <summary>Appends one recorded packet as a new expected line.</summary>
 	public void AppendRecordedPacket(string hexLine)
 	{
 		if (string.IsNullOrWhiteSpace(hexLine)) return;
@@ -80,16 +195,11 @@ public partial class ProtocolTestEditDialog : ContentDialog
 		ExpectedBox.ScrollToEnd();
 	}
 
-	/// <summary>Shows a short status message next to the Record button.</summary>
 	public void SetRecordStatus(string message)
 	{
 		RecordStatusText.Text = message ?? string.Empty;
 	}
 
-	/// <summary>
-	/// Called by the page to force-stop recording (e.g. when the interface could not be opened),
-	/// resetting the button without re-raising the stop event.
-	/// </summary>
 	public void NotifyRecordingStopped(string message = null)
 	{
 		recording = false;
@@ -125,28 +235,34 @@ public partial class ProtocolTestEditDialog : ContentDialog
 
 	private void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
 	{
-		if (!HexBytes.TryParse(RequestBox.Text, out _, out string requestError))
+		if (currentType != StepType.Sleep)
 		{
-			ShowError($"Request bytes: {requestError}");
-			args.Cancel = true;
-			return;
-		}
-
-		List<string> lines = SplitLines(ExpectedBox.Text);
-		if (lines.Count == 0)
-		{
-			ShowError("Add at least one expected packet line.");
-			args.Cancel = true;
-			return;
-		}
-
-		for (int i = 0; i < lines.Count; i++)
-		{
-			if (!ExpectedPacket.TryParse(lines[i], out _, out string lineError))
+			if (!HexBytes.TryParse(RequestBox.Text, out _, out string requestError))
 			{
-				ShowError($"Expected line {i + 1}: {lineError}");
+				ShowError($"Request bytes: {requestError}");
 				args.Cancel = true;
 				return;
+			}
+		}
+
+		if (currentType == StepType.SendAndAssert)
+		{
+			List<string> lines = SplitLines(ExpectedBox.Text);
+			if (lines.Count == 0)
+			{
+				ShowError("Add at least one expected packet line.");
+				args.Cancel = true;
+				return;
+			}
+
+			for (int i = 0; i < lines.Count; i++)
+			{
+				if (!ExpectedPacket.TryParse(lines[i], out _, out string lineError))
+				{
+					ShowError($"Expected line {i + 1}: {lineError}");
+					args.Cancel = true;
+					return;
+				}
 			}
 		}
 
