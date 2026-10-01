@@ -42,7 +42,7 @@
 		<ProjectReference Include="..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj" />
 		<ProjectReference Include="..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj" />
 		<ProjectReference Include="..\Features\ArmouryProtocol\ArmouryProtocol.csproj" />
-		<ProjectReference Include="..\Features\MouseATE\MouseATE.csproj" />
+		<ProjectReference Include="..\Features\ATE\ATE.csproj" />
 		<ProjectReference Include="..\Features\QuickScan\QuickScan.csproj" />
 		<ProjectReference Include="..\Features\Camera\Camera.csproj" />
 	</ItemGroup>
@@ -55,7 +55,7 @@
 		<Exec Command="dotnet msbuild ..\Features\GenericMouseAnalyzer\GenericMouseAnalyzer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\KeyboardHallSensor\KeyboardHallSensor.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\ArmouryProtocol\ArmouryProtocol.csproj /t:Publish /p:PublishProfile=FolderProfile" />
-		<Exec Command="dotnet msbuild ..\Features\MouseATE\MouseATE.csproj /t:Publish /p:PublishProfile=FolderProfile" />
+		<Exec Command="dotnet msbuild ..\Features\ATE\ATE.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\QuickScan\QuickScan.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\MCPServer\MCPServer.csproj /t:Publish /p:PublishProfile=FolderProfile" />
 		<Exec Command="dotnet msbuild ..\Features\AiComposer\AiComposer.csproj /t:Publish /p:PublishProfile=FolderProfile" />

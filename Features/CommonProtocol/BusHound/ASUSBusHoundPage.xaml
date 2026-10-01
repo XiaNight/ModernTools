@@ -60,6 +60,8 @@
 					<ColumnDefinition Width="*"/>
 					<ColumnDefinition Width="Auto"/>
 					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="Auto"/>
 				</Grid.ColumnDefinitions>
 
 				<TextBlock Grid.Column="0" Text="Protocol Tests" FontSize="16" FontWeight="SemiBold"
@@ -71,32 +73,58 @@
 						   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
 
 				<Button x:Name="TestsRunAllBtn" Grid.Column="2" Margin="4,0"
-						ToolTip="Run all tests in order">
+						ToolTip="Run all suites in order">
 					<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
 						<ui:FontIcon Glyph="&#xE768;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
 						<TextBlock Text="Run all"/>
 					</ui:SimpleStackPanel>
 				</Button>
 
-				<Button x:Name="TestsAddBtn" Grid.Column="3" Margin="4,0"
-						ToolTip="Add a new test">
+				<Button x:Name="TestsAddSuiteBtn" Grid.Column="3" Margin="4,0"
+						ToolTip="Add a new test suite">
 					<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
 						<ui:FontIcon Glyph="&#xE710;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
-						<TextBlock Text="Add"/>
+						<TextBlock Text="Add Suite"/>
+					</ui:SimpleStackPanel>
+				</Button>
+
+				<Button x:Name="TestsImportBtn" Grid.Column="4" Margin="4,0"
+						ToolTip="Import test suites from a JSON file">
+					<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
+						<ui:FontIcon Glyph="&#xE8B5;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+						<TextBlock Text="Import"/>
+					</ui:SimpleStackPanel>
+				</Button>
+
+				<Button x:Name="TestsExportBtn" Grid.Column="5" Margin="4,0"
+						ToolTip="Export test suites to a JSON file">
+					<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
+						<ui:FontIcon Glyph="&#xEDE1;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+						<TextBlock Text="Export"/>
 					</ui:SimpleStackPanel>
 				</Button>
 			</Grid>
 
-			<!-- Test list -->
+			<!-- Suite list -->
 			<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="4,0,12,0">
-				<mtc:ReorderableListView x:Name="TestsListPanel"/>
+				<StackPanel x:Name="SuitesListPanel"/>
 			</ScrollViewer>
 
-			<TextBlock x:Name="TestsEmptyText" Grid.Row="1"
-					   Text="No tests yet. Click Add to create one."
+			<StackPanel x:Name="TestsEmptyText" Grid.Row="1"
 					   HorizontalAlignment="Center" VerticalAlignment="Center"
-					   Opacity="0.7"
-					   Visibility="Collapsed"/>
+					   Visibility="Collapsed">
+				<TextBlock Text="No test suites yet. Click Add Suite to create one."
+						   HorizontalAlignment="Center"
+						   Opacity="0.7"/>
+				<Button x:Name="TestsLoadExampleBtn"
+						HorizontalAlignment="Center" Margin="0,8,0,0"
+						Padding="8,4">
+					<ui:SimpleStackPanel Orientation="Horizontal" Spacing="6">
+						<ui:FontIcon Glyph="&#xE7BE;" FontSize="14" FontFamily="Segoe Fluent Icons"/>
+						<TextBlock Text="Load example suites"/>
+					</ui:SimpleStackPanel>
+				</Button>
+			</StackPanel>
 		</Grid>
 
 		<Grid x:Name="DevicePanel" Grid.Row="1" Visibility="Collapsed">
