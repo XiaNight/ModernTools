@@ -1,0 +1,50 @@
+<Page x:Class="CameraPreview.UI.CameraPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Title="Camera">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="12" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0">
+            <TextBlock Margin="0,0,8,0"
+                       VerticalAlignment="Center"
+                       Text="Camera:" />
+
+            <ComboBox Width="320"
+                      ItemsSource="{Binding Cameras}"
+                      SelectedItem="{Binding SelectedCamera}"
+                      DisplayMemberPath="Name" />
+
+            <Button Margin="8,0,0,0"
+                    Padding="12,4"
+                    Content="Refresh"
+                    Command="{Binding RefreshCommand}" />
+
+            <Button Margin="8,0,0,0"
+                    Padding="12,4"
+                    Content="Start"
+                    Command="{Binding StartCommand}" />
+
+            <Button Margin="8,0,0,0"
+                    Padding="12,4"
+                    Content="Stop"
+                    Command="{Binding StopCommand}" />
+        </DockPanel>
+
+        <Border Grid.Row="2"
+                Background="Black"
+                BorderBrush="#333"
+                BorderThickness="1">
+            <Image Source="{Binding PreviewSource}"
+                   Stretch="Uniform" />
+        </Border>
+    </Grid>
+</Page>
