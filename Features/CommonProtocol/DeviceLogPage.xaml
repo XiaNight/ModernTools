@@ -13,11 +13,18 @@
 		<components:SearchableLogPanel x:Name="LogPanel">
 			<components:SearchableLogPanel.AdditionalControls>
 				<x:Array Type="{x:Type UIElement}">
-					<Button Padding="4" Margin="0 0 8 0">
+					<Button Tag="LogStartBtn" Padding="4" Margin="0 0 8 0" Visibility="Collapsed"
+							Click="OnStartButtonClick">
 						<ui:FontIcon Glyph="&#xE768;" FontFamily="Segoe Fluent Icons" FontSize="22"/>
 					</Button>
-					<Button Padding="4" Margin="0 0 8 0" d:Visibility="Collapsed">
+					<Button Tag="LogPauseBtn" Padding="4" Margin="0 0 8 0"
+							Click="OnPauseButtonClick">
 						<ui:FontIcon Glyph="&#xE769;" FontFamily="Segoe Fluent Icons" FontSize="22"/>
+					</Button>
+					<Button Padding="4" Margin="0 0 8 0"
+							Click="OnExportButtonClick"
+							ToolTip="Export log to file">
+						<ui:FontIcon Glyph="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="22"/>
 					</Button>
 				</x:Array>
 			</components:SearchableLogPanel.AdditionalControls>

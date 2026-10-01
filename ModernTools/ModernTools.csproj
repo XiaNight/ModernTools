@@ -9,7 +9,7 @@
 		<Nullable>disable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableWindowsTargeting>true</EnableWindowsTargeting>
-		<InformationalVersion>V99_09_07</InformationalVersion>
+		<InformationalVersion>V02_00_08</InformationalVersion>
 		<CleanInformationalVersion>$([System.Text.RegularExpressions.Regex]::Replace($(InformationalVersion), "\+.*$", ""))</CleanInformationalVersion>
 		<AppName>ModernToolset</AppName>
 		<Company>AsusTek Computer Inc.</Company>
@@ -44,6 +44,7 @@
 		<ProjectReference Include="..\Features\ArmouryProtocol\ArmouryProtocol.csproj" />
 		<ProjectReference Include="..\Features\ATE\ATE.csproj" />
 		<ProjectReference Include="..\Features\QuickScan\QuickScan.csproj" />
+		<ProjectReference Include="..\Features\Camera\Camera.csproj" />
 	</ItemGroup>
 
 	<Target Name="PublishPluginProjects" AfterTargets="Publish" Condition="'$(SkipPluginPublish)' != 'true'">
